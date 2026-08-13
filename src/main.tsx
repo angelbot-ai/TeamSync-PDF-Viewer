@@ -38,7 +38,7 @@ export interface SDKPermissions {
 
 import type { ViewerPlugin } from './plugins';
 
-interface WebViewerOptions {
+export interface WebViewerOptions {
   path?: string;
   initialDoc?: string;
   initialScale?: number;
@@ -58,7 +58,7 @@ interface WebViewerOptions {
   // ... other legacy options
 }
 
-class WebViewerInstance {
+export class WebViewerInstance {
   container: HTMLElement;
   getAnnotations: () => any[];
   initialDoc?: string;

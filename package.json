@@ -1,9 +1,34 @@
 {
-  "name": "teamsync-pdf-viewer",
-  "private": true,
-  "version": "0.0.0",
+  "name": "@angelbot-ai/teamsync-pdf-viewer",
+  "version": "1.0.0",
   "license": "CPAL-1.0",
+  "description": "Enterprise PDF Viewer SDK - 100% Client-Side WebAssembly PDF Engine for React",
   "type": "module",
+  "main": "./dist/teamsync-pdf-viewer.umd.cjs",
+  "module": "./dist/teamsync-pdf-viewer.es.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/teamsync-pdf-viewer.es.js",
+      "require": "./dist/teamsync-pdf-viewer.umd.cjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/angelbot-ai/TeamSync-PDF-Viewer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/angelbot-ai/TeamSync-PDF-Viewer/issues"
+  },
+  "homepage": "https://github.com/angelbot-ai/TeamSync-PDF-Viewer#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -24,6 +49,7 @@
     "@vitejs/plugin-react": "^6.0.4",
     "oxlint": "^1.75.0",
     "typescript": "~6.0.2",
-    "vite": "^8.2.0"
+    "vite": "^8.2.0",
+    "vite-plugin-dts": "^4.5.3"
   }
 }

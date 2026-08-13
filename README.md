@@ -103,7 +103,7 @@ Drop the SDK into any container element with a single function call:
 import { WebViewer } from './main';
 
 WebViewer({
-  initialDoc: '/sample.pdf',
+  initialDoc: '/TeamSync.pdf',
   initialScale: 1.0, // 100% natural size
   enableAnnotations: true,
   permissions: {

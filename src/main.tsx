@@ -767,28 +767,8 @@ if (rootElement) {
     
   } else {
     // We are running standalone (Dev Mode)
-    const ocrPayload = {
-      documentId: "doc_123",
-      findings: [
-        { type: "GENDER", value: "Male", page: 1, boundingBox: { x: 15, y: 125, width: 80, height: 18 } }
-      ]
-    };
-
-    const mappedOcrRedactions = ocrPayload.findings.map(finding => ({
-      pageIndex: finding.page,
-      x: finding.boundingBox.x,
-      y: finding.boundingBox.y,
-      width: finding.boundingBox.width,
-      height: finding.boundingBox.height
-    }));
-
     WebViewer({ 
       initialDoc: '/TeamSync_Marketing.pdf?v=2',
-      redactions: mappedOcrRedactions,
-      regexRedactions: [
-        /\d{4} \d{4}(?= \d{4})/g, // Redact first 8 digits of Aadhaar Number
-        /DOB: \d{2}\/\d{2}\/\d{4}/g // Redact Date of Birth dynamically
-      ],
       watermark: {
         text: 'CONFIDENTIAL',
         opacity: 0.1,

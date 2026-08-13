@@ -224,6 +224,9 @@ Distributed under the **CPAL 1.0 (Common Public Attribution License)**.
 100% Free and Open Source for personal and commercial usage.
 
 ---
+<div align="center">
+  <b>AngelBot AI • TeamSync • </b> <a href="www.teamsync.com">www.teamsync.com </a>
+</div>
 
 <div align="center">
   <b>TeamSync PDF Viewer Engine</b> • Engineered with ❤️ for the Open Web.

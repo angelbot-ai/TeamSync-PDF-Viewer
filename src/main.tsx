@@ -5,9 +5,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
-import { PDFDocument, rgb, PDFHexString, PDFString, PDFName, PDFDict, PDFArray, degrees, StandardFonts } from 'pdf-lib'
-import { signPdf, signPdfWithUSB } from './utils/signPdf'
-import { Vault } from './utils/vault'
+import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib'
 import * as pdfjsLib from 'pdfjs-dist'
 
 // Use worker from local public directory or CDN
@@ -167,8 +165,6 @@ class WebViewerInstance {
           const pages = pdfDoc.getPages();
           
           const anns = options?.explicitAnnotations || this.getAnnotations();
-          let digitalSignatureRect: [number, number, number, number] | null = null;
-          let digitalSignaturePageIndex: number | null = null;
           
           // Draw annotations
           // Note: pdf-lib uses a coordinate system where (0,0) is bottom-left.
@@ -302,8 +298,6 @@ class WebViewerInstance {
               const rectW = ann.width / scale;
               const rectH = ann.height / scale;
               const rectY = height - (ann.y / scale) - rectH;
-              digitalSignatureRect = [rectX, rectY, rectX + rectW, rectY + rectH];
-              digitalSignaturePageIndex = ann.pageIndex - 1;
               
               const dateStr = ann.timestamp ? new Date(ann.timestamp).toLocaleString('en-GB') : new Date().toLocaleString('en-GB');
               const iconW = rectW * 0.15;
@@ -524,91 +518,6 @@ class WebViewerInstance {
               }
             }
             finalDoc = flattenedPdf;
-          }
-
-          // --- Digital Signature Processing ---
-          const signatureMethod = sessionStorage.getItem('signature_method') || 'p12';
-          const p12Cert = Vault.getP12Cert();
-          const p12Password = Vault.getP12Password();
-
-          if ((signatureMethod === 'p12' && p12Cert && p12Password) || signatureMethod === 'usb') {
-            // If no visual placeholder was placed, default to an invisible signature on page 1
-            const targetPageIndex = digitalSignaturePageIndex !== null ? digitalSignaturePageIndex : 0;
-            const targetRect = digitalSignatureRect || [0, 0, 0, 0];
-            
-            const pages = finalDoc.getPages();
-            if (targetPageIndex < pages.length) {
-              const sigPage = pages[targetPageIndex];
-
-              // Add Digital Signature Placeholder
-              const sigDict = finalDoc.context.obj({
-                Type: 'Sig',
-                Filter: 'Adobe.PPKLite',
-                SubFilter: 'adbe.pkcs7.detached',
-                ByteRange: [0, 1000000000, 1000000000, 1000000000],
-                Contents: PDFHexString.of('0'.repeat(8192)),
-                Reason: PDFString.of(signatureMethod === 'usb' ? 'Digitally Signed with USB Token' : 'Digitally Signed by PDFViewer'),
-                  M: PDFString.fromDate(new Date()),
-                });
-                const sigRef = finalDoc.context.register(sigDict);
-
-                const roundedRect = [
-                  Math.round(targetRect[0]),
-                  Math.round(targetRect[1]),
-                  Math.round(targetRect[2]),
-                  Math.round(targetRect[3])
-                ];
-
-                const apStream = finalDoc.context.flateStream('q 0 0 m W n Q', {
-                  Type: 'XObject',
-                  Subtype: 'Form',
-                  BBox: roundedRect,
-                  Resources: {},
-                });
-                const apRef = finalDoc.context.register(apStream);
-
-                const sigFieldDict = finalDoc.context.obj({
-                  Type: 'Annot',
-                  Subtype: 'Widget',
-                  FT: 'Sig',
-                  T: PDFString.of('Signature1'),
-                  V: sigRef,
-                  Rect: roundedRect,
-                  F: 132, // Print and Locked
-                  P: sigPage.ref,
-                  AP: finalDoc.context.obj({ N: apRef }),
-                });
-                const sigFieldRef = finalDoc.context.register(sigFieldDict);
-
-                let acroForm = finalDoc.catalog.get(PDFName.of('AcroForm')) as PDFDict;
-                if (!acroForm) {
-                  acroForm = finalDoc.context.obj({ Fields: [], SigFlags: 3 });
-                  finalDoc.catalog.set(PDFName.of('AcroForm'), acroForm);
-                } else {
-                  acroForm.set(PDFName.of('SigFlags'), finalDoc.context.obj(3));
-                }
-                const fields = acroForm.get(PDFName.of('Fields')) as PDFArray;
-                fields.push(sigFieldRef);
-
-                const annots = sigPage.node.get(PDFName.of('Annots')) as PDFArray;
-                if (annots) {
-                  annots.push(sigFieldRef);
-                } else {
-                  sigPage.node.set(PDFName.of('Annots'), finalDoc.context.obj([sigFieldRef]));
-                }
-              }
-            
-            const pdfBytes = await finalDoc.save({ useObjectStreams: false });
-            if (signatureMethod === 'usb') {
-              try {
-                return await signPdfWithUSB(pdfBytes, Vault.getBridgeToken() || '');
-              } catch {
-                sessionStorage.removeItem('signature_method');
-                throw new Error("Could not connect to USB Bridge Service. USB Signing has been automatically disabled so you can download the document. Please click Download again to get the unsigned PDF, or start the bridge on port 8080.");
-              }
-            } else {
-              return signPdf(pdfBytes, p12Cert!, p12Password!);
-            }
           }
 
           return await finalDoc.save();

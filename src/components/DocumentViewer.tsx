@@ -5,9 +5,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import * as pdfjsLib from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { Pen, Type, Minus, Eraser, Square, Circle as CircleIcon, Highlighter, ChevronLeft, ChevronRight, Brush, MessageSquareQuote, ArrowUpRight, ShieldCheck, Link as LinkIcon, EyeOff, PenTool } from 'lucide-react';
-import { SignatureModal } from './SignatureModal';
-import ConfirmSignatureModal from './ConfirmSignatureModal';
+import { Pen, Type, Minus, Eraser, Square, Circle as CircleIcon, Highlighter, ChevronLeft, ChevronRight, Brush, MessageSquareQuote, ArrowUpRight, ShieldCheck, Link as LinkIcon, EyeOff } from 'lucide-react';
 import AnnotationContextMenu from './AnnotationContextMenu';
 import InsertLinkModal from './InsertLinkModal';
 import TextSelectionMenu from './TextSelectionMenu';
@@ -104,13 +102,7 @@ export default function DocumentViewer({
     window.dispatchEvent(new CustomEvent('action-tool-changed', { detail: { tool: activeTool } }));
   }, [activeTool]);
   
-  // Signature State
-  const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
-  const [savedSignatures, setSavedSignatures] = useState<string[]>([]);
-  const [activeSignatureUrl, setActiveSignatureUrl] = useState<string | null>(null);
-  const [pendingSignatureType, setPendingSignatureType] = useState<'digital' | 'ades' | 'simple'>('ades');
-  const [pendingSignatureParams, setPendingSignatureParams] = useState<any>(null);
-  const [globalMousePos, setGlobalMousePos] = useState<{ x: number, y: number } | null>(null);
+
 
   // Style State
   const [currentColor, setCurrentColor] = useState('#d32f2f');
@@ -135,71 +127,13 @@ export default function DocumentViewer({
   const justCreatedLinkRef = useRef(false);
   const [textSelection, setTextSelection] = useState<{ text: string, top: number, left: number, pageIndex: number, rects: DOMRect[] } | null>(null);
   const [pageContextMenuPos, setPageContextMenuPos] = useState<{ top: number; left: number; clientX?: number; clientY?: number; selection?: any } | null>(null);
-  const [isWaitingForPin, setIsWaitingForPin] = useState(false);
-  const [pinError, setPinError] = useState<string | null>(null);
-  const lastSignatureParams = useRef<any>(null);
+
 
   useEffect(() => {
-    const handleStartSignature = (e: any) => {
-      const type = e.detail?.type || 'ades';
-      setPendingSignatureType(type);
-      
-      if (type === 'digital') {
-        const ws = new WebSocket('ws://localhost:8080');
-        
-        ws.onopen = () => {
-          ws.close();
-          sessionStorage.setItem('signature_method', 'usb');
-          setActiveTool('digital_signature');
-        };
-        
-        ws.onerror = () => {
-          alert("Error: USB Bridge Service is not running! Please start 'node bridge.js' in your terminal on port 8080 first.");
-        };
-      } else {
-        setIsSignatureModalOpen(true);
-      }
-    };
-    
-    const handleCommitDigitalSignature = (e: any) => {
-      const { tempAnn } = e.detail;
-      // We use the functional form of setState because we can't capture the latest annotations in this closure easily
-      // However, commitAnnotations isn't a simple setState. We might need to dispatch an event or use a ref.
-      // Wait, in this useEffect, annotations is bound to the closure at render.
-      // Let's rely on setAnnotations if possible, but commitAnnotations handles history.
-      // Since it's a global event, we can just dispatch an event back to the main component or use a ref.
-      window.dispatchEvent(new CustomEvent('action-commit-digital-signature-local', { detail: { tempAnn } }));
-    };
-
-    const handlePinStart = () => { setIsWaitingForPin(true); setPinError(null); };
-    const handlePinEnd = () => { setIsWaitingForPin(false); setPinError(null); };
-    const handlePinError = (e: any) => { 
-      if (e.detail.error.toLowerCase().includes("incorrect pin")) {
-        setPinError("Incorrect PIN entered.");
-      } else {
-        setIsWaitingForPin(false);
-        alert("Digital Signature failed: " + e.detail.error);
-      }
-      setPendingSignatureParams(null);
-    };
     const handleSetTool = (e: any) => setActiveTool(e.detail.tool);
-
-    window.addEventListener('action-start-signature', handleStartSignature);
-    window.addEventListener('action-commit-digital-signature', handleCommitDigitalSignature);
-    window.addEventListener('action-waiting-for-pin-start', handlePinStart);
-    window.addEventListener('action-waiting-for-pin-end', handlePinEnd);
-    window.addEventListener('action-waiting-for-pin-error', handlePinError);
     window.addEventListener('action-set-tool', handleSetTool);
-
-    return () => {
-      window.removeEventListener('action-start-signature', handleStartSignature);
-      window.removeEventListener('action-commit-digital-signature', handleCommitDigitalSignature);
-      window.removeEventListener('action-waiting-for-pin-start', handlePinStart);
-      window.removeEventListener('action-waiting-for-pin-end', handlePinEnd);
-      window.removeEventListener('action-waiting-for-pin-error', handlePinError);
-      window.removeEventListener('action-set-tool', handleSetTool);
-    };
-  }, [annotations, activeSignatureUrl]);
+    return () => window.removeEventListener('action-set-tool', handleSetTool);
+  }, []);
 
   const zoomFocusRef = useRef<{vx: number | null, vy: number | null}>({ vx: null, vy: null });
   const prevScaleRef = useRef(scale);
@@ -430,11 +364,6 @@ export default function DocumentViewer({
 
   const handleMouseDown = (e: React.MouseEvent<Element>, targetPageNum: number) => {
     setTextSelection(null);
-    if (activeTab === 'Fill and Sign' && activeTool !== 'signature') {
-      setIsSignatureModalOpen(true);
-      return;
-    }
-
     if (!activeTool) return;
     
     const rect = e.currentTarget.getBoundingClientRect();
@@ -446,19 +375,6 @@ export default function DocumentViewer({
       return;
     }
 
-    if (activeTool === 'signature' && activeSignatureUrl) {
-      setPendingSignatureParams({
-        id: Date.now().toString(), type: 'signature', pageIndex: targetPageNum,
-        x: x - 100, y: y - 30, width: 200, height: 60, // Center offset
-        color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity,
-        imageUrl: activeSignatureUrl,
-        timestamp: Date.now(),
-        signer: 'Sanjiv Jha', // Placeholder identity
-        signType: pendingSignatureType
-      });
-      return;
-    }
-
     if (activeTool === 'eraser') {
       setIsDrawing(true);
       return;
@@ -467,10 +383,16 @@ export default function DocumentViewer({
     setStartPos({ x, y });
     setCurrentPos({ x, y });
     if (activeTool === 'freehand') {
+      setIsDrawing(true);
       setFreehandPoints([{ x, y }]);
+      setActiveDrawingPageNum(targetPageNum);
+    } else if (['rectangle', 'ellipse', 'line', 'arrow', 'highlight', 'redaction'].includes(activeTool)) {
+      setIsDrawing(true);
+      setActiveDrawingPageNum(targetPageNum);
+    } else if (['callout', 'link'].includes(activeTool)) {
+      setIsDrawing(true);
+      setActiveDrawingPageNum(targetPageNum);
     }
-    setActiveDrawingPageNum(targetPageNum);
-    setIsDrawing(true);
   };
 
   const commitTextAnnotation = () => {
@@ -544,27 +466,13 @@ export default function DocumentViewer({
         setIsLinkModalOpen(true);
         setActiveTool(null);
         return;
+      } else if (activeTool === 'text' || activeTool === 'note') {
+        if (activeTextEditor) {
+          commitTextAnnotation();
+        }
+        setActiveTextEditor({ x, y, type: activeTool as any, pageIndex: targetPageNum });
+        setCurrentText('');
       }
-
-      if (activeTool === 'digital_signature') {
-        const detail = {
-          pageIndex: targetPageNum,
-          x,
-          y,
-          width: 350,
-          height: 70
-        };
-        lastSignatureParams.current = detail;
-        window.dispatchEvent(new CustomEvent('action-process-digital-signature', { detail }));
-        setActiveTool(null);
-        return;
-      }
-
-      if (activeTextEditor) {
-        commitTextAnnotation();
-      }
-      setActiveTextEditor({ x, y, type: activeTool as any, pageIndex: targetPageNum });
-      setCurrentText('');
       return;
     }
 
@@ -939,19 +847,12 @@ export default function DocumentViewer({
               containerRef.current.scrollLeft = panStartRef.current.scrollLeft - dx;
               containerRef.current.scrollTop = panStartRef.current.scrollTop - dy;
             }
-
-            if ((activeTool === 'signature' && activeSignatureUrl) || activeTool === 'digital_signature') {
-              setGlobalMousePos({ x: e.clientX, y: e.clientY });
-            } else if (globalMousePos) {
-              setGlobalMousePos(null);
-            }
           }}
           onMouseLeave={() => {
             if (isPanning) {
               setIsPanning(false);
               panStartRef.current = null;
             }
-            setGlobalMousePos(null);
           }}
         >
           <div 
@@ -1598,150 +1499,6 @@ export default function DocumentViewer({
         searchProgress={searchProgress}
         onResultClick={handleSearchResultClick}
       />
-      
-      {isSignatureModalOpen && (
-        <SignatureModal
-          onClose={() => setIsSignatureModalOpen(false)}
-          onSave={(sigUrl) => {
-            if (!savedSignatures.includes(sigUrl)) {
-              setSavedSignatures([...savedSignatures, sigUrl]);
-            }
-            setActiveSignatureUrl(sigUrl);
-            setIsSignatureModalOpen(false);
-            setActiveTool('signature');
-          }}
-        />
-      )}
-      
-      {pendingSignatureParams && (
-        <ConfirmSignatureModal
-          onCancel={() => setPendingSignatureParams(null)}
-          onConfirm={() => {
-            commitAnnotations([...annotations, pendingSignatureParams]);
-            setPendingSignatureParams(null);
-            setActiveTool(null);
-          }}
-        />
-      )}
-
-      <RecentSignatureBanner 
-        annotations={annotations} 
-        onUndo={(id) => commitAnnotations(annotations.filter(a => a.id !== id))} 
-      />
-
-      {/* Signature Preview */}
-      {activeTool === 'signature' && activeSignatureUrl && globalMousePos && !pendingSignatureParams && (
-        <div style={{
-          position: 'fixed',
-          top: globalMousePos.y - 30 * scale,
-          left: globalMousePos.x - 100 * scale,
-          width: 200 * scale,
-          height: 60 * scale,
-          pointerEvents: 'none',
-          zIndex: 9999,
-          opacity: 0.7,
-          border: '1px dashed #3b82f6',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <img src={activeSignatureUrl} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} alt="Preview" />
-        </div>
-      )}
-
-      {/* Digital Signature Preview */}
-      {activeTool === 'digital_signature' && globalMousePos && (
-        <div style={{
-          position: 'fixed',
-          top: globalMousePos.y + 12,
-          left: globalMousePos.x + 12,
-          pointerEvents: 'none',
-          zIndex: 9999,
-          backgroundColor: '#0284c7',
-          color: 'white',
-          padding: '8px 16px',
-          borderRadius: '999px',
-          display: 'flex', alignItems: 'center', gap: '8px',
-          boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)',
-          fontSize: '14px',
-          fontWeight: 'bold',
-          whiteSpace: 'nowrap'
-        }}>
-          <PenTool size={16} />
-          Digital Sign Here
-        </div>
-      )}
-
-      {isWaitingForPin && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '24px 32px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
-            textAlign: 'center',
-            maxWidth: '400px'
-          }}>
-            {pinError ? (
-              <>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', color: '#b91c1c' }}>Authentication Failed</h3>
-                <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: '#475569', lineHeight: '1.5' }}>
-                  {pinError} Do you want to try again?
-                </p>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
-                  <button 
-                    onClick={() => {
-                      setIsWaitingForPin(false);
-                      setPinError(null);
-                    }}
-                    style={{ padding: '8px 16px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#475569', cursor: 'pointer', fontWeight: 500 }}
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setPinError(null);
-                      if (lastSignatureParams.current) {
-                        window.dispatchEvent(new CustomEvent('action-process-digital-signature', { detail: lastSignatureParams.current }));
-                      }
-                    }}
-                    style={{ padding: '8px 16px', borderRadius: '4px', border: 'none', backgroundColor: '#0284c7', color: 'white', cursor: 'pointer', fontWeight: 500 }}
-                  >
-                    Try Again
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', color: '#0f172a' }}>Waiting for PIN</h3>
-                <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: '#475569', lineHeight: '1.5' }}>
-                  Please check your terminal. The USB bridge service is waiting for you to enter your hardware PIN to authorize this digital signature.
-                </p>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', color: '#0284c7' }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'currentColor', animation: 'pulse 1.5s infinite ease-in-out' }} />
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'currentColor', animation: 'pulse 1.5s infinite ease-in-out 0.2s' }} />
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'currentColor', animation: 'pulse 1.5s infinite ease-in-out 0.4s' }} />
-                </div>
-              </>
-            )}
-            <style>{`
-              @keyframes pulse {
-                0%, 100% { opacity: 0.4; transform: scale(0.8); }
-                50% { opacity: 1; transform: scale(1.2); }
-              }
-            `}</style>
-          </div>
-        </div>
-      )}
-
-
     </div>
   );
 }
@@ -1766,34 +1523,4 @@ function ToolButton({ icon, active, onClick, label }: { icon: React.ReactNode, a
   );
 }
 
-function RecentSignatureBanner({ annotations, onUndo }: { annotations: Annotation[]; onUndo: (id: string) => void }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
 
-  const recentSignature = annotations.find(a => a.type === 'signature' && a.timestamp && (now - a.timestamp) < 10 * 60 * 1000);
-
-  if (!recentSignature) return null;
-
-  return (
-    <div style={{
-      position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
-      backgroundColor: '#374151', color: '#fff', padding: '12px 24px', borderRadius: '24px',
-      display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-      zIndex: 1000
-    }}>
-      <span style={{ fontSize: '14px' }}>Signature placed.</span>
-      <button 
-        onClick={() => onUndo(recentSignature.id)}
-        style={{ 
-          background: 'none', border: 'none', color: '#60a5fa', fontWeight: 600, 
-          cursor: 'pointer', fontSize: '14px', padding: 0 
-        }}
-      >
-        UNDO
-      </button>
-    </div>
-  );
-}

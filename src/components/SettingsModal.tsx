@@ -3,7 +3,6 @@
  */
 import React, { useState } from 'react';
 import { X, Edit2, Search } from 'lucide-react';
-import { Vault } from '../utils/vault';
 import { useShortcuts } from '../hooks/useShortcuts';
 import type { ActionType, Shortcut } from '../hooks/useShortcuts';
 
@@ -17,14 +16,6 @@ export default function SettingsModal({ onClose, watermarkText, setWatermarkText
   const { shortcuts, updateShortcut } = useShortcuts();
   const [activeTab, setActiveTab] = useState('Keyboard Shortcuts');
   const [editingAction, setEditingAction] = useState<ActionType | null>(null);
-  
-  
-  const [_p12File, setP12File] = useState<File | null>(null);
-  const [p12Password, setP12Password] = useState('');
-  const [p12Status, setP12Status] = useState<string>('');
-  const [signatureMethod, setSignatureMethod] = useState<'p12' | 'usb'>('p12');
-  const [bridgeToken, setBridgeToken] = useState('');
-  const [usbStatus, setUsbStatus] = useState<string>('');
 
   const handleKeyDown = (e: React.KeyboardEvent, action: ActionType) => {
     e.preventDefault();
@@ -84,7 +75,7 @@ export default function SettingsModal({ onClose, watermarkText, setWatermarkText
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           {/* Sidebar */}
           <div style={{ width: '200px', borderRight: '1px solid var(--border-color)', backgroundColor: '#f9fafb', display: 'flex', flexDirection: 'column' }}>
-            {['General', 'Keyboard Shortcuts', 'Digital Signatures'].map(tab => (
+            {['General', 'Keyboard Shortcuts'].map(tab => (
               <div 
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -144,142 +135,7 @@ export default function SettingsModal({ onClose, watermarkText, setWatermarkText
               </table>
             )}
             
-            {activeTab === 'Digital Signatures' && (
-              <div style={{ padding: '0' }}>
-                <h3 style={{ marginTop: 0 }}>Cryptographic Digital Signatures</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '24px' }}>
-                  Cryptographically sign your documents when you save or download them. This adds an invisible, secure PKI wrapper around the file to prevent unauthorized modifications.
-                </p>
 
-                <div style={{ display: 'flex', gap: '24px', marginBottom: '24px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input 
-                      type="radio" 
-                      name="sigMethod" 
-                      checked={signatureMethod === 'p12'} 
-                      onChange={() => {
-                        setSignatureMethod('p12');
-                        sessionStorage.setItem('signature_method', 'p12');
-                      }}
-                    />
-                    <span>Upload .p12 / .pfx Certificate</span>
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input 
-                      type="radio" 
-                      name="sigMethod" 
-                      checked={signatureMethod === 'usb'} 
-                      onChange={() => {
-                        setSignatureMethod('usb');
-                        sessionStorage.setItem('signature_method', 'usb');
-                      }}
-                    />
-                    <span>Hardware Token (eMudhra / nCode)</span>
-                  </label>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '400px' }}>
-                  {signatureMethod === 'p12' && (
-                    <>
-                      <div>
-                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 500 }}>Certificate File (.p12)</label>
-                        <input 
-                          type="file" 
-                          accept=".p12,.pfx"
-                          onChange={(e) => {
-                            if (e.target.files && e.target.files.length > 0) {
-                              const file = e.target.files[0];
-                              setP12File(file);
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                if (reader.result) {
-                                  const base64 = btoa(new Uint8Array(reader.result as ArrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-                                  Vault.setP12Cert(base64);
-                                  setP12Status('Certificate securely loaded into memory vault.');
-                                }
-                              };
-                              reader.readAsArrayBuffer(file);
-                            }
-                          }}
-                          style={{ width: '100%' }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 500 }}>Certificate Password</label>
-                        <input 
-                          type="password" 
-                          value={p12Password}
-                          onChange={(e) => {
-                            setP12Password(e.target.value);
-                            Vault.setP12Password(e.target.value);
-                          }}
-                          placeholder="Enter certificate password..."
-                          style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '4px' }}
-                        />
-                      </div>
-                      
-                      {p12Status && (
-                        <div style={{ padding: '12px', backgroundColor: '#eef2ff', color: 'var(--primary)', borderRadius: '4px', fontSize: '13px' }}>
-                          {p12Status}
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {signatureMethod === 'usb' && (
-                    <div style={{ padding: '16px', backgroundColor: '#fff', border: '1px solid var(--border-color)', borderRadius: '4px' }}>
-                      <h4 style={{ margin: '0 0 12px 0', fontSize: '15px' }}>USB Bridge Service Required</h4>
-                      <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--text-muted)' }}>
-                        Browsers cannot directly access Class 3 DSC Tokens. To sign using your eMudhra or nCode token, you must be running the Local Bridge Service on your computer.
-                      </p>
-
-                      <div style={{ marginBottom: '16px' }}>
-                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 500 }}>Bridge Authorization Token</label>
-                        <input 
-                          type="password" 
-                          value={bridgeToken}
-                          onChange={(e) => {
-                            setBridgeToken(e.target.value);
-                            Vault.setBridgeToken(e.target.value);
-                          }}
-                          placeholder="Enter token from bridge console..."
-                          style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '4px' }}
-                        />
-                        <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: 'var(--text-muted)' }}>Required to securely authorize the connection and prevent CSWSH attacks.</p>
-                      </div>
-                      
-                      <button 
-                        onClick={async () => {
-                          setUsbStatus('Connecting...');
-                          try {
-                            const ws = new WebSocket('ws://127.0.0.1:8080');
-                            ws.onopen = () => {
-                              setUsbStatus('Successfully connected to bridge service!');
-                              ws.close();
-                            };
-                            ws.onerror = () => {
-                              setUsbStatus('Failed to connect. Ensure the bridge service is running.');
-                            };
-                          } catch {
-                            setUsbStatus('Failed to connect.');
-                          }
-                        }}
-                        style={{ padding: '8px 16px', borderRadius: '4px', border: '1px solid var(--border-color)', background: '#f9fafb', cursor: 'pointer', fontSize: '13px' }}
-                      >
-                        Test Connection
-                      </button>
-                      
-                      {usbStatus && (
-                        <div style={{ marginTop: '12px', padding: '12px', backgroundColor: usbStatus.includes('Failed') ? '#fef2f2' : '#eef2ff', color: usbStatus.includes('Failed') ? '#b91c1c' : 'var(--primary)', borderRadius: '4px', fontSize: '13px' }}>
-                          {usbStatus}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
             
             {activeTab === 'General' && (
               <div>

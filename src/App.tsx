@@ -5,8 +5,6 @@ import React, { useState } from 'react';
 import Header from './components/Header';
 import DocumentViewer from './components/DocumentViewer';
 import SettingsModal from './components/SettingsModal';
-import SignTypeModal from './components/SignTypeModal';
-import VerificationModal from './components/VerificationModal';
 import AboutModal from './components/AboutModal';
 
 import type { Redaction, WatermarkOptions, SDKPermissions } from './main';
@@ -31,7 +29,7 @@ interface AppProps {
 
 function App({ 
   initialDoc, initialScale, redactions, regexRedactions, enableAnnotations, 
-  enableSign = true, signOptions = ['digital', 'ades', 'simple'],
+  enableSign = true, signOptions: _signOptions = ['digital', 'ades', 'simple'],
   initialPage, watermark, permissions, enableRedactions,
   canAddAnnotations, canEditAnnotations, canDeleteAnnotations,
   onAnnotationsChange 
@@ -57,25 +55,10 @@ function App({
   const [pageLayout, setPageLayout] = useState<'single' | 'double' | 'cover-facing'>('single');
   const [rotation, setRotation] = useState<number>(0);
   const [watermarkText, setWatermarkText] = useState<string>('user@example.com - Confidential');
-  const [annotations, setAnnotations] = useState<any[]>([]);
-
-  // Signature Modals State
-  const [isSignTypeModalOpen, setIsSignTypeModalOpen] = useState(false);
-  const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
-
-  const signatures = annotations.filter(a => a.type === 'signature');
+  const [_annotations, setAnnotations] = useState<any[]>([]);
 
   // Listen for header events
   React.useEffect(() => {
-    const handleSign = () => {
-      const allowed: ('digital' | 'ades' | 'simple')[] = signOptions && signOptions.length > 0 ? signOptions : ['digital', 'ades', 'simple'];
-      if (allowed.length === 1) {
-        handleSignTypeSelect(allowed[0]);
-      } else {
-        setIsSignTypeModalOpen(true);
-      }
-    };
-    const handleVerify = () => setIsVerifyModalOpen(true);
     const handleOpenElements = (e: any) => {
       const elements = e.detail.elements || [];
       if (elements.includes('leftPanel')) setLeftSidebarOpen(true);
@@ -120,27 +103,18 @@ function App({
       }
     };
 
-    window.addEventListener('action-sign', handleSign);
-    window.addEventListener('action-verify', handleVerify);
     window.addEventListener('action-open-elements', handleOpenElements);
     window.addEventListener('action-close-elements', handleCloseElements);
     window.addEventListener('action-set-active-left-panel', handleSetActiveLeftPanel);
     window.addEventListener('keydown', handleKeyDown);
     
     return () => {
-      window.removeEventListener('action-sign', handleSign);
-      window.removeEventListener('action-verify', handleVerify);
       window.removeEventListener('action-open-elements', handleOpenElements);
       window.removeEventListener('action-close-elements', handleCloseElements);
       window.removeEventListener('action-set-active-left-panel', handleSetActiveLeftPanel);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [signOptions]);
-
-  const handleSignTypeSelect = (type: 'digital' | 'ades' | 'simple') => {
-    setIsSignTypeModalOpen(false);
-    window.dispatchEvent(new CustomEvent('action-start-signature', { detail: { type } }));
-  };
+  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
@@ -168,7 +142,6 @@ function App({
         pageTransition={pageTransition} setPageTransition={setPageTransition}
         pageLayout={pageLayout} setPageLayout={setPageLayout}
         rotation={rotation} setRotation={setRotation}
-        signatureCount={signatures.length}
         enableAnnotations={enableAnnotations}
         enableSign={enableSign}
         permissions={effectivePermissions}
@@ -202,22 +175,6 @@ function App({
       </div>
       {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} watermarkText={watermarkText} setWatermarkText={setWatermarkText} />}
       {isAboutModalOpen && <AboutModal onClose={() => setIsAboutModalOpen(false)} />}
-      {isSignTypeModalOpen && (
-        <SignTypeModal 
-          fileName={initialDoc?.split('/').pop() || 'Document.pdf'}
-          userEmail="sanjiv@costacloud.com"
-          allowedSignTypes={signOptions}
-          onClose={() => setIsSignTypeModalOpen(false)}
-          onSignNow={handleSignTypeSelect}
-        />
-      )}
-      {isVerifyModalOpen && (
-        <VerificationModal 
-          fileName={initialDoc?.split('/').pop() || 'Document.pdf'}
-          signatures={signatures}
-          onClose={() => setIsVerifyModalOpen(false)}
-        />
-      )}
     </div>
   );
 }

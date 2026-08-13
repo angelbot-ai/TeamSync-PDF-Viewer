@@ -38,10 +38,13 @@ export interface SDKPermissions {
   canRedact?: boolean;
 }
 
+import { DigitalSignerPlugin, type ViewerPlugin } from './plugins';
+
 interface WebViewerOptions {
   path?: string;
   initialDoc?: string;
   initialScale?: number;
+  plugins?: ViewerPlugin[];
   redactions?: Redaction[];
   regexRedactions?: RegExp[];
   enableAnnotations?: boolean;
@@ -769,6 +772,11 @@ if (rootElement) {
     // We are running standalone (Dev Mode)
     WebViewer({ 
       initialDoc: '/TeamSync_Marketing.pdf?v=2',
+      plugins: [
+        DigitalSignerPlugin({
+          allowedTypes: ['digital', 'ades', 'simple']
+        })
+      ],
       watermark: {
         text: 'CONFIDENTIAL',
         opacity: 0.1,

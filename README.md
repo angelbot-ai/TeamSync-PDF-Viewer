@@ -61,6 +61,20 @@ If installing from GitHub Packages registry:
 
 ---
 
+## 📖 Official Documentation & Wiki
+
+Explore detailed SDK guides, parameter options, code snippets, and architecture deep dives:
+
+- 🏠 **[Wiki Home](docs/wiki/Home.md)**: Main documentation index & overview.
+- 🚀 **[Getting Started Guide](docs/wiki/Getting-Started.md)**: Installation, CDN, and framework setups.
+- ⚙️ **[API Reference & Options](docs/wiki/API-Reference-&-Options.md)**: Complete parameter list for `WebViewerOptions` & `SDKPermissions`.
+- 🎨 **[Annotations & Markup Guide](docs/wiki/Annotations-&-Markup-Guide.md)**: Freehand drawing, vector shapes, callouts & links.
+- 🛡️ **[Redactions & PII Sanitization Guide](docs/wiki/Redactions-&-PII-Sanitization.md)**: Binary redactions, regex PII scanning & discard options.
+- 💧 **[Forensic Watermarking Guide](docs/wiki/Forensic-Watermarking.md)**: Dynamic single and tiled watermark setup.
+- 🔌 **[Plugin Architecture Guide](docs/wiki/Plugin-Architecture.md)**: Writing custom extension plugins.
+
+---
+
 ## ✨ Uncompromised Feature Set
 
 Everything you need to build collaborative, secure document workflows.

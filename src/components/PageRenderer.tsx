@@ -58,6 +58,7 @@ interface PageRendererProps {
   watermark?: import('../main').WatermarkOptions;
   watermarkText?: string;
   redactions?: Redaction[];
+  onDiscardRedaction?: (redaction: Redaction) => void;
 }
 
 function PageRendererComponent({ 
@@ -65,7 +66,7 @@ function PageRendererComponent({
   scrollTop: _scrollTop, scrollLeft: _scrollLeft, pageTop, pageLeft = 0, basePageWidth, basePageHeight,
   activeTab, activeTool, annotations, selectedAnnotationId, activeSearchResult,
   onMouseDown, onMouseMove, onMouseUp, onAnnotationClick, onAnnotationMouseEnter, onClearSelection,
-  watermark, watermarkText, redactions
+  watermark, watermarkText, redactions, onDiscardRedaction
 }: PageRendererProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
@@ -523,7 +524,15 @@ function PageRendererComponent({
         })}
 
         {redactions && redactions.filter(r => r.pageIndex === pageNum && r.status === 'pending').map((r, idx) => (
-          <g key={r.id || `pending-${idx}`}>
+          <g 
+            key={r.id || `pending-${idx}`} 
+            style={{ cursor: 'pointer' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDiscardRedaction?.(r);
+            }}
+          >
+            <title>Click to discard this redaction</title>
             <rect 
               x={r.x} 
               y={r.y} 
@@ -544,6 +553,13 @@ function PageRendererComponent({
             >
               PENDING REDACTION
             </text>
+            {/* Top-right Discard X Badge */}
+            {r.width > 24 && r.height > 16 && (
+              <g transform={`translate(${r.x + r.width - 18}, ${r.y + 2})`}>
+                <rect width="16" height="16" rx="4" fill="#dc2626" />
+                <path d="M4.5 4.5 L11.5 11.5 M11.5 4.5 L4.5 11.5" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+              </g>
+            )}
           </g>
         ))}
       </svg>

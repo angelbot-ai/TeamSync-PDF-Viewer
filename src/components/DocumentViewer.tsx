@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import * as pdfjsLib from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { Pen, Type, Minus, Eraser, Square, Circle as CircleIcon, Highlighter, ChevronLeft, ChevronRight, Brush, MessageSquareQuote, ArrowUpRight, ShieldCheck, Link as LinkIcon, EyeOff } from 'lucide-react';
+import { Pen, Type, Minus, Eraser, Square, Circle as CircleIcon, Highlighter, ChevronLeft, ChevronRight, Brush, MessageSquareQuote, ArrowUpRight, ShieldCheck, Link as LinkIcon, EyeOff, Trash2 } from 'lucide-react';
 import AnnotationContextMenu from './AnnotationContextMenu';
 import InsertLinkModal from './InsertLinkModal';
 import TextSelectionMenu from './TextSelectionMenu';
@@ -319,6 +319,16 @@ export default function DocumentViewer({
   const pendingRedactionsCount = useMemo(() => {
     return combinedRedactions.filter(r => r.status === 'pending').length;
   }, [combinedRedactions]);
+
+  const handleDiscardAllRedactions = useCallback(() => {
+    setManualRedactions(prev => prev.filter(r => r.status === 'applied'));
+    setAutoRedactions(prev => prev.filter(r => r.status === 'applied'));
+  }, []);
+
+  const handleDiscardRedaction = useCallback((red: Redaction) => {
+    setManualRedactions(prev => prev.filter(r => r !== red && r.id !== red.id));
+    setAutoRedactions(prev => prev.filter(r => r !== red && r.id !== red.id));
+  }, []);
 
   const { search, searchResults, isSearching, searchProgress } = usePdfSearch(pdfDoc, combinedRedactions);
 
@@ -723,28 +733,50 @@ export default function DocumentViewer({
               ))}
             </div>
             {pendingRedactionsCount > 0 && (
-              <button
-                onClick={() => setIsCommitModalOpen(true)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  backgroundColor: '#dc2626',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '5px 12px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 6px rgba(220, 38, 38, 0.3)',
-                  marginLeft: '8px'
-                }}
-                title="Apply all marked redactions permanently"
-              >
-                <ShieldCheck size={16} />
-                Apply Redactions ({pendingRedactionsCount})
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '8px' }}>
+                <button
+                  onClick={() => setIsCommitModalOpen(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#dc2626',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '5px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 6px rgba(220, 38, 38, 0.3)'
+                  }}
+                  title="Apply all marked redactions permanently"
+                >
+                  <ShieldCheck size={16} />
+                  Apply Redactions ({pendingRedactionsCount})
+                </button>
+
+                <button
+                  onClick={handleDiscardAllRedactions}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#ffffff',
+                    color: '#dc2626',
+                    border: '1px solid #fca5a5',
+                    borderRadius: '6px',
+                    padding: '5px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                  title="Discard all pending unapplied redactions"
+                >
+                  <Trash2 size={14} color="#dc2626" />
+                  Discard Redactions
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -765,7 +797,7 @@ export default function DocumentViewer({
             backgroundColor: '#ffffff',
             borderRadius: '12px',
             padding: '24px',
-            width: '440px',
+            width: '460px',
             maxWidth: '90vw',
             boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
           }}>
@@ -781,11 +813,11 @@ export default function DocumentViewer({
             <p style={{ fontSize: '14px', color: '#374151', lineHeight: '1.5', marginBottom: '20px' }}>
               You are about to permanently apply <strong>{pendingRedactionsCount} redaction(s)</strong>. Marked areas will be blacked out and underlying text will be permanently removed. This action cannot be undone.
             </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button
                 onClick={() => setIsCommitModalOpen(false)}
                 style={{
-                  padding: '8px 16px',
+                  padding: '8px 14px',
                   borderRadius: '6px',
                   border: '1px solid #d1d5db',
                   backgroundColor: '#ffffff',
@@ -799,12 +831,30 @@ export default function DocumentViewer({
               </button>
               <button
                 onClick={() => {
+                  handleDiscardAllRedactions();
+                  setIsCommitModalOpen(false);
+                }}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: '6px',
+                  border: '1px solid #fca5a5',
+                  backgroundColor: '#fef2f2',
+                  color: '#dc2626',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Discard Redactions
+              </button>
+              <button
+                onClick={() => {
                   setManualRedactions(prev => prev.map(r => ({ ...r, status: 'applied' })));
                   setAutoRedactions(prev => prev.map(r => ({ ...r, status: 'applied' })));
                   setIsCommitModalOpen(false);
                 }}
                 style={{
-                  padding: '8px 16px',
+                  padding: '8px 14px',
                   borderRadius: '6px',
                   border: 'none',
                   backgroundColor: '#dc2626',
@@ -1043,6 +1093,7 @@ export default function DocumentViewer({
                         watermark={watermark}
                         watermarkText={watermarkText}
                         redactions={combinedRedactions}
+                        onDiscardRedaction={handleDiscardRedaction}
                       />
                       {activeTextEditor && activeTextEditor.pageIndex === p && (
                         <div style={{

@@ -225,7 +225,7 @@ Distributed under the **CPAL 1.0 (Common Public Attribution License)**.
 
 ---
 <div align="center">
-  <b>AngelBot AI • TeamSync • </b> <a href="www.teamsync.com">www.teamsync.com </a>
+  <b>AngelBot AI • TeamSync • </b> <a href="https://www.teamsync.com" target="_blank" rel="noopener noreferrer">https://www.teamsync.com</a>
 </div>
 
 <div align="center">

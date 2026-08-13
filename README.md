@@ -23,8 +23,8 @@ Integrate a high-performance, drop-in PDF Viewer SDK directly into your React ap
 
 Traditional commercial PDF viewers force developers into expensive per-domain licenses, opaque sales calls, and heavy server-side processing dependencies. **TeamSync PDF Viewer** is built from the ground up to solve these pain points.
 
-- 💰 **Zero-Cost, Transparent Licensing**: Uncapped usage, no per-server fees, and no $10k+/yr commercial paywalls. 100% free and open-source under CPAL 1.0.
-- ⚡ **100% Client-Side WebAssembly**: Documents never leave the browser sandbox. Process, redact, sign, and render PDFs entirely on the client—guaranteeing instant **HIPAA**, **GDPR**, and **FINRA** compliance.
+- 💰 **Zero-Cost, Transparent Licensing**: Uncapped usage, no per-server fees, and no commercial paywalls. 100% free and open-source under CPAL 1.0.
+- ⚡ **100% Client-Side WebAssembly**: Documents never leave the browser sandbox. Process, redact, and render PDFs entirely on the client—guaranteeing instant **HIPAA**, **GDPR**, and **FINRA** compliance.
 - 🔌 **Universal WebViewer API**: Clean, intuitive `WebViewer({...})` API interface that makes integrating into your web applications effortless.
 - 🎨 **Headless & Customizable**: Built for modern React 19 SPA lifecycles. No bloated iFrames to fight—customize toolbars, sidebars, context menus, and controls natively.
 
@@ -39,11 +39,6 @@ Everything you need to build collaborative, secure document workflows.
 - **Notes & Callouts**: Sticky notes, callout text boxes with directional arrows, and text annotations.
 - **Interactive Hyperlinks**: Create internal page-jump links (`#page=N`) or external web URL links directly on document selections.
 
-### 🔐 Cryptographic PKI & USB Digital Signatures
-- **Local P12 / Certificate Signing**: Native in-browser PKI signing using X.509 digital certificates and private keys.
-- **Hardware Token / USB Smart Card**: Real-time integration with USB Smart Cards (e.g. ePass2003, AETokens) via a local bridge service for ADeS/eIDAS compliance.
-- **Simple & Handwritten Signatures**: Draw, type, or upload image signatures with customizable timestamps and signer identity verification.
-
 ### 🛡️ Military-Grade Secure Redaction
 - **Binary-Level Data Obliteration**: We don't just place black boxes over text—redactions are permanently rasterized and burned into the underlying PDF vector structure.
 - **Text Layer Sanitization**: Redacted text is automatically stripped from the DOM `textLayer` and PDF content streams, preventing copy/paste extraction and search indexing.
@@ -55,6 +50,24 @@ Everything you need to build collaborative, secure document workflows.
 
 ### 💧 Dynamic Forensic Watermarking
 - Programmatic, non-destructive watermarks rendered on the fly (single centered or full-page tiled) with customizable text, color, opacity, font size, and rotation.
+
+---
+
+## 🔌 Extensible Plugin Architecture
+
+TeamSync PDF Viewer features a decoupled **Plugin Architecture**. Core PDF rendering, smart annotations, redaction engines, and search remain lightweight and modular in the main engine, while enterprise extensions plug in as independent modules.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              TeamSync PDF Viewer Core                   │
+│   (Page Rendering, Annotations, Redactions, Search)     │
+└───────────────────────────┬─────────────────────────────┘
+                            │ Plugins Registry API
+┌───────────────────────────▼─────────────────────────────┐
+│                   Custom Extension                      │
+│      (Custom Modals, Action Buttons, Export Hooks)      │
+└─────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -80,33 +93,14 @@ Open `http://localhost:5173` in your browser to launch the live SDK viewer.
 
 ---
 
-## 🔌 Plugin Architecture
-
-TeamSync PDF Viewer features a decoupled **Plugin Architecture**. Core PDF rendering, smart annotations, redaction engines, and search remain lightweight and open-source in the main engine, while enterprise extensions (such as PKI Digital Signing & USB Hardware Tokens) plug in as independent modules.
-
-```
-┌─────────────────────────────────────────────────────────┐
-│              TeamSync PDF Viewer Core                   │
-│   (Page Rendering, Annotations, Redactions, Search)     │
-└───────────────────────────┬─────────────────────────────┘
-                            │ Plugins Registry API
-┌───────────────────────────▼─────────────────────────────┐
-│                 DigitalSignerPlugin                     │
-│   (PKI Engine, Hardware Tokens, P12 Signing, Modals)    │
-└─────────────────────────────────────────────────────────┘
-```
-
----
-
 ## 💻 Developer SDK Usage
 
-### Standard WebViewer Initialization (With Plugins)
+### Standard WebViewer Initialization
 
-Drop the SDK into any container element and load extension plugins:
+Drop the SDK into any container element with a single function call:
 
 ```typescript
 import { WebViewer } from './main';
-import { DigitalSignerPlugin } from './plugins';
 
 WebViewer({
   initialDoc: '/sample.pdf',
@@ -114,16 +108,8 @@ WebViewer({
   enableAnnotations: true,
   permissions: {
     canRedact: true,
-    canSign: true,
     canAddAnnotations: true
   },
-  // Load optional plugins (e.g. Digital Signing & Hardware Tokens)
-  plugins: [
-    DigitalSignerPlugin({
-      allowedTypes: ['digital', 'ades', 'simple'],
-      usbBridgeUrl: 'ws://localhost:8080'
-    })
-  ],
   watermark: {
     text: 'CONFIDENTIAL',
     mode: 'single',
@@ -134,7 +120,7 @@ WebViewer({
 }, document.getElementById('viewer-container')).then((instance) => {
   console.log('TeamSync PDF Viewer is ready!', instance);
   
-  // Export annotated / signed PDF buffer
+  // Export annotated PDF buffer
   instance.Core.documentViewer.getDocument().getFileData().then((pdfBytes) => {
     console.log('Exported PDF byte length:', pdfBytes.length);
   });
@@ -155,7 +141,7 @@ function App() {
         initialDoc="/contract.pdf"
         scale={1.0}
         enableAnnotations={true}
-        permissions={{ canSign: true, canRedact: true }}
+        permissions={{ canRedact: true }}
       />
     </div>
   );
@@ -164,11 +150,10 @@ function App() {
 
 ---
 
-## 🏛️ Architecture & Modern Tech Stack
+## 🏛️ Architecture & Tech Stack
 
 - **Core Engine**: HTML5, TypeScript, WebAssembly (PDF.js + pdf-lib)
 - **UI & State**: React 19, Lucide Icons, Pure CSS Modules
-- **Cryptographic Security**: Node-Forge (PKI / ASN.1 / X.509 parsing)
 - **Build System**: Vite 8 & Oxlint (Sub-500ms tree-shakable builds)
 
 ```
@@ -176,27 +161,13 @@ TeamSync-PDF-Viewer/
 ├── src/
 │   ├── components/       # Native React UI (Header, DocumentViewer, Sidebars, Modals)
 │   ├── hooks/            # Search & Keyboard shortcut hooks
-│   ├── utils/            # Cryptographic PDF signing & Regex redaction algorithms
+│   ├── utils/            # Redaction algorithms & vector helpers
+│   ├── plugins/          # Plugin API interfaces & registry
 │   ├── main.tsx          # WebViewer SDK entry point & public API bridge
 │   └── App.tsx           # Demo Application Shell
-├── usb-bridge/           # Local Node.js USB Smart Card Token Service
 ├── public/               # Static PDF assets & PDF.js workers
 └── docs/images/          # High-res UI documentation screenshots
 ```
-
----
-
-## ⚡ Hardware Token & USB Signing (Optional)
-
-To enable hardware-based digital signing using USB Smart Cards / Tokens (ADeS / eIDAS):
-
-```bash
-cd usb-bridge
-npm install
-node bridge.js
-```
-
-The viewer automatically detects the local bridge on `ws://localhost:8080` and enables native USB token digital signing.
 
 ---
 

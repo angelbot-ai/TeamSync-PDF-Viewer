@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![TeamSync PDF Viewer UI](docs/images/viewer_ui.png)
+![TeamSync PDF Viewer UI](https://raw.githubusercontent.com/angelbot-ai/TeamSync-PDF-Viewer/main/docs/images/viewer_ui.png)
 
 ### **100% Open Source. 100% Client-Side. Enterprise PDF Engine.**
 

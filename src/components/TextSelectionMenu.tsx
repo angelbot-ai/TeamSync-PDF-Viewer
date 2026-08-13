@@ -1,0 +1,98 @@
+/**
+ * © 2026 AngelBot Ai Pvt Ltd. All rights reserved.
+ */
+import React from 'react';
+import { Highlighter, Underline, Type, Copy, Link as LinkIcon, EyeOff } from 'lucide-react';
+
+import type { SDKPermissions } from '../main';
+
+interface TextSelectionMenuProps {
+  position: { top: number; left: number };
+  onHighlight: () => void;
+  onRedact?: () => void;
+  onStrikethrough: () => void;
+  onUnderline: () => void;
+  onCopy: () => void;
+  onLink: () => void;
+  permissions?: SDKPermissions;
+}
+
+export default function TextSelectionMenu({
+  position,
+  onHighlight,
+  onRedact,
+  onStrikethrough,
+  onUnderline,
+  onCopy,
+  onLink,
+  permissions
+}: TextSelectionMenuProps) {
+  const canAdd = permissions?.canAddAnnotations !== false;
+  const canRedact = permissions?.canRedact !== false;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: `${position.top}px`,
+        left: `${position.left}px`,
+        backgroundColor: '#ffffff',
+        border: '1px solid #e5e7eb',
+        borderRadius: '6px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+        display: 'flex',
+        alignItems: 'center',
+        padding: '4px',
+        gap: '4px',
+        zIndex: 2000,
+        transform: 'translate(-50%, -100%) translateY(-8px)' // Center horizontally and place above the selection
+      }}
+      onMouseDown={(e) => e.preventDefault()} // Prevent losing focus/selection when clicking the menu
+    >
+      {canAdd && (
+        <>
+          <MenuButton icon={<Highlighter size={16} />} title="Highlight" onClick={onHighlight} />
+          <MenuButton icon={<Underline size={16} />} title="Underline" onClick={onUnderline} />
+          <MenuButton icon={<Type size={16} />} title="Strikethrough" onClick={onStrikethrough} />
+        </>
+      )}
+      {canRedact && onRedact && (
+        <MenuButton icon={<EyeOff size={16} />} title="Redact Selection" onClick={onRedact} color="#dc2626" />
+      )}
+      {(canAdd || canRedact) && (
+        <div style={{ width: '1px', height: '20px', backgroundColor: '#e5e7eb', margin: '0 4px' }} />
+      )}
+      <MenuButton icon={<Copy size={16} />} title="Copy Text" onClick={onCopy} />
+      {canAdd && (
+        <>
+          <div style={{ width: '1px', height: '20px', backgroundColor: '#e5e7eb', margin: '0 4px' }} />
+          <MenuButton icon={<LinkIcon size={16} />} title="Create Link" onClick={onLink} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function MenuButton({ icon, title, onClick, color = '#4b5563' }: { icon: React.ReactNode, title: string, onClick: () => void, color?: string }) {
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '32px',
+        height: '32px',
+        borderRadius: '4px',
+        border: 'none',
+        backgroundColor: 'transparent',
+        cursor: 'pointer',
+        color: color
+      }}
+      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+    >
+      {icon}
+    </button>
+  );
+}

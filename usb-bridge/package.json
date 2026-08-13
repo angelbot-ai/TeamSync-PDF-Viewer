@@ -1,0 +1,17 @@
+{
+  "name": "usb-bridge",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "node-forge": "^1.4.0",
+    "ws": "^8.16.0"
+  }
+}

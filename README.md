@@ -80,14 +80,33 @@ Open `http://localhost:5173` in your browser to launch the live SDK viewer.
 
 ---
 
+## 🔌 Plugin Architecture
+
+TeamSync PDF Viewer features a decoupled **Plugin Architecture**. Core PDF rendering, smart annotations, redaction engines, and search remain lightweight and open-source in the main engine, while enterprise extensions (such as PKI Digital Signing & USB Hardware Tokens) plug in as independent modules.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              TeamSync PDF Viewer Core                   │
+│   (Page Rendering, Annotations, Redactions, Search)     │
+└───────────────────────────┬─────────────────────────────┘
+                            │ Plugins Registry API
+┌───────────────────────────▼─────────────────────────────┐
+│                 DigitalSignerPlugin                     │
+│   (PKI Engine, Hardware Tokens, P12 Signing, Modals)    │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## 💻 Developer SDK Usage
 
-### Standard WebViewer Initialization
+### Standard WebViewer Initialization (With Plugins)
 
-Drop the SDK into any container element with a single function call:
+Drop the SDK into any container element and load extension plugins:
 
 ```typescript
 import { WebViewer } from './main';
+import { DigitalSignerPlugin } from './plugins';
 
 WebViewer({
   initialDoc: '/sample.pdf',
@@ -98,17 +117,20 @@ WebViewer({
     canSign: true,
     canAddAnnotations: true
   },
+  // Load optional plugins (e.g. Digital Signing & Hardware Tokens)
+  plugins: [
+    DigitalSignerPlugin({
+      allowedTypes: ['digital', 'ades', 'simple'],
+      usbBridgeUrl: 'ws://localhost:8080'
+    })
+  ],
   watermark: {
     text: 'CONFIDENTIAL',
     mode: 'single',
     size: 48,
     opacity: 0.1,
     color: '#dc2626'
-  },
-  regexRedactions: [
-    /\d{4} \d{4}(?= \d{4})/g, // Auto-redact first 8 digits of 12-digit IDs
-    /DOB: \d{2}\/\d{2}\/\d{4}/g // Auto-redact Dates of Birth
-  ]
+  }
 }, document.getElementById('viewer-container')).then((instance) => {
   console.log('TeamSync PDF Viewer is ready!', instance);
   

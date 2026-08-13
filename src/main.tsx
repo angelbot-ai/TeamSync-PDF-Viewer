@@ -680,7 +680,7 @@ if (rootElement) {
   } else {
     // We are running standalone (Dev Mode)
     WebViewer({ 
-      initialDoc: '/TeamSync_Marketing.pdf?v=2',
+      initialDoc: '/TeamSync.pdf?v=2',
       watermark: {
         text: 'CONFIDENTIAL',
         opacity: 0.1,

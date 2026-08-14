@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 
 import type { SDKPermissions } from '../main';
+import type { ViewerPlugin } from '../plugins/types';
 
 interface HeaderProps {
   activeTab: string;
@@ -23,7 +24,7 @@ interface HeaderProps {
   scale: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
-  onZoomSet?: (scale: number) => void;
+  onZoomSet: (scale: number) => void;
   onDownload: () => void;
   onFullScreen: () => void;
   onSaveAs: () => void;
@@ -39,6 +40,7 @@ interface HeaderProps {
   signatureCount?: number;
   enableAnnotations?: boolean;
   enableSign?: boolean;
+  plugins?: ViewerPlugin[];
   permissions?: SDKPermissions;
 }
 
@@ -56,9 +58,12 @@ export default function Header({
   pageTransition, setPageTransition, pageLayout, setPageLayout, rotation, setRotation,
   signatureCount = 0,
   enableAnnotations,
-  enableSign = true,
+  enableSign = false,
+  plugins,
   permissions
 }: HeaderProps) {
+  const hasSignPlugin = plugins && plugins.some(p => p.id && p.id.toLowerCase().includes('sign'));
+  const isSignVisible = enableSign === true && Boolean(hasSignPlugin);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false);
   const [isViewSettingsOpen, setIsViewSettingsOpen] = useState(false);
@@ -304,7 +309,7 @@ export default function Header({
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           
           {/* Sign Button */}
-          {enableSign !== false && (
+          {isSignVisible && (
             <button 
               onClick={() => window.dispatchEvent(new CustomEvent('action-sign'))}
               style={{ 

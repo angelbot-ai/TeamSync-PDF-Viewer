@@ -8,10 +8,12 @@ import SettingsModal from './components/SettingsModal';
 import AboutModal from './components/AboutModal';
 
 import type { Redaction, WatermarkOptions, SDKPermissions } from './main';
+import type { ViewerPlugin } from './plugins/types';
 
 interface AppProps {
   initialDoc?: string;
   initialScale?: number;
+  plugins?: ViewerPlugin[];
   redactions?: Redaction[];
   regexRedactions?: RegExp[];
   enableAnnotations?: boolean;
@@ -28,8 +30,8 @@ interface AppProps {
 }
 
 function App({ 
-  initialDoc, initialScale, redactions, regexRedactions, enableAnnotations, 
-  enableSign = true, signOptions: _signOptions = ['digital', 'ades', 'simple'],
+  initialDoc, initialScale, plugins, redactions, regexRedactions, enableAnnotations, 
+  enableSign = false, signOptions: _signOptions = ['digital', 'ades', 'simple'],
   initialPage, watermark, permissions, enableRedactions,
   canAddAnnotations, canEditAnnotations, canDeleteAnnotations,
   onAnnotationsChange 
@@ -144,6 +146,7 @@ function App({
         rotation={rotation} setRotation={setRotation}
         enableAnnotations={enableAnnotations}
         enableSign={enableSign}
+        plugins={plugins}
         permissions={effectivePermissions}
       />
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>

@@ -540,6 +540,7 @@ export const WebViewer = (options: WebViewerOptions, viewerElement: HTMLElement)
       regexRedactions={options.regexRedactions}
       enableAnnotations={options.enableAnnotations}
       enableSign={options.enableSign}
+      plugins={options.plugins}
       signOptions={options.signOptions}
       initialPage={options.initialPage}
       watermark={options.watermark}

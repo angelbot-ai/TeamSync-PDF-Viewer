@@ -32,6 +32,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:app": "tsc -b && vite build --config vite.config.app.ts",
     "lint": "oxlint",
     "preview": "vite preview"
   },

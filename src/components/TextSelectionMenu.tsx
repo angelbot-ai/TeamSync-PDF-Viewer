@@ -10,11 +10,13 @@ interface TextSelectionMenuProps {
   position: { top: number; left: number };
   onHighlight: () => void;
   onRedact?: () => void;
-  onStrikethrough: () => void;
-  onUnderline: () => void;
-  onCopy: () => void;
-  onLink: () => void;
+  onStrikethrough?: () => void;
+  onUnderline?: () => void;
+  onCopy?: () => void;
+  onLink?: () => void;
   permissions?: SDKPermissions;
+  isViewMode?: boolean;
+  hasText?: boolean;
 }
 
 export default function TextSelectionMenu({
@@ -25,10 +27,15 @@ export default function TextSelectionMenu({
   onUnderline,
   onCopy,
   onLink,
-  permissions
+  permissions,
+  isViewMode = false,
+  hasText = true
 }: TextSelectionMenuProps) {
-  const canAdd = permissions?.canAddAnnotations !== false;
-  const canRedact = permissions?.canRedact !== false;
+  const canAdd = !isViewMode && permissions?.canAddAnnotations !== false;
+  const canRedact = !isViewMode && permissions?.canRedact !== false;
+
+  if (isViewMode && !hasText) return null;
+
   return (
     <div
       style={{
@@ -44,25 +51,29 @@ export default function TextSelectionMenu({
         padding: '4px',
         gap: '4px',
         zIndex: 2000,
-        transform: 'translate(-50%, -100%) translateY(-8px)' // Center horizontally and place above the selection
+        transform: 'translate(-50%, -100%) translateY(-8px)'
       }}
-      onMouseDown={(e) => e.preventDefault()} // Prevent losing focus/selection when clicking the menu
+      onMouseDown={(e) => e.preventDefault()}
     >
       {canAdd && (
         <>
           <MenuButton icon={<Highlighter size={16} />} title="Highlight" onClick={onHighlight} />
-          <MenuButton icon={<Underline size={16} />} title="Underline" onClick={onUnderline} />
-          <MenuButton icon={<Type size={16} />} title="Strikethrough" onClick={onStrikethrough} />
+          {onUnderline && <MenuButton icon={<Underline size={16} />} title="Underline" onClick={onUnderline} />}
+          {onStrikethrough && <MenuButton icon={<Type size={16} />} title="Strikethrough" onClick={onStrikethrough} />}
         </>
       )}
       {canRedact && onRedact && (
         <MenuButton icon={<EyeOff size={16} />} title="Redact Selection" onClick={onRedact} color="#dc2626" />
       )}
-      {(canAdd || canRedact) && (
-        <div style={{ width: '1px', height: '20px', backgroundColor: '#e5e7eb', margin: '0 4px' }} />
+      {hasText && onCopy && (
+        <>
+          {(canAdd || canRedact) && (
+            <div style={{ width: '1px', height: '20px', backgroundColor: '#e5e7eb', margin: '0 4px' }} />
+          )}
+          <MenuButton icon={<Copy size={16} />} title="Copy Text" onClick={onCopy} />
+        </>
       )}
-      <MenuButton icon={<Copy size={16} />} title="Copy Text" onClick={onCopy} />
-      {canAdd && (
+      {canAdd && onLink && (
         <>
           <div style={{ width: '1px', height: '20px', backgroundColor: '#e5e7eb', margin: '0 4px' }} />
           <MenuButton icon={<LinkIcon size={16} />} title="Create Link" onClick={onLink} />

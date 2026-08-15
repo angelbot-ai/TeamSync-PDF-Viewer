@@ -8,7 +8,7 @@
 
 [![License: CPAL-1.0](https://img.shields.io/badge/License-CPAL--1.0-blue.svg)](LICENSE)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-pdfviewer.teamsync.com-000000.svg)](https://pdfviewer.teamsync.com/)
-[![NPM Version](https://img.shields.io/badge/npm-%40angelbot--ai%2Fteamsync--pdf--viewer-blue.svg)](https://www.npmjs.com/package/@angelbot-ai/teamsync-pdf-viewer)
+[![NPM Version](https://img.shields.io/badge/npm-%40angelbot--ai%2Fteamsync--pdf--viewer-blue.svg)](https://www.npmjs.com/package/teamsync-pdf-viewer)
 [![React 19](https://img.shields.io/badge/React-19-61dafb.svg)](https://reactjs.org/)
 [![Vite 8](https://img.shields.io/badge/Vite-8.2-646cff.svg)](https://vitejs.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue.svg)](https://www.typescriptlang.org/)
@@ -37,13 +37,13 @@ Install the package into your React / TypeScript project:
 
 ```bash
 # Using npm
-npm install @angelbot-ai/teamsync-pdf-viewer
+npm install teamsync-pdf-viewer
 
 # Using yarn
-yarn add @angelbot-ai/teamsync-pdf-viewer
+yarn add teamsync-pdf-viewer
 
 # Using pnpm
-pnpm add @angelbot-ai/teamsync-pdf-viewer
+pnpm add teamsync-pdf-viewer
 ```
 
 ### Installing from GitHub Packages (Alternative)
@@ -56,7 +56,7 @@ If installing from GitHub Packages registry:
    ```
 2. Install via npm:
    ```bash
-   npm install @angelbot-ai/teamsync-pdf-viewer
+   npm install teamsync-pdf-viewer
    ```
 
 ---
@@ -106,8 +106,8 @@ Everything you need to build collaborative, secure document workflows.
 Drop the SDK into any container element with a single function call:
 
 ```typescript
-import { WebViewer } from '@angelbot-ai/teamsync-pdf-viewer';
-import '@angelbot-ai/teamsync-pdf-viewer/style.css';
+import { WebViewer } from 'teamsync-pdf-viewer';
+import 'teamsync-pdf-viewer/style.css';
 
 WebViewer({
   initialDoc: '/sample.pdf',
@@ -139,8 +139,8 @@ WebViewer({
 For native React integration, use the `<DocumentViewer />` component:
 
 ```tsx
-import { DocumentViewer } from '@angelbot-ai/teamsync-pdf-viewer';
-import '@angelbot-ai/teamsync-pdf-viewer/style.css';
+import { DocumentViewer } from 'teamsync-pdf-viewer';
+import 'teamsync-pdf-viewer/style.css';
 
 function App() {
   return (

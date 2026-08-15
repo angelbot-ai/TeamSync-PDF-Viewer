@@ -1,5 +1,5 @@
 {
-  "name": "@angelbot-ai/teamsync-pdf-viewer",
+  "name": "teamsync-pdf-viewer",
   "version": "1.0.3",
   "license": "CPAL-1.0",
   "description": "Enterprise PDF Viewer SDK - 100% Client-Side WebAssembly PDF Engine for React",

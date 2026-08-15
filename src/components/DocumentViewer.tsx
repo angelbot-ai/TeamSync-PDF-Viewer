@@ -8,7 +8,6 @@ import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Pen, Type, Minus, Eraser, Square, Circle as CircleIcon, Highlighter, ChevronLeft, ChevronRight, Brush, MessageSquareQuote, ArrowUpRight, ShieldCheck, Link as LinkIcon, EyeOff, Trash2 } from 'lucide-react';
 import AnnotationContextMenu from './AnnotationContextMenu';
 import InsertLinkModal from './InsertLinkModal';
-import TextSelectionMenu from './TextSelectionMenu';
 import { matchShortcut, useShortcuts } from '../hooks/useShortcuts';
 import Sidebar from './Sidebar';
 import LeftSidebar from './LeftSidebar';
@@ -119,12 +118,10 @@ export default function DocumentViewer({
   const [currentText, setCurrentText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Selection State
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   const [contextMenuPos, setContextMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const justCreatedLinkRef = useRef(false);
-  const [textSelection, setTextSelection] = useState<{ text: string, top: number, left: number, pageIndex: number, rects: DOMRect[] } | null>(null);
 
 
   useEffect(() => {
@@ -408,7 +405,6 @@ export default function DocumentViewer({
   }, [handleFitToWidth, handleFitToPage]);
 
   const handleMouseDown = (e: React.MouseEvent<Element>, targetPageNum: number) => {
-    setTextSelection(null);
     if (!activeTool) return;
     
     const rect = e.currentTarget.getBoundingClientRect();
@@ -967,83 +963,11 @@ export default function DocumentViewer({
                 setIsPanning(false);
                 panStartRef.current = null;
               }
-              if (activeTool !== null && activeTool !== 'pan') return;
-              setTimeout(() => {
-                const selection = window.getSelection();
-                if (selection && selection.rangeCount > 0 && selection.toString().trim() !== '') {
-                  const range = selection.getRangeAt(0);
-                  const rect = range.getBoundingClientRect();
-                  const container = containerRef.current;
-                  if (container && container.contains(selection.anchorNode)) {
-                    // Try to determine which page this text belongs to
-                    let pageIndex = 1;
-                    const pageNodes = document.querySelectorAll('.pdf-page-container');
-                    pageNodes.forEach((node, i) => {
-                      if (node.contains(selection.anchorNode)) {
-                        pageIndex = i + 1;
-                      }
-                    });
-
-                    const rects = Array.from(range.getClientRects());
-                    setTextSelection({
-                      text: selection.toString(),
-                      top: rect.top - container.getBoundingClientRect().top + container.scrollTop,
-                      left: rect.left - container.getBoundingClientRect().left + container.scrollLeft + (rect.width / 2),
-                      pageIndex,
-                      rects
-                    });
-                  }
-                } else {
-                  setTextSelection(null);
-                }
-              }, 10);
             }}
             onContextMenu={(e) => {
-              // Prevent default context menu
+              // Prevent default browser context menu
               e.preventDefault();
               e.stopPropagation();
-              
-              if (activeTab === 'View') {
-                // In View mode, if text is selected, keep text selection for copy, otherwise close menu
-                const selection = window.getSelection();
-                if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') {
-                  setTextSelection(null);
-                }
-                return;
-              }
-              
-              const container = containerRef.current;
-              if (container) {
-                const rect = container.getBoundingClientRect();
-                const selection = window.getSelection();
-                let selText = '';
-                let pageIndex = 1;
-                let rects: DOMRect[] = [];
-                
-                if (selection && selection.rangeCount > 0 && selection.toString().trim() !== '') {
-                  selText = selection.toString();
-                  const range = selection.getRangeAt(0);
-                  rects = Array.from(range.getClientRects());
-                  const pageNodes = document.querySelectorAll('.pdf-page-container');
-                  pageNodes.forEach((node, i) => {
-                    if (node.contains(selection.anchorNode)) {
-                      pageIndex = i + 1;
-                    }
-                  });
-                } else {
-                  const yRaw = (e.clientY - rect.top + container.scrollTop) / scale;
-                  const pageHeightRaw = basePageDims.height + (16 / scale);
-                  pageIndex = Math.floor(yRaw / pageHeightRaw) + 1;
-                }
-
-                setTextSelection({
-                  text: selText,
-                  top: e.clientY - rect.top + container.scrollTop,
-                  left: e.clientX - rect.left + container.scrollLeft,
-                  pageIndex,
-                  rects
-                });
-              }
             }}
             style={{ 
               width: '100%', 
@@ -1357,7 +1281,7 @@ export default function DocumentViewer({
                   setSelectedAnnotationId(null);
                   setContextMenuPos(null);
                 }}
-                onUpdateColor={(color) => {
+                onUpdateColor={(color: string) => {
                   commitAnnotations(annotations.map(a => a.id === selectedAnnotationId ? { ...a, color } : a));
                 }}
                 onOpenLinkModal={() => {
@@ -1368,109 +1292,7 @@ export default function DocumentViewer({
               />
             )}
             
-            {/* Unified Text Selection & Right-Click Menu */}
-            {textSelection && !isLinkModalOpen && (
-              <TextSelectionMenu
-                permissions={permissions}
-                position={textSelection}
-                isViewMode={activeTab === 'View'}
-                hasText={!!textSelection.text}
-                onHighlight={() => {
-                  const annId = Math.random().toString(36).substr(2, 9);
-                  const pageEl = document.getElementById(`pdf-page-${textSelection.pageIndex}`);
-                  if (pageEl) {
-                     const pageRect = pageEl.getBoundingClientRect();
-                     const firstRect = textSelection.rects[0] || { left: pageRect.left, top: pageRect.top, width: 100, height: 16 };
-                     const x = (firstRect.left - pageRect.left) / scale;
-                     const y = (firstRect.top - pageRect.top) / scale;
-                     
-                     commitAnnotations([...annotations, {
-                       id: annId, type: 'highlight', pageIndex: textSelection.pageIndex,
-                       x: x, y: y, width: firstRect.width / scale, height: firstRect.height / scale,
-                       color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity,
-                       points: [], text: ''
-                     }]);
-                  }
-                  window.getSelection()?.removeAllRanges();
-                  setTextSelection(null);
-                }}
-                onRedact={() => {
-                  const pageEl = document.getElementById(`pdf-page-${textSelection.pageIndex}`);
-                  if (pageEl) {
-                    const pageRect = pageEl.getBoundingClientRect();
-                    const newRedactions: Redaction[] = textSelection.rects.length > 0 ? textSelection.rects.map(r => ({
-                      id: `manual-sel-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-                      pageIndex: textSelection.pageIndex,
-                      x: (r.left - pageRect.left) / scale,
-                      y: (r.top - pageRect.top) / scale,
-                      width: r.width / scale,
-                      height: r.height / scale,
-                      status: 'pending'
-                    })) : [{
-                      id: `manual-sel-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-                      pageIndex: textSelection.pageIndex,
-                      x: (textSelection.left - (pageEl.getBoundingClientRect().left - containerRef.current!.getBoundingClientRect().left + containerRef.current!.scrollLeft)) / scale,
-                      y: (textSelection.top - (pageEl.getBoundingClientRect().top - containerRef.current!.getBoundingClientRect().top + containerRef.current!.scrollTop)) / scale,
-                      width: 100,
-                      height: 30,
-                      status: 'pending'
-                    }];
-                    setManualRedactions(prev => [...prev, ...newRedactions]);
-                  }
-                  window.getSelection()?.removeAllRanges();
-                  setTextSelection(null);
-                }}
-                onText={() => {
-                  const annId = Math.random().toString(36).substr(2, 9);
-                  const pageEl = document.getElementById(`pdf-page-${textSelection.pageIndex}`);
-                  if (pageEl) {
-                     const pageRect = pageEl.getBoundingClientRect();
-                     const firstRect = textSelection.rects[0] || { left: pageRect.left, top: pageRect.top, width: 100, height: 16 };
-                     const x = (firstRect.left - pageRect.left) / scale;
-                     const y = (firstRect.top - pageRect.top) / scale;
-                     
-                     commitAnnotations([...annotations, {
-                       id: annId, type: 'text', pageIndex: textSelection.pageIndex,
-                       x: x, y: y, width: 120, height: 30,
-                       color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity,
-                       points: [], text: 'Text Annotation'
-                     }]);
-                  }
-                  window.getSelection()?.removeAllRanges();
-                  setTextSelection(null);
-                }}
-                onCopy={() => {
-                  if (textSelection.text) {
-                    navigator.clipboard.writeText(textSelection.text);
-                  }
-                  window.getSelection()?.removeAllRanges();
-                  setTextSelection(null);
-                }}
-                onLink={() => {
-                  let annId = Math.random().toString(36).substr(2, 9);
-                  if (textSelection) {
-                     const pageEl = document.getElementById(`pdf-page-${textSelection.pageIndex}`);
-                     if (pageEl) {
-                       const pageRect = pageEl.getBoundingClientRect();
-                       const firstRect = textSelection.rects[0] || { left: pageRect.left, top: pageRect.top, width: 100, height: 30 };
-                       const x = (firstRect.left - pageRect.left) / scale;
-                       const y = (firstRect.top - pageRect.top) / scale;
-                       
-                       commitAnnotations([...annotations, {
-                         id: annId, type: 'link', pageIndex: textSelection.pageIndex,
-                         x: x, y: y, width: firstRect.width / scale, height: (firstRect.height || 30) / scale,
-                         color: 'transparent', strokeWidth: 0, opacity: 1,
-                         points: [], text: ''
-                       }]);
-                     }
-                  }
-                  justCreatedLinkRef.current = true;
-                  setSelectedAnnotationId(annId);
-                  setIsLinkModalOpen(true);
-                  setTextSelection(null);
-                }}
-              />
-            )}
+
         </div>
       </div>
       

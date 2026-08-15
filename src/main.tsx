@@ -126,6 +126,18 @@ export class WebViewerInstance {
     },
     setActiveLeftPanel: (panel: string) => {
       window.dispatchEvent(new CustomEvent('action-set-active-left-panel', { detail: { panel } }));
+    },
+    fitWidth: () => {
+      window.dispatchEvent(new CustomEvent('action-fit-to-width'));
+    },
+    fitPage: () => {
+      window.dispatchEvent(new CustomEvent('action-fit-to-page'));
+    },
+    fitToWidth: () => {
+      window.dispatchEvent(new CustomEvent('action-fit-to-width'));
+    },
+    fitToPage: () => {
+      window.dispatchEvent(new CustomEvent('action-fit-to-page'));
     }
   };
 

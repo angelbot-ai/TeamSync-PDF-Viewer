@@ -372,6 +372,43 @@ export default function DocumentViewer({
     }
   }, [pdfDoc, rotation]);
 
+  // Dynamic Fit to Width calculation
+  const handleFitToWidth = useCallback(() => {
+    if (!containerRef.current || !basePageDims.width) return;
+    const availableWidth = containerRef.current.clientWidth - 48;
+    if (availableWidth > 0 && basePageDims.width > 0) {
+      const newScale = availableWidth / basePageDims.width;
+      const clampedScale = Math.max(0.1, Math.min(32, parseFloat(newScale.toFixed(2))));
+      setScale(clampedScale);
+    }
+  }, [basePageDims.width, setScale]);
+
+  // Dynamic Fit to Page calculation
+  const handleFitToPage = useCallback(() => {
+    if (!containerRef.current || !basePageDims.width || !basePageDims.height) return;
+    const availableWidth = containerRef.current.clientWidth - 48;
+    const availableHeight = containerRef.current.clientHeight - 48;
+    if (availableWidth > 0 && availableHeight > 0 && basePageDims.width > 0 && basePageDims.height > 0) {
+      const scaleX = availableWidth / basePageDims.width;
+      const scaleY = availableHeight / basePageDims.height;
+      const newScale = Math.min(scaleX, scaleY);
+      const clampedScale = Math.max(0.1, Math.min(32, parseFloat(newScale.toFixed(2))));
+      setScale(clampedScale);
+    }
+  }, [basePageDims.width, basePageDims.height, setScale]);
+
+  useEffect(() => {
+    const onFitWidth = () => handleFitToWidth();
+    const onFitPage = () => handleFitToPage();
+
+    window.addEventListener('action-fit-to-width', onFitWidth);
+    window.addEventListener('action-fit-to-page', onFitPage);
+    return () => {
+      window.removeEventListener('action-fit-to-width', onFitWidth);
+      window.removeEventListener('action-fit-to-page', onFitPage);
+    };
+  }, [handleFitToWidth, handleFitToPage]);
+
   const handleMouseDown = (e: React.MouseEvent<Element>, targetPageNum: number) => {
     setTextSelection(null);
     if (!activeTool) return;

@@ -2,16 +2,15 @@
  * © 2026 AngelBot Ai Pvt Ltd. All rights reserved.
  */
 import React from 'react';
-import { Highlighter, Underline, Type, Copy, Link as LinkIcon, EyeOff } from 'lucide-react';
+import { Highlighter, Type, Copy, Link as LinkIcon, EyeOff } from 'lucide-react';
 
 import type { SDKPermissions } from '../main';
 
 interface TextSelectionMenuProps {
   position: { top: number; left: number };
   onHighlight: () => void;
+  onText?: () => void;
   onRedact?: () => void;
-  onStrikethrough?: () => void;
-  onUnderline?: () => void;
   onCopy?: () => void;
   onLink?: () => void;
   permissions?: SDKPermissions;
@@ -22,9 +21,8 @@ interface TextSelectionMenuProps {
 export default function TextSelectionMenu({
   position,
   onHighlight,
+  onText,
   onRedact,
-  onStrikethrough,
-  onUnderline,
   onCopy,
   onLink,
   permissions,
@@ -58,12 +56,11 @@ export default function TextSelectionMenu({
       {canAdd && (
         <>
           <MenuButton icon={<Highlighter size={16} />} title="Highlight" onClick={onHighlight} />
-          {onUnderline && <MenuButton icon={<Underline size={16} />} title="Underline" onClick={onUnderline} />}
-          {onStrikethrough && <MenuButton icon={<Type size={16} />} title="Strikethrough" onClick={onStrikethrough} />}
+          {onText && <MenuButton icon={<Type size={16} />} title="Add Text" onClick={onText} />}
         </>
       )}
       {canRedact && onRedact && (
-        <MenuButton icon={<EyeOff size={16} />} title="Redact Selection" onClick={onRedact} color="#dc2626" />
+        <MenuButton icon={<EyeOff size={16} />} title="Redact" onClick={onRedact} color="#dc2626" />
       )}
       {hasText && onCopy && (
         <>

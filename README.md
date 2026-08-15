@@ -7,14 +7,14 @@
 ### **100% Open Source. 100% Client-Side. Enterprise PDF Engine.**
 
 [![License: CPAL-1.0](https://img.shields.io/badge/License-CPAL--1.0-blue.svg)](LICENSE)
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-teamsync--pdf--viewer.vercel.app-000000.svg?logo=vercel)](https://teamsync-pdf-viewer.vercel.app)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-pdfviewer.teamsync.com-000000.svg)](https://pdfviewer.teamsync.com/)
 [![NPM Version](https://img.shields.io/badge/npm-%40angelbot--ai%2Fteamsync--pdf--viewer-blue.svg)](https://www.npmjs.com/package/@angelbot-ai/teamsync-pdf-viewer)
 [![React 19](https://img.shields.io/badge/React-19-61dafb.svg)](https://reactjs.org/)
 [![Vite 8](https://img.shields.io/badge/Vite-8.2-646cff.svg)](https://vitejs.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue.svg)](https://www.typescriptlang.org/)
 
 *No paywalls. No vendor lock-in. No server dependencies.*  
-Try the **[Interactive Live Demo](https://teamsync-pdf-viewer.vercel.app)** or integrate the high-performance PDF Viewer SDK into your React applications.
+Try the **[Interactive Live Demo](https://pdfviewer.teamsync.com/)** or integrate the high-performance PDF Viewer SDK into your React applications.
 
 </div>
 

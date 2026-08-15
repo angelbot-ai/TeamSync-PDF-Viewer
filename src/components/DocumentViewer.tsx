@@ -1420,7 +1420,7 @@ export default function DocumentViewer({
                   window.getSelection()?.removeAllRanges();
                   setTextSelection(null);
                 }}
-                onStrikethrough={() => {
+                onText={() => {
                   const annId = Math.random().toString(36).substr(2, 9);
                   const pageEl = document.getElementById(`pdf-page-${textSelection.pageIndex}`);
                   if (pageEl) {
@@ -1430,29 +1430,10 @@ export default function DocumentViewer({
                      const y = (firstRect.top - pageRect.top) / scale;
                      
                      commitAnnotations([...annotations, {
-                       id: annId, type: 'rectangle', pageIndex: textSelection.pageIndex,
-                       x: x, y: y + (firstRect.height / scale / 2), width: firstRect.width / scale, height: 2,
+                       id: annId, type: 'text', pageIndex: textSelection.pageIndex,
+                       x: x, y: y, width: 120, height: 30,
                        color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity,
-                       points: [], text: ''
-                     }]);
-                  }
-                  window.getSelection()?.removeAllRanges();
-                  setTextSelection(null);
-                }}
-                onUnderline={() => {
-                  const annId = Math.random().toString(36).substr(2, 9);
-                  const pageEl = document.getElementById(`pdf-page-${textSelection.pageIndex}`);
-                  if (pageEl) {
-                     const pageRect = pageEl.getBoundingClientRect();
-                     const firstRect = textSelection.rects[0] || { left: pageRect.left, top: pageRect.top, width: 100, height: 16 };
-                     const x = (firstRect.left - pageRect.left) / scale;
-                     const y = (firstRect.top - pageRect.top) / scale;
-                     
-                     commitAnnotations([...annotations, {
-                       id: annId, type: 'rectangle', pageIndex: textSelection.pageIndex,
-                       x: x, y: y + (firstRect.height / scale) - 2, width: firstRect.width / scale, height: 2,
-                       color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity,
-                       points: [], text: ''
+                       points: [], text: 'Text Annotation'
                      }]);
                   }
                   window.getSelection()?.removeAllRanges();

@@ -253,8 +253,8 @@ export default function Header({
                   width: '180px', zIndex: 1000, display: 'flex', flexDirection: 'column',
                   border: '1px solid var(--border-color)', overflow: 'hidden', padding: '8px 0'
                 }}>
-                  <MenuOption icon={<MoveHorizontal size={16} />} label="Fit To Width" onClick={() => { if(onZoomSet) onZoomSet(1.5); setIsZoomMenuOpen(false); }} />
-                  <MenuOption icon={<Maximize2 size={16} />} label="Fit To Page" onClick={() => { if(onZoomSet) onZoomSet(0.8); setIsZoomMenuOpen(false); }} />
+                  <MenuOption icon={<MoveHorizontal size={16} />} label="Fit To Width" onClick={() => { window.dispatchEvent(new CustomEvent('action-fit-to-width')); setIsZoomMenuOpen(false); }} />
+                  <MenuOption icon={<Maximize2 size={16} />} label="Fit To Page" onClick={() => { window.dispatchEvent(new CustomEvent('action-fit-to-page')); setIsZoomMenuOpen(false); }} />
                   <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
                   {[0.1, 0.25, 0.5, 1, 1.25, 1.5, 2, 4, 8, 16, 32, 64].map(zoomLevel => (
                     <div 

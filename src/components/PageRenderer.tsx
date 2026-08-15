@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { type SearchResult } from '../hooks/usePdfSearch';
 import type { Redaction } from '../main';
+import { getRotationTransform, convertToRotatedRect } from '../utils/rotationUtils';
 
 export interface Annotation {
   id: string;
@@ -112,13 +113,16 @@ function PageRendererComponent({
         if (redactions && redactions.length > 0) {
           ctx.save();
           ctx.setTransform(1, 0, 0, 1, 0, 0);
+          const unW = rotation % 180 === 0 ? basePageWidth : basePageHeight;
+          const unH = rotation % 180 === 0 ? basePageHeight : basePageWidth;
           
           for (const redaction of redactions) {
             if (redaction.pageIndex === pageNum) {
-              const vX = redaction.x * scale * outputScale;
-              const vY = redaction.y * scale * outputScale;
-              const vW = redaction.width * scale * outputScale;
-              const vH = redaction.height * scale * outputScale;
+              const rotRect = convertToRotatedRect(redaction.x, redaction.y, redaction.width, redaction.height, rotation, unW, unH);
+              const vX = rotRect.x * scale * outputScale;
+              const vY = rotRect.y * scale * outputScale;
+              const vW = rotRect.width * scale * outputScale;
+              const vH = rotRect.height * scale * outputScale;
               
               if (redaction.status === 'applied' || redaction.status === undefined) {
                 ctx.fillStyle = '#000000';
@@ -360,20 +364,27 @@ function PageRendererComponent({
       )}
       
       {/* SVG Annotation Overlay */}
-      <svg 
-        style={{ 
-          position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', 
-          cursor: ['Annotate', 'Shapes'].includes(activeTab) && activeTool ? (activeTool === 'eraser' ? 'cell' : 'crosshair') : 'default', 
-          pointerEvents: (activeTool === null || activeTool === 'pan') ? 'none' : 'auto',
-          zIndex: 10
-        }}
-        viewBox={`0 0 ${basePageWidth} ${basePageHeight}`}
-        onMouseDown={(e) => onMouseDown(e, pageNum)}
-        onMouseMove={(e) => onMouseMove(e, pageNum)}
-        onMouseUp={(e) => onMouseUp(e, pageNum)}
-        onMouseLeave={(e) => onMouseUp(e, pageNum)}
-      >
-        {pageAnnotations.map(ann => {
+      {(() => {
+        const unW = rotation % 180 === 0 ? basePageWidth : basePageHeight;
+        const unH = rotation % 180 === 0 ? basePageHeight : basePageWidth;
+        const rotTransform = getRotationTransform(rotation, unW, unH);
+        return (
+          <svg 
+            style={{ 
+              position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', 
+              cursor: ['Annotate', 'Shapes'].includes(activeTab) && activeTool ? (activeTool === 'eraser' ? 'cell' : 'crosshair') : 'default', 
+              pointerEvents: (activeTool === null || activeTool === 'pan') ? 'none' : 'auto',
+              zIndex: 10
+            }}
+            viewBox={`0 0 ${basePageWidth} ${basePageHeight}`}
+            onMouseDown={(e) => onMouseDown(e, pageNum)}
+            onMouseMove={(e) => onMouseMove(e, pageNum)}
+            onMouseUp={(e) => onMouseUp(e, pageNum)}
+            onMouseLeave={(e) => onMouseUp(e, pageNum)}
+          >
+            <g transform={rotTransform}>
+              <React.Fragment>
+                {pageAnnotations.map(ann => {
           const fillColor = (ann.type === 'text' || ann.type === 'callout') ? 'transparent' : `${ann.color}${Math.floor(ann.opacity * 255).toString(16).padStart(2, '0')}`;
           const strokeColor = ann.color;
           const isSelected = selectedAnnotationId === ann.id;
@@ -562,7 +573,11 @@ function PageRendererComponent({
             )}
           </g>
         ))}
-      </svg>
+      </React.Fragment>
+    </g>
+          </svg>
+        );
+      })()}
     </div>
   );
 }

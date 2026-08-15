@@ -15,6 +15,7 @@ import { usePdfSearch, type SearchResult } from '../hooks/usePdfSearch';
 import PageRenderer, { type Annotation } from './PageRenderer';
 import type { Redaction, WatermarkOptions, SDKPermissions } from '../main';
 import { findRegexRedactions } from '../utils/findRegexRedactions';
+import { convertToUnrotated, convertToRotated } from '../utils/rotationUtils';
 
 // Configure the worker locally via Vite
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -404,12 +405,19 @@ export default function DocumentViewer({
     };
   }, [handleFitToWidth, handleFitToPage]);
 
+  const getUnrotatedPoint = (e: React.MouseEvent<Element>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const rawX = (e.clientX - rect.left) / scale;
+    const rawY = (e.clientY - rect.top) / scale;
+    const unW = rotation % 180 === 0 ? basePageDims.width : basePageDims.height;
+    const unH = rotation % 180 === 0 ? basePageDims.height : basePageDims.width;
+    return convertToUnrotated(rawX, rawY, rotation, unW, unH);
+  };
+
   const handleMouseDown = (e: React.MouseEvent<Element>, targetPageNum: number) => {
     if (!activeTool) return;
     
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
+    const { x, y } = getUnrotatedPoint(e);
 
     if (activeTool === 'text' || activeTool === 'note') {
       e.preventDefault();
@@ -467,9 +475,7 @@ export default function DocumentViewer({
 
   const handleMouseMove = (e: React.MouseEvent<Element>, _targetPageNum: number) => {
     if (!isDrawing) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
+    const { x, y } = getUnrotatedPoint(e);
     setCurrentPos({ x, y });
     if (activeTool === 'freehand') {
       setFreehandPoints(prev => [...prev, { x, y }]);
@@ -478,9 +484,7 @@ export default function DocumentViewer({
 
   const handleMouseUp = (e: React.MouseEvent<Element>, targetPageNum: number) => {
     if (activeTool === 'text' || activeTool === 'note' || activeTool === 'digital_signature' || activeTool === 'link') {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / scale;
-      const y = (e.clientY - rect.top) / scale;
+      const { x, y } = getUnrotatedPoint(e);
       
       if (activeTool === 'link') {
         let width = Math.abs(currentPos.x - startPos.x);
@@ -489,8 +493,8 @@ export default function DocumentViewer({
         let linkY = Math.min(startPos.y, currentPos.y);
 
         if (width < 5 || height < 5) {
-          linkX = (e.clientX - rect.left) / scale;
-          linkY = (e.clientY - rect.top) / scale;
+          linkX = x;
+          linkY = y;
           width = 120;
           height = 35;
         }
@@ -1090,18 +1094,22 @@ export default function DocumentViewer({
                         redactions={combinedRedactions}
                         onDiscardRedaction={handleDiscardRedaction}
                       />
-                      {activeTextEditor && activeTextEditor.pageIndex === p && (
-                        <div style={{
-                          position: 'absolute',
-                          left: `${(pLeft || 0) + activeTextEditor.x * scale}px`,
-                          top: `${rTop + activeTextEditor.y * scale}px`,
-                          zIndex: 50,
-                          backgroundColor: '#fff',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                          borderRadius: '4px',
-                          display: 'flex',
-                          flexDirection: 'column'
-                        }}>
+                      {activeTextEditor && activeTextEditor.pageIndex === p && (() => {
+                        const unW = rotation % 180 === 0 ? basePageDims.width : basePageDims.height;
+                        const unH = rotation % 180 === 0 ? basePageDims.height : basePageDims.width;
+                        const rotEditorPos = convertToRotated(activeTextEditor.x, activeTextEditor.y, rotation, unW, unH);
+                        return (
+                          <div style={{
+                            position: 'absolute',
+                            left: `${(pLeft || 0) + rotEditorPos.x * scale}px`,
+                            top: `${rTop + rotEditorPos.y * scale}px`,
+                            zIndex: 50,
+                            backgroundColor: '#fff',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                            borderRadius: '4px',
+                            display: 'flex',
+                            flexDirection: 'column'
+                          }}>
                           <textarea
                             ref={textareaRef}
                             value={currentText}
@@ -1137,7 +1145,8 @@ export default function DocumentViewer({
                             </button>
                           </div>
                         </div>
-                      )}
+                      );
+                    })()}
                     </React.Fragment>
                   );
                 });

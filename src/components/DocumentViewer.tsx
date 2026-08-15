@@ -733,17 +733,23 @@ export default function DocumentViewer({
           <div style={{ flex: 1 }} />
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {['line', 'arrow', 'rectangle', 'ellipse', 'freehand'].includes(activeTool || '') && (
+            {['line', 'arrow', 'rectangle', 'ellipse', 'freehand', 'highlight'].includes(activeTool || '') && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRight: '1px solid var(--border-color)', paddingRight: '12px' }}>
-                <span style={{ fontSize: '12px', color: '#666' }}>Thickness:</span>
+                <span style={{ fontSize: '12px', color: '#666', minWidth: '85px' }}>Thickness: <strong>{currentStrokeWidth}px</strong></span>
                 <input 
                   type="range" 
                   min="1" 
-                  max="10" 
-                  value={currentStrokeWidth} 
-                  onMouseDown={(e) => e.preventDefault()}
-                  onChange={(e) => setCurrentStrokeWidth(parseInt(e.target.value))}
-                  style={{ width: '80px' }}
+                  max="24" 
+                  value={Math.min(24, Math.max(1, currentStrokeWidth))} 
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setCurrentStrokeWidth(val);
+                    if (selectedAnnotationId && !activeTextEditor) {
+                      commitAnnotations(annotations.map(a => a.id === selectedAnnotationId ? { ...a, strokeWidth: val } : a));
+                    }
+                  }}
+                  style={{ width: '90px', cursor: 'pointer' }}
                 />
               </div>
             )}

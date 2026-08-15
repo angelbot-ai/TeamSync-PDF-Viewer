@@ -9,7 +9,6 @@ import { Pen, Type, Minus, Eraser, Square, Circle as CircleIcon, Highlighter, Ch
 import AnnotationContextMenu from './AnnotationContextMenu';
 import InsertLinkModal from './InsertLinkModal';
 import TextSelectionMenu from './TextSelectionMenu';
-import PageContextMenu from './PageContextMenu';
 import { matchShortcut, useShortcuts } from '../hooks/useShortcuts';
 import Sidebar from './Sidebar';
 import LeftSidebar from './LeftSidebar';
@@ -126,7 +125,6 @@ export default function DocumentViewer({
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const justCreatedLinkRef = useRef(false);
   const [textSelection, setTextSelection] = useState<{ text: string, top: number, left: number, pageIndex: number, rects: DOMRect[] } | null>(null);
-  const [pageContextMenuPos, setPageContextMenuPos] = useState<{ top: number; left: number; clientX?: number; clientY?: number; selection?: any } | null>(null);
 
 
   useEffect(() => {
@@ -999,15 +997,45 @@ export default function DocumentViewer({
               e.preventDefault();
               e.stopPropagation();
               
+              if (activeTab === 'View') {
+                // In View mode, if text is selected, keep text selection for copy, otherwise close menu
+                const selection = window.getSelection();
+                if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') {
+                  setTextSelection(null);
+                }
+                return;
+              }
+              
               const container = containerRef.current;
               if (container) {
                 const rect = container.getBoundingClientRect();
-                setPageContextMenuPos({
+                const selection = window.getSelection();
+                let selText = '';
+                let pageIndex = 1;
+                let rects: DOMRect[] = [];
+                
+                if (selection && selection.rangeCount > 0 && selection.toString().trim() !== '') {
+                  selText = selection.toString();
+                  const range = selection.getRangeAt(0);
+                  rects = Array.from(range.getClientRects());
+                  const pageNodes = document.querySelectorAll('.pdf-page-container');
+                  pageNodes.forEach((node, i) => {
+                    if (node.contains(selection.anchorNode)) {
+                      pageIndex = i + 1;
+                    }
+                  });
+                } else {
+                  const yRaw = (e.clientY - rect.top + container.scrollTop) / scale;
+                  const pageHeightRaw = basePageDims.height + (16 / scale);
+                  pageIndex = Math.floor(yRaw / pageHeightRaw) + 1;
+                }
+
+                setTextSelection({
+                  text: selText,
                   top: e.clientY - rect.top + container.scrollTop,
                   left: e.clientX - rect.left + container.scrollLeft,
-                  clientX: e.clientX,
-                  clientY: e.clientY,
-                  selection: textSelection
+                  pageIndex,
+                  rects
                 });
               }
             }}
@@ -1334,17 +1362,19 @@ export default function DocumentViewer({
               />
             )}
             
-            {/* Selection Text Menu */}
-            {textSelection && !isLinkModalOpen && (enableAnnotations !== false || permissions?.canRedact !== false) && (
+            {/* Unified Text Selection & Right-Click Menu */}
+            {textSelection && !isLinkModalOpen && (
               <TextSelectionMenu
                 permissions={permissions}
                 position={textSelection}
+                isViewMode={activeTab === 'View'}
+                hasText={!!textSelection.text}
                 onHighlight={() => {
                   const annId = Math.random().toString(36).substr(2, 9);
                   const pageEl = document.getElementById(`pdf-page-${textSelection.pageIndex}`);
                   if (pageEl) {
                      const pageRect = pageEl.getBoundingClientRect();
-                     const firstRect = textSelection.rects[0];
+                     const firstRect = textSelection.rects[0] || { left: pageRect.left, top: pageRect.top, width: 100, height: 16 };
                      const x = (firstRect.left - pageRect.left) / scale;
                      const y = (firstRect.top - pageRect.top) / scale;
                      
@@ -1362,7 +1392,7 @@ export default function DocumentViewer({
                   const pageEl = document.getElementById(`pdf-page-${textSelection.pageIndex}`);
                   if (pageEl) {
                     const pageRect = pageEl.getBoundingClientRect();
-                    const newRedactions: Redaction[] = textSelection.rects.map(r => ({
+                    const newRedactions: Redaction[] = textSelection.rects.length > 0 ? textSelection.rects.map(r => ({
                       id: `manual-sel-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
                       pageIndex: textSelection.pageIndex,
                       x: (r.left - pageRect.left) / scale,
@@ -1370,16 +1400,62 @@ export default function DocumentViewer({
                       width: r.width / scale,
                       height: r.height / scale,
                       status: 'pending'
-                    }));
+                    })) : [{
+                      id: `manual-sel-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+                      pageIndex: textSelection.pageIndex,
+                      x: (textSelection.left - (pageEl.getBoundingClientRect().left - containerRef.current!.getBoundingClientRect().left + containerRef.current!.scrollLeft)) / scale,
+                      y: (textSelection.top - (pageEl.getBoundingClientRect().top - containerRef.current!.getBoundingClientRect().top + containerRef.current!.scrollTop)) / scale,
+                      width: 100,
+                      height: 30,
+                      status: 'pending'
+                    }];
                     setManualRedactions(prev => [...prev, ...newRedactions]);
                   }
                   window.getSelection()?.removeAllRanges();
                   setTextSelection(null);
                 }}
-                onStrikethrough={() => {}}
-                onUnderline={() => {}}
+                onStrikethrough={() => {
+                  const annId = Math.random().toString(36).substr(2, 9);
+                  const pageEl = document.getElementById(`pdf-page-${textSelection.pageIndex}`);
+                  if (pageEl) {
+                     const pageRect = pageEl.getBoundingClientRect();
+                     const firstRect = textSelection.rects[0] || { left: pageRect.left, top: pageRect.top, width: 100, height: 16 };
+                     const x = (firstRect.left - pageRect.left) / scale;
+                     const y = (firstRect.top - pageRect.top) / scale;
+                     
+                     commitAnnotations([...annotations, {
+                       id: annId, type: 'rectangle', pageIndex: textSelection.pageIndex,
+                       x: x, y: y + (firstRect.height / scale / 2), width: firstRect.width / scale, height: 2,
+                       color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity,
+                       points: [], text: ''
+                     }]);
+                  }
+                  window.getSelection()?.removeAllRanges();
+                  setTextSelection(null);
+                }}
+                onUnderline={() => {
+                  const annId = Math.random().toString(36).substr(2, 9);
+                  const pageEl = document.getElementById(`pdf-page-${textSelection.pageIndex}`);
+                  if (pageEl) {
+                     const pageRect = pageEl.getBoundingClientRect();
+                     const firstRect = textSelection.rects[0] || { left: pageRect.left, top: pageRect.top, width: 100, height: 16 };
+                     const x = (firstRect.left - pageRect.left) / scale;
+                     const y = (firstRect.top - pageRect.top) / scale;
+                     
+                     commitAnnotations([...annotations, {
+                       id: annId, type: 'rectangle', pageIndex: textSelection.pageIndex,
+                       x: x, y: y + (firstRect.height / scale) - 2, width: firstRect.width / scale, height: 2,
+                       color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity,
+                       points: [], text: ''
+                     }]);
+                  }
+                  window.getSelection()?.removeAllRanges();
+                  setTextSelection(null);
+                }}
                 onCopy={() => {
-                  navigator.clipboard.writeText(textSelection.text);
+                  if (textSelection.text) {
+                    navigator.clipboard.writeText(textSelection.text);
+                  }
                   window.getSelection()?.removeAllRanges();
                   setTextSelection(null);
                 }}
@@ -1389,13 +1465,13 @@ export default function DocumentViewer({
                      const pageEl = document.getElementById(`pdf-page-${textSelection.pageIndex}`);
                      if (pageEl) {
                        const pageRect = pageEl.getBoundingClientRect();
-                       const firstRect = textSelection.rects[0];
+                       const firstRect = textSelection.rects[0] || { left: pageRect.left, top: pageRect.top, width: 100, height: 30 };
                        const x = (firstRect.left - pageRect.left) / scale;
                        const y = (firstRect.top - pageRect.top) / scale;
                        
                        commitAnnotations([...annotations, {
                          id: annId, type: 'link', pageIndex: textSelection.pageIndex,
-                         x: x, y: y, width: firstRect.width / scale, height: firstRect.height / scale,
+                         x: x, y: y, width: firstRect.width / scale, height: (firstRect.height || 30) / scale,
                          color: 'transparent', strokeWidth: 0, opacity: 1,
                          points: [], text: ''
                        }]);
@@ -1405,141 +1481,6 @@ export default function DocumentViewer({
                   setSelectedAnnotationId(annId);
                   setIsLinkModalOpen(true);
                   setTextSelection(null);
-                }}
-              />
-            )}
-            
-            {/* Page Context Menu */}
-            {pageContextMenuPos && !selectedAnnotationId && (
-              <PageContextMenu
-                position={pageContextMenuPos}
-                hasSelection={!!(pageContextMenuPos.selection || textSelection)}
-                enableAnnotations={enableAnnotations}
-                onSetTool={(tool) => {
-                  window.dispatchEvent(new CustomEvent('action-set-tool', { detail: { tool } }));
-                  setPageContextMenuPos(null);
-                }}
-                onZoomIn={() => {
-                  setScale(s => Math.min(s + 0.25, 64));
-                  setPageContextMenuPos(null);
-                }}
-                onZoomOut={() => {
-                  setScale(s => Math.max(s - 0.25, 0.5));
-                  setPageContextMenuPos(null);
-                }}
-                onClose={() => setPageContextMenuPos(null)}
-                onLink={() => {
-                  let annId = Math.random().toString(36).substr(2, 9);
-                  const sel = pageContextMenuPos?.selection || textSelection;
-                  if (sel) {
-                     const pageEl = document.getElementById(`pdf-page-${sel.pageIndex}`);
-                     if (pageEl) {
-                       const pageRect = pageEl.getBoundingClientRect();
-                       const firstRect = sel.rects[0];
-                       const x = (firstRect.left - pageRect.left) / scale;
-                       const y = (firstRect.top - pageRect.top) / scale;
-                       
-                       commitAnnotations([...annotations, {
-                         id: annId, type: 'link', pageIndex: sel.pageIndex,
-                         x: x, y: y, width: firstRect.width / scale, height: firstRect.height / scale,
-                         color: 'transparent', strokeWidth: 0, opacity: 1,
-                         points: [], text: ''
-                       }]);
-                     }
-                  } else if (pageContextMenuPos) {
-                     const yRaw = pageContextMenuPos.top / scale;
-                     const pageHeightRaw = basePageDims.height + (16/scale);
-                     const pageIndex = Math.floor(yRaw / pageHeightRaw) + 1;
-                     const pageEl = document.getElementById(`pdf-page-${pageIndex}`);
-                     if (pageEl && pageContextMenuPos.clientX !== undefined && pageContextMenuPos.clientY !== undefined) {
-                       const pageRect = pageEl.getBoundingClientRect();
-                       const x = (pageContextMenuPos.clientX - pageRect.left) / scale;
-                       const y = (pageContextMenuPos.clientY - pageRect.top) / scale;
-                       
-                       commitAnnotations([...annotations, {
-                         id: annId, type: 'link', pageIndex: pageIndex,
-                         x: x, y: y, width: 100, height: 30,
-                         color: 'transparent', strokeWidth: 0, opacity: 1,
-                         points: [], text: ''
-                       }]);
-                     }
-                  }
-                  
-                  justCreatedLinkRef.current = true;
-                  setSelectedAnnotationId(annId);
-                  setIsLinkModalOpen(true);
-                  setPageContextMenuPos(null);
-                  setTextSelection(null);
-                }}
-                onHighlight={() => {
-                  const sel = pageContextMenuPos?.selection || textSelection;
-                  if (sel) {
-                    const annId = Math.random().toString(36).substr(2, 9);
-                    const pageEl = document.getElementById(`pdf-page-${sel.pageIndex}`);
-                    if (pageEl) {
-                       const pageRect = pageEl.getBoundingClientRect();
-                       const firstRect = sel.rects[0];
-                       const x = (firstRect.left - pageRect.left) / scale;
-                       const y = (firstRect.top - pageRect.top) / scale;
-                       
-                       commitAnnotations([...annotations, {
-                         id: annId, type: 'highlight', pageIndex: sel.pageIndex,
-                         x: x, y: y, width: firstRect.width / scale, height: firstRect.height / scale,
-                         color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity,
-                         points: [], text: ''
-                       }]);
-                    }
-                    window.getSelection()?.removeAllRanges();
-                  }
-                }}
-                onCopy={() => {
-                  const sel = pageContextMenuPos?.selection || textSelection;
-                  if (sel) {
-                    navigator.clipboard.writeText(sel.text);
-                    window.getSelection()?.removeAllRanges();
-                  }
-                }}
-                onUnderline={() => {
-                  const sel = pageContextMenuPos?.selection || textSelection;
-                  if (sel) {
-                    const annId = Math.random().toString(36).substr(2, 9);
-                    const pageEl = document.getElementById(`pdf-page-${sel.pageIndex}`);
-                    if (pageEl) {
-                       const pageRect = pageEl.getBoundingClientRect();
-                       const firstRect = sel.rects[0];
-                       const x = (firstRect.left - pageRect.left) / scale;
-                       const y = (firstRect.top - pageRect.top) / scale;
-                       
-                       commitAnnotations([...annotations, {
-                         id: annId, type: 'rectangle', pageIndex: sel.pageIndex,
-                         x: x, y: y + (firstRect.height / scale) - 2, width: firstRect.width / scale, height: 2,
-                         color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity,
-                         points: [], text: ''
-                       }]);
-                    }
-                    window.getSelection()?.removeAllRanges();
-                  }
-                }}
-                onStrikethrough={() => {
-                  const sel = pageContextMenuPos?.selection || textSelection;
-                  if (sel) {
-                    const annId = Math.random().toString(36).substr(2, 9);
-                    const pageEl = document.getElementById(`pdf-page-${sel.pageIndex}`);
-                    if (pageEl) {
-                       const pageRect = pageEl.getBoundingClientRect();
-                       const firstRect = sel.rects[0];
-                       const x = (firstRect.left - pageRect.left) / scale;
-                       const y = (firstRect.top - pageRect.top) / scale;
-                       
-                       commitAnnotations([...annotations, {
-                         id: annId, type: 'rectangle', pageIndex: sel.pageIndex,
-                         x: x, y: y + (firstRect.height / scale) / 2, width: firstRect.width / scale, height: 2,
-                         color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity,
-                         points: [], text: ''
-                       }]);
-                    }
-                    window.getSelection()?.removeAllRanges();
-                  }
                 }}
               />
             )}

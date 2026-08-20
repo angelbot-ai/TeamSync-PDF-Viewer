@@ -5,10 +5,6 @@ Open-source PDF SDK for React.
 
 ![TeamSync PDF Viewer UI](https://raw.githubusercontent.com/angelbot-ai/TeamSync-PDF-Viewer/main/docs/images/viewer_ui.png)
 
-Render, annotate, search, redact and export PDFs entirely in the browser.
-
-[Live Demo] [Documentation] [npm] [GitHub]
-
 ✨ Annotations
 🔐 Permanent redaction
 🔎 PDF search
@@ -27,7 +23,6 @@ Render, annotate, search, redact and export PDFs entirely in the browser.
 [![Vite 8](https://img.shields.io/badge/Vite-8.2-646cff.svg)](https://vitejs.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue.svg)](https://www.typescriptlang.org/)
 
-*No paywalls. No vendor lock-in. No server dependencies.*  
 Try the **[Interactive Live Demo](https://pdfviewer.teamsync.com/)** or integrate the high-performance PDF Viewer SDK into your React applications.
 
 </div>

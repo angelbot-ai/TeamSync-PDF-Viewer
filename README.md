@@ -1,8 +1,22 @@
 # TeamSync PDF Viewer SDK
+Open-source PDF SDK for React.
 
 <div align="center">
 
 ![TeamSync PDF Viewer UI](https://raw.githubusercontent.com/angelbot-ai/TeamSync-PDF-Viewer/main/docs/images/viewer_ui.png)
+
+Render, annotate, search, redact and export PDFs entirely in the browser.
+
+[Live Demo] [Documentation] [npm] [GitHub]
+
+✨ Annotations
+🔐 Permanent redaction
+🔎 PDF search
+🕵️ PII detection
+💧 Watermarking
+⚛️ React 19
+📦 TypeScript
+🌐 Client-side
 
 ### **100% Open Source. 100% Client-Side. Enterprise PDF Engine.**
 

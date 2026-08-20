@@ -84,7 +84,7 @@ Everything you need to build collaborative, secure document workflows.
 - **Notes & Callouts**: Sticky notes, callout text boxes with directional arrows, and text annotations.
 - **Interactive Hyperlinks**: Create internal page-jump links (`#page=N`) or external web URL links directly on document selections.
 
-### 🛡️ Military-Grade Secure Redaction
+### 🛡️ PDF Secure Redaction
 - **Binary-Level Data Obliteration**: We don't just place black boxes over text—redactions are permanently rasterized and burned into the underlying PDF vector structure.
 - **Text Layer Sanitization**: Redacted text is automatically stripped from the DOM `textLayer` and PDF content streams, preventing copy/paste extraction and search indexing.
 - **Automatic Regex Redactions**: Programmatically locate and redact sensitive PII (Aadhaar numbers, SSNs, credit cards, dates of birth) in a single click.

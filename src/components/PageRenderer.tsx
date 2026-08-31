@@ -418,7 +418,24 @@ function PageRendererComponent({
               </g>
             );
           } else if (ann.type === 'highlight' && ann.width !== undefined && ann.height !== undefined) {
-            shape = <rect x={ann.x} y={ann.y} width={ann.width} height={ann.height} fill={strokeColor} opacity={ann.opacity} style={{ mixBlendMode: 'multiply' }} />;
+            const hlRects = ann.rects && ann.rects.length > 0 ? ann.rects : [{ x: ann.x, y: ann.y, width: ann.width, height: ann.height }];
+            shape = (
+              <g style={{ mixBlendMode: 'multiply' }}>
+                {hlRects.map((r, i) => (
+                  <rect key={i} x={r.x} y={r.y} width={r.width} height={r.height} fill={strokeColor} opacity={ann.opacity} />
+                ))}
+              </g>
+            );
+          } else if (ann.type === 'opaque') {
+            // Imported annotation this viewer cannot edit/render natively: outline + kind label.
+            shape = (
+              <g>
+                <rect x={ann.x} y={ann.y} width={ann.width} height={ann.height} fill="none" stroke={strokeColor} strokeWidth="1" strokeDasharray="3,2" opacity={0.8} />
+                {ann.opaqueKind && ann.width > 40 && (
+                  <text x={ann.x + 2} y={ann.y - 2} fill={strokeColor} fontSize="8px" fontFamily="sans-serif" opacity={0.8}>{ann.opaqueKind}</text>
+                )}
+              </g>
+            );
           } else if (ann.type === 'link' && ann.width !== undefined && ann.height !== undefined) {
             if (ann.text) {
               const linkColor = ann.color && ann.color !== 'transparent' ? strokeColor : '#007bff';
@@ -431,12 +448,19 @@ function PageRendererComponent({
               const borderColor = ann.color && ann.color !== 'transparent' ? strokeColor : '#007bff';
               shape = <rect x={ann.x} y={ann.y} width={ann.width} height={ann.height} fill="transparent" stroke={isSelected ? borderColor : `${borderColor}80`} strokeWidth={isSelected ? "2" : "1"} strokeDasharray={isSelected ? "none" : "4"} />;
             }
-          } else if (ann.type === 'freehand' && ann.points) {
-            const d = `M ${ann.points.map(p => `${p.x},${p.y}`).join(' L ')}`;
+          } else if (ann.type === 'freehand' && (ann.strokes?.length || ann.points)) {
+            const strokes = ann.strokes && ann.strokes.length > 0 ? ann.strokes : [ann.points ?? []];
             shape = (
               <g style={{ mixBlendMode: blendMode }}>
-                <path d={d} fill="none" stroke="transparent" strokeWidth={Math.max(10, ann.strokeWidth * 3)} strokeLinejoin="round" strokeLinecap="round" />
-                <path d={d} fill="none" stroke={strokeColor} strokeWidth={ann.strokeWidth} strokeLinejoin="round" strokeLinecap="round" />
+                {strokes.filter(st => st.length > 0).map((st, i) => {
+                  const d = `M ${st.map(p => `${p.x},${p.y}`).join(' L ')}`;
+                  return (
+                    <React.Fragment key={i}>
+                      <path d={d} fill="none" stroke="transparent" strokeWidth={Math.max(10, ann.strokeWidth * 3)} strokeLinejoin="round" strokeLinecap="round" />
+                      <path d={d} fill="none" stroke={strokeColor} strokeWidth={ann.strokeWidth} strokeLinejoin="round" strokeLinecap="round" />
+                    </React.Fragment>
+                  );
+                })}
               </g>
             );
           } else if (ann.type === 'note') {

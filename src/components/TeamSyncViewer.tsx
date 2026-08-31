@@ -18,6 +18,8 @@ import AboutModal from './AboutModal';
 import { ViewerBus } from '../core/eventBus';
 import { ViewerBusContext } from '../core/busContext';
 import { WebViewerInstance } from '../core/ViewerInstance';
+import { AnnotationManager } from '../annotations/AnnotationManager';
+import { printPdfBytes } from '../core/print';
 import type { WebViewerOptions, SDKPermissions, Redaction } from '../core/types';
 import type { Annotation } from '../annotations/types';
 
@@ -63,8 +65,9 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
 
   const rootRef = useRef<HTMLDivElement>(null);
   const bus = useMemo(() => new ViewerBus(), []);
+  const annotationManager = useMemo(() => new AnnotationManager(), []);
   const instanceRef = useRef<WebViewerInstance | null>(null);
-  if (!instanceRef.current) instanceRef.current = new WebViewerInstance(bus);
+  if (!instanceRef.current) instanceRef.current = new WebViewerInstance(bus, annotationManager);
   const instance = instanceRef.current;
   useImperativeHandle(ref, () => instance, [instance]);
 
@@ -107,12 +110,33 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   }, [readOnly, permissions, canAddAnnotations, canEditAnnotations, canDeleteAnnotations, enableAnnotations, enableRedactions]);
   const annotationsEnabled = !readOnly && enableAnnotations !== false;
 
+  // Keep the manager's user / permission state in sync with props.
+  const currentUserId = props.currentUser?.id;
+  const currentUserName = props.currentUser?.name;
+  useEffect(() => {
+    annotationManager.setCurrentUserInfo(currentUserId || currentUserName ? { id: currentUserId, name: currentUserName } : undefined);
+  }, [annotationManager, currentUserId, currentUserName]);
+  useEffect(() => {
+    annotationManager.setReadOnly(readOnly);
+  }, [annotationManager, readOnly]);
+  useEffect(() => {
+    annotationManager.setCanEditOthers(Boolean(permissions?.canEditOthers));
+  }, [annotationManager, permissions?.canEditOthers]);
+
+  // Annotations belong to a document: drop them when a different document is requested.
+  useEffect(() => {
+    annotationManager.clear();
+    annotationManager.setDocument(null);
+  }, [annotationManager, docUrl]);
+
+  // Relay granular manager events to the instance bus (`instance.on('annotationChanged', ...)`).
+  useEffect(() => annotationManager.addEventListener('annotationChanged', (e) => bus.emit('annotationChanged', e)), [annotationManager, bus]);
+
   useEffect(() => {
     if (effectivePermissions.canAddAnnotations === false && activeTab === 'Annotate') setActiveTab('View');
   }, [effectivePermissions.canAddAnnotations, activeTab]);
 
   // ---- live state exposed to the instance ------------------------------------------------------
-  const annotationsRef = useRef<Annotation[]>([]);
   const redactionsRef = useRef<Redaction[]>([]);
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
   const pageRef = useRef({ current: 1, count: 0 });
@@ -124,7 +148,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   useEffect(() => {
     instance._bind(
       {
-        getAnnotations: () => annotationsRef.current,
+        getAnnotations: () => annotationManager.getAnnotationsList(),
         getRedactions: () => redactionsRef.current,
         getWatermark: () => latest.current.watermark,
         getPdfDocument: () => pdfDocRef.current,
@@ -138,7 +162,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
       rootRef.current
     );
     return () => instance._unbind();
-  }, [instance, loadDocument]);
+  }, [instance, annotationManager, loadDocument]);
 
   // onReady + autoFocus, exactly once.
   const readyRef = useRef(false);
@@ -175,6 +199,15 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
         else setLeftSidebarOpen(true);
       }),
       bus.on<{ tool: string | null }>('action-tool-changed', (d) => bus.emit('toolChanged', { tool: d?.tool ?? null })),
+      bus.on('action-print', async () => {
+        try {
+          const data = await instance.getFileData();
+          await printPdfBytes(data, { title: latest.current.fileName });
+        } catch (err) {
+          console.error('[teamsync-pdf-viewer] print failed', err);
+          bus.emit('action-print-error', { error: err });
+        }
+      }),
       bus.on('action-download', async () => {
         try {
           let data = signedBytesRef.current;
@@ -231,22 +264,24 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   const handleDocumentLoaded = useCallback(
     (doc: pdfjsLib.PDFDocumentProxy, url: string) => {
       pdfDocRef.current = doc;
+      annotationManager.setDocument(doc);
       pageRef.current = { current: 1, count: doc.numPages };
       initialFitAppliedRef.current = false;
       bus.emit('documentLoaded', { url, numPages: doc.numPages });
       latest.current.onDocumentLoaded?.({ url, numPages: doc.numPages });
     },
-    [bus]
+    [bus, annotationManager]
   );
 
   const handleLoadError = useCallback(
     (error: Error, info: DocumentLoadErrorInfo) => {
       pdfDocRef.current = null;
+      annotationManager.setDocument(null);
       bus.emit('documentLoadError', { url: info.url, error, passwordRequired: info.passwordRequired });
       if (info.passwordRequired) latest.current.onPasswordRequired?.({ url: info.url });
       latest.current.onDocumentLoadError?.(error, (newUrl) => loadDocument(newUrl ?? info.url), info);
     },
-    [bus, loadDocument]
+    [bus, loadDocument, annotationManager]
   );
 
   const handleFirstPageRendered = useCallback(
@@ -275,7 +310,6 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
 
   const handleAnnotationsChange = useCallback(
     (anns: Annotation[]) => {
-      annotationsRef.current = anns;
       bus.emit('annotationsChanged', { annotations: anns });
       latest.current.onAnnotationsChange?.(anns);
     },
@@ -355,6 +389,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             onDownload={() => bus.emit('action-download')}
             onFullScreen={toggleFullscreen}
             onSaveAs={() => bus.emit('action-download')}
+            onPrint={() => bus.emit('action-print')}
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenAbout={() => setIsAboutModalOpen(true)}
             onOpenSidebarTab={openSidebarTab}
@@ -378,6 +413,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             setSidebarTab={setSidebarTab}
             sidebars={sidebars}
             activeTab={activeTab}
+            annotationManager={annotationManager}
             initialDoc={docUrl}
             loadNonce={loadNonce}
             withCredentials={withCredentials}

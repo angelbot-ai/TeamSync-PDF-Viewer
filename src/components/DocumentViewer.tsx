@@ -117,6 +117,21 @@ export default function DocumentViewer({
   const [textDiffs, setTextDiffs] = useState<TextDiffSegment[]>([]);
   const [isDiffSidebarOpen, setIsDiffSidebarOpen] = useState(false);
 
+  const loadDocA = useCallback(async (docSource: string | ArrayBuffer | Uint8Array) => {
+    try {
+      assertWorkerConfigured();
+      if (assetsRef.current) configurePdfAssets(assetsRef.current);
+      const params: any = typeof docSource === 'string' ? { url: docSource } : { data: docSource };
+      if (withCredentials) params.withCredentials = true;
+      Object.assign(params, getDocumentParams());
+      const loadingTask = pdfjsLib.getDocument(params);
+      const loadedDocA = await loadingTask.promise;
+      setPdfDoc(loadedDocA);
+    } catch (err) {
+      console.error('Failed to load comparison document A:', err);
+    }
+  }, [withCredentials]);
+
   const loadCompareDoc = useCallback(async (docSource: string | ArrayBuffer | Uint8Array) => {
     try {
       assertWorkerConfigured();
@@ -164,8 +179,8 @@ export default function DocumentViewer({
 
   // Public Event Listeners for Compare APIs
   useEffect(() => {
-    const handleStartCompare = (e: any) => {
-      const { docA: _docA, docB, options } = e.detail || {};
+    const handleStartCompare = async (e: any) => {
+      const { docA, docB, options } = e.detail || {};
       if (options) {
         setCompareState(prev => ({
           ...prev,
@@ -177,8 +192,11 @@ export default function DocumentViewer({
           blendMode: options.blendMode || prev.blendMode
         }));
       }
+      if (docA) {
+        await loadDocA(docA);
+      }
       if (docB) {
-        loadCompareDoc(docB);
+        await loadCompareDoc(docB);
       }
     };
 
@@ -211,7 +229,7 @@ export default function DocumentViewer({
       window.removeEventListener('action-set-compare-mode', handleSetCompareMode);
       window.removeEventListener('action-set-compare-colors', handleSetCompareColors);
     };
-  }, [loadCompareDoc]);
+  }, [loadDocA, loadCompareDoc]);
 
   // Per-page base dimensions (scale 1, UI rotation composed with the page's /Rotate). Index =
   // pageNumber - 1. Populated progressively after load so mixed-size documents lay out correctly.
@@ -1353,6 +1371,46 @@ export default function DocumentViewer({
                         onDiscardRedaction={handleDiscardRedaction}
                         onRendered={handlePageRendered}
                       />
+                      {compareState.isActive && compareState.mode === 'overlay' && pdfDocB && (
+                        <div style={{
+                          position: 'absolute',
+                          top: `${rTop}px`,
+                          left: pLeft !== undefined ? `${pLeft}px` : '0px',
+                          width: `${pageDim.width * scale}px`,
+                          height: `${pageDim.height * scale}px`,
+                          pointerEvents: 'none',
+                          mixBlendMode: compareState.blendMode as any,
+                          opacity: compareState.opacityB,
+                          zIndex: 12,
+                          filter: 'contrast(1.2) brightness(0.95)'
+                        }}>
+                          <PageRenderer 
+                            pageNum={p}
+                            pdfDoc={pdfDocB}
+                            scale={scale}
+                            rotation={rotation}
+                            containerWidth={containerRef.current?.clientWidth || 0}
+                            containerHeight={containerRef.current?.clientHeight || 0}
+                            scrollTop={scrollPos.top}
+                            scrollLeft={scrollPos.left}
+                            pageTop={0}
+                            pageLeft={0}
+                            basePageWidth={pageDim.width}
+                            basePageHeight={pageDim.height}
+                            activeTab={activeTab}
+                            activeTool={null}
+                            annotations={[]}
+                            selectedAnnotationId={null}
+                            activeSearchResult={null}
+                            onMouseDown={() => {}}
+                            onMouseMove={() => {}}
+                            onMouseUp={() => {}}
+                            onAnnotationClick={() => {}}
+                            onAnnotationMouseEnter={() => {}}
+                            onClearSelection={() => {}}
+                          />
+                        </div>
+                      )}
                       {activeTextEditor && activeTextEditor.pageIndex === p && (() => {
                         const unW = rotation % 180 === 0 ? pageDim.width : pageDim.height;
                         const unH = rotation % 180 === 0 ? pageDim.height : pageDim.width;

@@ -32,14 +32,14 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
           # Full history: actions/checkout resolves a *short* SHA only if the object is already
           # local. With the default shallow fetch it treats the input as a branch/tag pattern
           # (refs/heads/<ref>*) and dies with an opaque "git failed with exit code 1".
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm

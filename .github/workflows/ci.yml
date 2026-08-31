@@ -31,7 +31,7 @@ jobs:
       - name: Build demo application
         run: npm run build:app
       - name: Upload library artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist-lib
           path: dist

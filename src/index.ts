@@ -25,5 +25,24 @@ export type {
   ViewerEventMap,
   ViewerEventType,
 } from './core/types';
-export type { Annotation, AnnotationType, AnnotationPoint } from './annotations/types';
+export type { Annotation, AnnotationType, AnnotationPoint, AnnotationInput } from './annotations/types';
+export { AnnotationManager } from './annotations/AnnotationManager';
+export type { AnnotationAction, AnnotationChangedEvent, CommitOptions, ViewerUserInfo } from './annotations/AnnotationManager';
+export { newAnnotationId } from './annotations/ids';
+export {
+  createPageGeometry,
+  geometryFromPage,
+  createGeometryResolver,
+  toPdfPoint,
+  fromPdfPoint,
+  rectToPdf,
+  rectFromPdf,
+  rectToQuadPoints,
+  quadPointsToRects,
+} from './annotations/geometry';
+export type { PageGeometry, GeometryResolver, PdfRect, Rect, Point } from './annotations/geometry';
+export { annotationsToXfdf, annotationToXfdfFragment, parseXfdf, toPdfDate, fromPdfDate, XFDF_NS } from './annotations/xfdf';
+export type { XfdfExportOptions } from './annotations/xfdf';
+export { printPdfBytes } from './core/print';
+export type { PrintOptions } from './core/print';
 export * from './plugins/types';

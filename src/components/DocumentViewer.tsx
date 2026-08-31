@@ -1198,13 +1198,18 @@ export default function DocumentViewer({
           )}
           <div 
             className="pdf-viewer-area"
-          style={{ 
-            flex: 1, 
-            overflow: 'hidden', 
-            position: 'relative', 
-            backgroundColor: 'var(--bg-color)', 
-            cursor: isPanning ? 'grabbing' : (activeTool === 'pan' || activeTool === null ? 'grab' : (activeTool === 'eraser' ? 'cell' : 'crosshair')) 
-          }}
+            style={{ 
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              minWidth: 0,
+              minHeight: 0,
+              height: '100%', 
+              overflow: 'hidden', 
+              position: 'relative', 
+              backgroundColor: 'var(--bg-color)', 
+              cursor: isPanning ? 'grabbing' : (activeTool === 'pan' || activeTool === null ? 'grab' : (activeTool === 'eraser' ? 'cell' : 'crosshair')) 
+            }}
           onMouseMove={(e) => {
             if (isPanning && panStartRef.current && containerRef.current) {
               const dx = e.clientX - panStartRef.current.x;
@@ -1248,8 +1253,10 @@ export default function DocumentViewer({
               e.stopPropagation();
             }}
             style={{ 
+              flex: 1,
               width: '100%', 
               height: '100%', 
+              minHeight: 0,
               overflow: 'auto',
               position: 'relative'
             }}

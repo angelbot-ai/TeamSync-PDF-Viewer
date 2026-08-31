@@ -30,3 +30,7 @@ scratch/
 *.sln
 *.sw?
 .vercel
+
+# Test / tooling output
+coverage
+.vitest

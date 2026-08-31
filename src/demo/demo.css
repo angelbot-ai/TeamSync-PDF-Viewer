@@ -1,0 +1,22 @@
+/**
+ * © 2026 AngelBot Ai Pvt Ltd. All rights reserved.
+ * Demo-only global styles (NOT shipped in the npm package).
+ */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  overflow: hidden;
+  background-color: #e5e5e5;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}

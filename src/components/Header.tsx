@@ -10,8 +10,9 @@ import {
   FileCode2, File, Copy, Expand, RotateCw, RotateCcw, ShieldCheck, Pen
 } from 'lucide-react';
 
-import type { SDKPermissions } from '../main';
+import type { SDKPermissions } from '../core/types';
 import type { ViewerPlugin } from '../plugins/types';
+import { useViewerBus, useBusEvent } from '../hooks/useViewerBus';
 
 interface HeaderProps {
   activeTab: string;
@@ -71,11 +72,11 @@ export default function Header({
   const menuRef = useRef<HTMLDivElement>(null);
   const zoomMenuRef = useRef<HTMLDivElement>(null);
   const viewSettingsRef = useRef<HTMLDivElement>(null);
+  const bus = useViewerBus();
+
+  useBusEvent<{ tool: string | null }>('action-tool-changed', (d) => setHeaderTool(d?.tool ?? null));
 
   useEffect(() => {
-    const handleToolChanged = (e: any) => setHeaderTool(e.detail.tool);
-    window.addEventListener('action-tool-changed', handleToolChanged);
-    
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
@@ -90,7 +91,6 @@ export default function Header({
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
-      window.removeEventListener('action-tool-changed', handleToolChanged);
     };
   }, []);
 
@@ -253,8 +253,8 @@ export default function Header({
                   width: '180px', zIndex: 1000, display: 'flex', flexDirection: 'column',
                   border: '1px solid var(--border-color)', overflow: 'hidden', padding: '8px 0'
                 }}>
-                  <MenuOption icon={<MoveHorizontal size={16} />} label="Fit To Width" onClick={() => { window.dispatchEvent(new CustomEvent('action-fit-to-width')); setIsZoomMenuOpen(false); }} />
-                  <MenuOption icon={<Maximize2 size={16} />} label="Fit To Page" onClick={() => { window.dispatchEvent(new CustomEvent('action-fit-to-page')); setIsZoomMenuOpen(false); }} />
+                  <MenuOption icon={<MoveHorizontal size={16} />} label="Fit To Width" onClick={() => { bus.emit('action-fit-to-width'); setIsZoomMenuOpen(false); }} />
+                  <MenuOption icon={<Maximize2 size={16} />} label="Fit To Page" onClick={() => { bus.emit('action-fit-to-page'); setIsZoomMenuOpen(false); }} />
                   <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
                   {[0.1, 0.25, 0.5, 1, 1.25, 1.5, 2, 4, 8, 16, 32, 64].map(zoomLevel => (
                     <div 
@@ -279,7 +279,7 @@ export default function Header({
             <IconButton icon={<PlusCircle size={18} color="var(--text-muted)" />} title="Zoom In" onClick={onZoomIn} />
           </div>
           <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border-color)', margin: '0 4px' }} />
-          <IconButton icon={<Hand size={18} />} title="Pan Tool" active={headerTool === 'pan'} onClick={() => window.dispatchEvent(new CustomEvent('action-set-tool', { detail: { tool: 'pan' } }))} />
+          <IconButton icon={<Hand size={18} />} title="Pan Tool" active={headerTool === 'pan'} onClick={() => bus.emit('action-set-tool', { tool: 'pan' })} />
         </div>
 
         {/* Center Section: Tabs */}
@@ -311,7 +311,7 @@ export default function Header({
           {/* Sign Button */}
           {isSignVisible && (
             <button 
-              onClick={() => window.dispatchEvent(new CustomEvent('action-sign'))}
+              onClick={() => bus.emit('action-sign')}
               style={{ 
                 background: '#fff0f0', border: '1px solid #d32f2f', color: '#d32f2f', 
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
@@ -327,7 +327,7 @@ export default function Header({
           {/* Verify Button (Only visible if signed) */}
           {signatureCount > 0 && (
             <div 
-              onClick={() => window.dispatchEvent(new CustomEvent('action-verify'))}
+              onClick={() => bus.emit('action-verify')}
               style={{ 
                 backgroundColor: '#10b981', color: '#000', 
                 borderRadius: '16px', padding: '4px 12px', 

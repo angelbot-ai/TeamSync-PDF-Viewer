@@ -34,6 +34,7 @@ export default function DiffSummarySidebar({
       borderLeft: '1px solid #e2e8f0',
       display: 'flex',
       flexDirection: 'column',
+      flexShrink: 0,
       zIndex: 80
     }}>
       {/* Header */}

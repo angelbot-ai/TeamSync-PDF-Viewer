@@ -1170,7 +1170,8 @@ export default function DocumentViewer({
 
 
       {/* Main Canvas / Compare Viewport Area */}
-      {compareState.isActive && compareState.mode === 'side-by-side' ? (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0, width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
+        {compareState.isActive && compareState.mode === 'side-by-side' ? (
         <SideBySideViewer
           pdfDocA={pdfDoc}
           pdfDocB={pdfDocB}
@@ -1687,6 +1688,7 @@ export default function DocumentViewer({
           onResultClick={handleSearchResultClick}
         />
       )}
+      </div>
     </div>
   );
 }

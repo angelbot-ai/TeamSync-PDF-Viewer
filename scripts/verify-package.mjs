@@ -47,7 +47,40 @@ if (!lib.startsWith('"use client";')) fail('library bundle is missing the "use c
 const sizeMB = statSync(pkg.module).size / (1024 * 1024);
 if (sizeMB > 1.5) fail(`library bundle is ${sizeMB.toFixed(2)} MB — dependencies are no longer externalized`);
 
-// 4. publint + arethetypeswrong on the packed tarball.
+// 4. Every selector in the stylesheet must be scoped under `.tspdf-root`.
+//    dist/style.css bundles pdfjs-dist/web/pdf_viewer.css, which contains bare generic class names
+//    (.sidebar, .dialog, .toggle-button, .closeButton, .messageBar). Shipping those unscoped
+//    restyles the host application the moment the stylesheet loads — 1.2.0 broke TeamSync's
+//    sidebar exactly this way. Scoping happens in vite.config.ts; this asserts the OUTPUT.
+{
+  const { default: postcss } = await import('postcss');
+  const cssFile = pkg.exports['./style.css'];
+  const root = postcss.parse(readFileSync(cssFile, 'utf8'));
+  const SKIP = /^(keyframes|font-face|property|counter-style|page)$/i;
+  const unscoped = [];
+  const doubled = [];
+  root.walkRules((rule) => {
+    if (rule.parent && rule.parent.type === 'rule') return;
+    for (let p = rule.parent; p; p = p.parent) {
+      if (p.type === 'atrule' && SKIP.test(String(p.name).replace(/^-\w+-/, ''))) return;
+    }
+    for (const sel of rule.selectors) {
+      const n = (sel.match(/\.tspdf-root/g) || []).length;
+      if (n === 0) unscoped.push(sel);
+      if (n > 1) doubled.push(sel);
+    }
+  });
+  if (unscoped.length) {
+    fail(`${unscoped.length} selector(s) in ${cssFile} are not scoped under .tspdf-root and will leak into host apps, e.g.: ${unscoped.slice(0, 5).join(' | ')}`);
+  }
+  // A doubly-prefixed selector matches nothing, so the viewer's own styling silently breaks.
+  if (doubled.length) {
+    fail(`${doubled.length} selector(s) in ${cssFile} are prefixed more than once and match nothing, e.g.: ${doubled.slice(0, 5).join(' | ')}`);
+  }
+  console.log(`✓ CSS scoping: all ${root.nodes.length} top-level nodes scoped under .tspdf-root`);
+}
+
+// 5. publint + arethetypeswrong on the packed tarball.
 execSync('npx publint --strict', { stdio: 'inherit' });
 // - ./style.css is a stylesheet entrypoint: it has no types by design.
 // - internal-resolution-error: the emitted .d.ts files use extension-less relative imports, which

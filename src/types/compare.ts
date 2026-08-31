@@ -21,6 +21,17 @@ export interface TextDiffSegment {
   pageIndex: number;
 }
 
+export interface DiffBoundingBox {
+  id: string;
+  pageIndex: number;
+  type: 'addition' | 'deletion' | 'modification';
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface DiffItem {
   id: string;
   pageIndex: number;
@@ -46,4 +57,6 @@ export interface CompareState {
   showCurtain: boolean;
   diffItems: DiffItem[];
   currentDiffIndex: number;
+  pageDiffsA?: Record<number, DiffBoundingBox[]>;
+  pageDiffsB?: Record<number, DiffBoundingBox[]>;
 }

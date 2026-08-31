@@ -229,6 +229,13 @@ src/
 └── demo/                 # demo & iframe-package bootstrap (not published)
 ```
 
+### Releasing
+
+1. Bump `version` in `package.json` + add a `CHANGELOG.md` entry, merge to `main`.
+2. Either push a tag `vX.Y.Z` on that commit, or run the **Publish to npm** workflow manually
+   with the ref to publish. The workflow re-runs the full verification chain, checks the version
+   is not already on the registry, and publishes with provenance (needs the `NPM_TOKEN` secret).
+
 ### Iframe package (script-tag hosts)
 
 `npm run build:app` produces a self-contained viewer; `public/webviewer.js` wraps it in an iframe

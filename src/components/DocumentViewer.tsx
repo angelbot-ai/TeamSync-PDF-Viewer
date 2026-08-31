@@ -1170,8 +1170,7 @@ export default function DocumentViewer({
 
 
       {/* Main Canvas / Compare Viewport Area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0, width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
-        {compareState.isActive && compareState.mode === 'side-by-side' ? (
+      {compareState.isActive && compareState.mode === 'side-by-side' ? (
         <SideBySideViewer
           pdfDocA={pdfDoc}
           pdfDocB={pdfDocB}
@@ -1199,12 +1198,7 @@ export default function DocumentViewer({
           <div 
             className="pdf-viewer-area"
             style={{ 
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              minWidth: 0,
-              minHeight: 0,
-              height: '100%', 
+              flex: 1, 
               overflow: 'hidden', 
               position: 'relative', 
               backgroundColor: 'var(--bg-color)', 
@@ -1253,10 +1247,8 @@ export default function DocumentViewer({
               e.stopPropagation();
             }}
             style={{ 
-              flex: 1,
               width: '100%', 
               height: '100%', 
-              minHeight: 0,
               overflow: 'auto',
               position: 'relative'
             }}
@@ -1650,8 +1642,7 @@ export default function DocumentViewer({
           onJumpToPage={(p) => setPageNum(p)}
         />
       )}
-      </div>
-      
+
       {isLinkModalOpen && selectedAnnotationId && (
         <InsertLinkModal
           initialUrl={annotations.find(a => a.id === selectedAnnotationId)?.linkUrl || ''}

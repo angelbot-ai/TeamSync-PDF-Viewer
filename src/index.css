@@ -1,7 +1,9 @@
 /**
  * © 2026 AngelBot Ai Pvt Ltd. All rights reserved.
+ * Library styles. Everything is scoped under `.tspdf-root` so embedding the viewer never restyles
+ * the host page (the demo's global resets live in src/demo/demo.css).
  */
-:root {
+.tspdf-root {
   --primary: #007bff;
   --bg-color: #e5e5e5;
   --toolbar-bg: #ffffff;
@@ -10,53 +12,61 @@
   --text-muted: #666666;
   --active-tab-border: #007bff;
   --hover-bg: #f0f0f0;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  outline: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: normal;
+  color: var(--text-color);
+  background-color: var(--bg-color);
 }
 
-* {
+.tspdf-root *,
+.tspdf-root *::before,
+.tspdf-root *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  color: var(--text-color);
-  background-color: var(--bg-color);
-  overflow: hidden;
-}
-
-/* Scrollbar styling */
-::-webkit-scrollbar {
+/* Scrollbar styling (viewer panels only) */
+.tspdf-root ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
-::-webkit-scrollbar-track {
+.tspdf-root ::-webkit-scrollbar-track {
   background: transparent;
 }
 
-::-webkit-scrollbar-thumb {
+.tspdf-root ::-webkit-scrollbar-thumb {
   background: #c1c1c1;
   border-radius: 5px;
 }
 
-::-webkit-scrollbar-thumb:hover {
+.tspdf-root ::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
 
-.textLayer ::selection {
+.tspdf-root .textLayer ::selection {
   background: rgba(0, 100, 255, 0.3);
 }
 
-
-.textLayer, .textLayer * {
+.tspdf-root .textLayer,
+.tspdf-root .textLayer * {
   user-select: text !important;
   -webkit-user-select: text !important;
 }
 
-
-.textLayer span::selection {
+.tspdf-root .textLayer span::selection {
   background: rgba(0, 100, 255, 0.3) !important;
   color: transparent !important;
 }
-

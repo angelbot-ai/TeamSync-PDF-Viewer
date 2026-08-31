@@ -63,3 +63,8 @@ export function getRotationTransform(rotation: number, unW: number, unH: number)
   if (normRot === 270) return `translate(0, ${unW}) rotate(270)`;
   return undefined;
 }
+
+/** Normalizes any degree value into [0, 360). */
+export function normalizeRotation(rotation: number): number {
+  return ((rotation % 360) + 360) % 360;
+}

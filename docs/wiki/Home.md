@@ -2,7 +2,7 @@
 
 ![TeamSync PDF Viewer UI](../images/viewer_ui.png)
 
-**TeamSync PDF Viewer** is a commercial-grade, 100% client-side WebAssembly PDF engine built for React & TypeScript applications.
+**TeamSync PDF Viewer** is a 100% client-side PDF viewer and annotation SDK for React & TypeScript applications, built on pdf.js and pdf-lib.
 
 ---
 

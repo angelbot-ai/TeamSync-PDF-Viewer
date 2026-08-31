@@ -16,7 +16,7 @@ Extend **TeamSync PDF Viewer** with custom extension plugins.
 
 ```typescript
 import React from 'react';
-import type { ViewerPlugin, PluginContext } from '@angelbot-ai/teamsync-pdf-viewer';
+import type { ViewerPlugin, PluginContext } from 'teamsync-pdf-viewer';
 
 export function CustomPlugin(): ViewerPlugin {
   return {

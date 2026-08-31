@@ -87,7 +87,8 @@ if (rootElement) {
 
         window.addEventListener('message', async (cmdEvent) => {
           if (cmdEvent.data?.type === 'CORE_EXPORT_ANNOTATIONS') {
-            const anns = instance.Core.annotationManager.exportAnnotations();
+            // The iframe protocol predates XFDF support and expects the JSON annotation list.
+            const anns = instance.Core.annotationManager.exportAnnotationsLegacyJson();
             window.parent.postMessage({ type: 'EXPORT_ANNOTATIONS_RESULT', annotations: JSON.parse(anns) }, '*');
           } else if (cmdEvent.data?.type === 'CORE_GET_FILE_DATA') {
             const data = await instance.getFileData();

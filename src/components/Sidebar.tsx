@@ -181,6 +181,7 @@ export default function Sidebar({
                 {comment.type === 'text' && <Type size={14} />}
                 {comment.type === 'link' && <LinkIcon size={14} />}
                 <span style={{ fontSize: '12px', textTransform: 'capitalize' }}>{comment.type}</span>
+                {comment.author && <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>· {comment.author}</span>}
               </div>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleDelete(comment.id); }}

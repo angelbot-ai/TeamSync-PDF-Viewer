@@ -5,7 +5,9 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import PageRenderer from './PageRenderer';
+import DiffHighlightOverlay from './DiffHighlightOverlay';
 import type { SDKPermissions, WatermarkOptions, Redaction } from '../core/types';
+import type { DiffBoundingBox } from '../types/compare';
 
 interface SideBySideViewerProps {
   pdfDocA: pdfjsLib.PDFDocumentProxy | null;
@@ -21,6 +23,10 @@ interface SideBySideViewerProps {
   watermark?: WatermarkOptions;
   watermarkText?: string;
   redactions?: Redaction[];
+  diffsA?: DiffBoundingBox[];
+  diffsB?: DiffBoundingBox[];
+  selectedDiffId?: string | null;
+  onSelectDiff?: (id: string) => void;
   onScrollSync?: (scrollTop: number, scrollLeft: number) => void;
 }
 
@@ -36,7 +42,11 @@ export default function SideBySideViewer({
   annotations,
   watermark,
   watermarkText,
-  redactions
+  redactions,
+  diffsA = [],
+  diffsB = [],
+  selectedDiffId,
+  onSelectDiff
 }: SideBySideViewerProps) {
   const containerARef = useRef<HTMLDivElement>(null);
   const containerBRef = useRef<HTMLDivElement>(null);
@@ -153,6 +163,13 @@ export default function SideBySideViewer({
               redactions={redactions}
             />
           )}
+          <DiffHighlightOverlay
+            boxes={diffsA}
+            scale={scale}
+            colorScheme="deletions"
+            selectedDiffId={selectedDiffId}
+            onSelectDiff={onSelectDiff}
+          />
         </div>
       </div>
 
@@ -206,6 +223,13 @@ export default function SideBySideViewer({
               redactions={redactions}
             />
           )}
+          <DiffHighlightOverlay
+            boxes={diffsB}
+            scale={scale}
+            colorScheme="additions"
+            selectedDiffId={selectedDiffId}
+            onSelectDiff={onSelectDiff}
+          />
         </div>
       </div>
     </div>

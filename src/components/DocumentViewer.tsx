@@ -24,8 +24,9 @@ import SideBySideViewer from './SideBySideViewer';
 import CompareToolbar from './CompareToolbar';
 import DiffSummarySidebar from './DiffSummarySidebar';
 import CompareCurtainSlider from './CompareCurtainSlider';
+import DiffHighlightOverlay from './DiffHighlightOverlay';
 import type { CompareState, TextDiffSegment } from '../types/compare';
-import { computeTextDiff } from '../utils/pdfDiffEngine';
+import { computeTextDiff, computePageDiffBoxes } from '../utils/pdfDiffEngine';
 
 export interface DocumentLoadErrorInfo {
   url: string;
@@ -151,8 +152,19 @@ export default function DocumentViewer({
 
   useEffect(() => {
     if (compareState.isActive && pdfDoc && pdfDocB) {
+      let cancelled = false;
       const computeDiffs = async () => {
         try {
+          const { diffsA, diffsB, summary } = await computePageDiffBoxes(pdfDoc, pdfDocB, pageNum);
+          if (cancelled) return;
+
+          setCompareState(prev => ({
+            ...prev,
+            diffItems: summary,
+            pageDiffsA: { ...(prev.pageDiffsA || {}), [pageNum]: diffsA },
+            pageDiffsB: { ...(prev.pageDiffsB || {}), [pageNum]: diffsB }
+          }));
+
           const pA = await pdfDoc.getPage(pageNum);
           const pB = await pdfDocB.getPage(Math.min(pageNum, pdfDocB.numPages));
           const textContentA = await pA.getTextContent();
@@ -162,12 +174,13 @@ export default function DocumentViewer({
           const strB = textContentB.items.map((i: any) => i.str).join(' ');
 
           const diffs = computeTextDiff(strA, strB, pageNum);
-          setTextDiffs(diffs);
+          if (!cancelled) setTextDiffs(diffs);
         } catch (e) {
-          console.error('Error computing page text diff:', e);
+          console.error('Error computing page diff boxes:', e);
         }
       };
       computeDiffs();
+      return () => { cancelled = true; };
     }
   }, [compareState.isActive, pdfDoc, pdfDocB, pageNum]);
 
@@ -1191,6 +1204,13 @@ export default function DocumentViewer({
             watermark={watermark}
             watermarkText={watermarkText}
             redactions={combinedRedactions}
+            diffsA={compareState.pageDiffsA?.[pageNum] || []}
+            diffsB={compareState.pageDiffsB?.[pageNum] || []}
+            selectedDiffId={compareState.diffItems[compareState.currentDiffIndex]?.id}
+            onSelectDiff={(id) => {
+              const idx = compareState.diffItems.findIndex(d => d.id === id);
+              if (idx !== -1) setCompareState(prev => ({ ...prev, currentDiffIndex: idx }));
+            }}
           />
         ) : (
           <>
@@ -1418,6 +1438,30 @@ export default function DocumentViewer({
                             onAnnotationClick={() => {}}
                             onAnnotationMouseEnter={() => {}}
                             onClearSelection={() => {}}
+                          />
+                        </div>
+                      )}
+                      {compareState.isActive && (
+                        <div style={{
+                          position: 'absolute',
+                          top: `${rTop}px`,
+                          left: pLeft !== undefined ? `${pLeft}px` : '0px',
+                          width: `${pageDim.width * scale}px`,
+                          height: `${pageDim.height * scale}px`,
+                          pointerEvents: 'none',
+                          zIndex: 16
+                        }}>
+                          <DiffHighlightOverlay
+                            boxes={[
+                              ...(compareState.pageDiffsA?.[p] || []),
+                              ...(compareState.pageDiffsB?.[p] || [])
+                            ]}
+                            scale={scale}
+                            selectedDiffId={compareState.diffItems[compareState.currentDiffIndex]?.id}
+                            onSelectDiff={(id) => {
+                              const idx = compareState.diffItems.findIndex(d => d.id === id);
+                              if (idx !== -1) setCompareState(prev => ({ ...prev, currentDiffIndex: idx }));
+                            }}
                           />
                         </div>
                       )}

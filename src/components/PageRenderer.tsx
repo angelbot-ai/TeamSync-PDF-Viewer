@@ -4,29 +4,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { type SearchResult } from '../hooks/usePdfSearch';
-import type { Redaction } from '../main';
-import { getRotationTransform, convertToRotatedRect } from '../utils/rotationUtils';
+import type { Redaction, WatermarkOptions } from '../core/types';
+import type { Annotation } from '../annotations/types';
+import { getRotationTransform, convertToRotatedRect, normalizeRotation } from '../utils/rotationUtils';
 
-export interface Annotation {
-  id: string;
-  pageIndex: number;
-  type: 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand' | 'text' | 'note' | 'callout' | 'signature' | 'highlight' | 'digital_signature_placeholder' | 'link';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  text?: string;
-  points?: { x: number; y: number }[];
-  rects?: { x: number; y: number; width: number; height: number }[];
-  color: string;
-  strokeWidth: number;
-  opacity: number;
-  imageUrl?: string;
-  timestamp?: number;
-  signer?: string;
-  signType?: 'advanced' | 'simple';
-  linkUrl?: string;
-}
+export type { Annotation };
 
 interface PageRendererProps {
   pageNum: number;
@@ -56,19 +38,23 @@ interface PageRendererProps {
   onAnnotationClick: (id: string, e: React.MouseEvent) => void;
   onAnnotationMouseEnter: (id: string) => void;
   onClearSelection: () => void;
-  watermark?: import('../main').WatermarkOptions;
+  watermark?: WatermarkOptions;
   watermarkText?: string;
   redactions?: Redaction[];
   onDiscardRedaction?: (redaction: Redaction) => void;
+  /** Called after the page canvas has been painted (used for first-page-rendered telemetry). */
+  onRendered?: (pageNum: number) => void;
 }
 
-function PageRendererComponent({ 
+function PageRendererComponent({
   pageNum, pdfDoc, scale, rotation, containerWidth: _containerWidth, containerHeight: _containerHeight,
   scrollTop: _scrollTop, scrollLeft: _scrollLeft, pageTop, pageLeft = 0, basePageWidth, basePageHeight,
   activeTab, activeTool, annotations, selectedAnnotationId, activeSearchResult,
   onMouseDown, onMouseMove, onMouseUp, onAnnotationClick, onAnnotationMouseEnter, onClearSelection,
-  watermark, watermarkText, redactions, onDiscardRedaction
+  watermark, watermarkText, redactions, onDiscardRedaction, onRendered
 }: PageRendererProps) {
+  const onRenderedRef = useRef(onRendered);
+  onRenderedRef.current = onRendered;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
   const renderTaskRef = useRef<any>(null);
@@ -94,7 +80,8 @@ function PageRendererComponent({
         if (isCancelled) return;
 
         let outputScale = window.devicePixelRatio || 1;
-        const viewport = page.getViewport({ scale: scale * outputScale, rotation });
+        // Compose UI rotation with the page's intrinsic /Rotate (pdf.js replaces it otherwise).
+        const viewport = page.getViewport({ scale: scale * outputScale, rotation: normalizeRotation(page.rotate + rotation) });
 
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = Math.floor(viewport.width);
@@ -191,6 +178,7 @@ function PageRendererComponent({
           if (destCtx) {
             destCtx.drawImage(tempCanvas, 0, 0);
           }
+          onRenderedRef.current?.(pageNum);
         }
       } catch (err: any) {
         if (err?.name !== 'RenderingCancelledException') {
@@ -269,8 +257,8 @@ function PageRendererComponent({
     const renderText = async () => {
       try {
         const page = await pdfDoc.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 1, rotation });
-        
+        const viewport = page.getViewport({ scale: 1, rotation: normalizeRotation(page.rotate + rotation) });
+
         let sanitizedTextContent = textContent;
         if (redactions && redactions.length > 0) {
           const pageRedactions = redactions.filter(r => r.pageIndex === pageNum);

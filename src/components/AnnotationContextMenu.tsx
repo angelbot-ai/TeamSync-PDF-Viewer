@@ -3,9 +3,9 @@
  */
 import React from 'react';
 import { Copy, Trash2, Link as LinkIcon, Edit2 } from 'lucide-react';
-import type { Annotation } from './PageRenderer';
+import type { Annotation } from '../annotations/types';
 
-import type { SDKPermissions } from '../main';
+import type { SDKPermissions } from '../core/types';
 
 interface AnnotationContextMenuProps {
   annotation: Annotation;

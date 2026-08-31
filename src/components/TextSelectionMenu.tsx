@@ -4,7 +4,7 @@
 import React from 'react';
 import { Highlighter, Type, Copy, Link as LinkIcon, EyeOff } from 'lucide-react';
 
-import type { SDKPermissions } from '../main';
+import type { SDKPermissions } from '../core/types';
 
 interface TextSelectionMenuProps {
   position: { top: number; left: number };

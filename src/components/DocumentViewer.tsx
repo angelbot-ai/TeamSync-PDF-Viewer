@@ -4,7 +4,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
-import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Pen, Type, Minus, Eraser, Square, Circle as CircleIcon, Highlighter, ChevronLeft, ChevronRight, Brush, MessageSquareQuote, ArrowUpRight, ShieldCheck, Link as LinkIcon, EyeOff, Trash2 } from 'lucide-react';
 import AnnotationContextMenu from './AnnotationContextMenu';
 import InsertLinkModal from './InsertLinkModal';
@@ -12,19 +11,32 @@ import { matchShortcut, useShortcuts } from '../hooks/useShortcuts';
 import Sidebar from './Sidebar';
 import LeftSidebar from './LeftSidebar';
 import { usePdfSearch, type SearchResult } from '../hooks/usePdfSearch';
-import PageRenderer, { type Annotation } from './PageRenderer';
-import type { Redaction, WatermarkOptions, SDKPermissions } from '../main';
+import PageRenderer from './PageRenderer';
+import type { Annotation } from '../annotations/types';
+import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths } from '../core/types';
 import { findRegexRedactions } from '../utils/findRegexRedactions';
-import { convertToUnrotated, convertToRotated } from '../utils/rotationUtils';
+import { convertToUnrotated, convertToRotated, normalizeRotation } from '../utils/rotationUtils';
+import { useViewerBus, useBusEvent } from '../hooks/useViewerBus';
+import { assertWorkerConfigured, configurePdfAssets, getDocumentParams } from '../core/pdfAssets';
 
-// Configure the worker locally via Vite
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+export interface DocumentLoadErrorInfo {
+  url: string;
+  passwordRequired: boolean;
+}
 
 interface DocumentViewerProps {
   leftSidebarOpen: boolean;
   rightSidebarOpen: boolean;
   activeTab: string;
   initialDoc?: string;
+  /** Bump to force a reload of the same URL (retry after a load error). */
+  loadNonce?: number;
+  /** Send cookies with the document request. */
+  withCredentials?: boolean;
+  /** pdf.js asset locations, applied right before the document is opened. */
+  assets?: PdfAssetPaths;
+  /** Render the thumbnails (left) and comments/search (right) panels. Default true. */
+  sidebars?: boolean;
   redactions?: Redaction[];
   regexRedactions?: RegExp[];
   scale: number;
@@ -32,6 +44,13 @@ interface DocumentViewerProps {
   sidebarTab: 'Comments' | 'Search';
   setSidebarTab: (tab: 'Comments' | 'Search') => void;
   onAnnotationsChange?: (annotations: Annotation[]) => void;
+  /** Reports the combined (prop + regex + manual) redaction list whenever it changes. */
+  onRedactionsChange?: (redactions: Redaction[]) => void;
+  onDocumentLoaded?: (doc: pdfjsLib.PDFDocumentProxy, url: string) => void;
+  onLoadError?: (error: Error, info: DocumentLoadErrorInfo) => void;
+  /** Fires once per loaded document, after the first page canvas has been painted. */
+  onFirstPageRendered?: (pageNumber: number) => void;
+  onPageChange?: (pageNumber: number, numPages: number) => void;
   pageTransition: 'continuous' | 'page-by-page';
   pageLayout: 'single' | 'double' | 'cover-facing';
   rotation: number;
@@ -43,15 +62,25 @@ interface DocumentViewerProps {
   permissions?: SDKPermissions;
 }
 
-export default function DocumentViewer({ 
-  leftSidebarOpen, rightSidebarOpen, activeTab, initialDoc, redactions, regexRedactions, scale, setScale, sidebarTab, setSidebarTab, onAnnotationsChange,
-  pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations, initialPage, permissions
+export default function DocumentViewer({
+  leftSidebarOpen, rightSidebarOpen, activeTab, initialDoc, loadNonce = 0, withCredentials = false, assets, sidebars = true,
+  redactions, regexRedactions, scale, setScale, sidebarTab, setSidebarTab, onAnnotationsChange, onRedactionsChange,
+  onDocumentLoaded, onLoadError, onFirstPageRendered, onPageChange,
+  pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations: _enableAnnotations, initialPage, permissions
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const bus = useViewerBus();
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const [loadError, setLoadError] = useState<Error | null>(null);
   const [pageNum, setPageNum] = useState(1);
   const [manualRedactions, setManualRedactions] = useState<Redaction[]>([]);
   const { getCommand } = useShortcuts();
+
+  // Latest-callback refs: parents may pass inline functions without re-triggering effects.
+  const callbacksRef = useRef({ onRedactionsChange, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageChange });
+  callbacksRef.current = { onRedactionsChange, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageChange };
+  const assetsRef = useRef(assets);
+  assetsRef.current = assets;
 
   // Provide combinedRedactions to usePdfSearch but wait, combinedRedactions is computed later in the file.
   // We can just move the combinedRedactions useMemo up before usePdfSearch, 
@@ -98,8 +127,8 @@ export default function DocumentViewer({
   }, [activeTab]);
 
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('action-tool-changed', { detail: { tool: activeTool } }));
-  }, [activeTool]);
+    bus.emit('action-tool-changed', { tool: activeTool });
+  }, [activeTool, bus]);
   
 
 
@@ -125,11 +154,7 @@ export default function DocumentViewer({
   const justCreatedLinkRef = useRef(false);
 
 
-  useEffect(() => {
-    const handleSetTool = (e: any) => setActiveTool(e.detail.tool);
-    window.addEventListener('action-set-tool', handleSetTool);
-    return () => window.removeEventListener('action-set-tool', handleSetTool);
-  }, []);
+  useBusEvent<{ tool: typeof activeTool }>('action-set-tool', (d) => setActiveTool(d?.tool ?? null));
 
   const zoomFocusRef = useRef<{vx: number | null, vy: number | null}>({ vx: null, vy: null });
   const prevScaleRef = useRef(scale);
@@ -210,13 +235,9 @@ export default function DocumentViewer({
     setAnnotations(newAnns);
   }, [annotations]);
 
-  useEffect(() => {
-    const handleLocalCommit = (e: any) => {
-      commitAnnotations([...annotations, e.detail.tempAnn]);
-    };
-    window.addEventListener('action-commit-digital-signature-local', handleLocalCommit);
-    return () => window.removeEventListener('action-commit-digital-signature-local', handleLocalCommit);
-  }, [annotations, commitAnnotations]);
+  useBusEvent<{ tempAnn: Annotation }>('action-commit-digital-signature-local', (d) => {
+    if (d?.tempAnn) commitAnnotations([...annotations, d.tempAnn]);
+  });
 
   const handleUndo = useCallback(() => {
     if (past.length === 0) return;
@@ -234,44 +255,41 @@ export default function DocumentViewer({
     setFuture(prev => prev.slice(1));
   }, [annotations, future]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const isInput = document.activeElement?.tagName === 'TEXTAREA' || document.activeElement?.tagName === 'INPUT';
-      
-      if (matchShortcut(e, getCommand('ROTATE_CW'))) {
-        e.preventDefault();
-        setRotation(r => (r + 90) % 360);
-        return;
-      }
-      if (matchShortcut(e, getCommand('ROTATE_CCW'))) {
-        e.preventDefault();
-        setRotation(r => (r - 90) % 360);
-        return;
-      }
-      if (matchShortcut(e, getCommand('UNDO'))) {
-        e.preventDefault();
-        handleUndo();
-        return;
-      }
-      if (matchShortcut(e, getCommand('REDO'))) {
-        e.preventDefault();
-        handleRedo();
-        return;
-      }
+  // Keyboard shortcuts are delivered by <TeamSyncViewer> from its root element, so they only apply
+  // to the viewer instance that currently has focus (several viewers can share a page).
+  useBusEvent<KeyboardEvent>('viewer-keydown', (e) => {
+    const isInput = document.activeElement?.tagName === 'TEXTAREA' || document.activeElement?.tagName === 'INPUT';
 
-      // Don't delete if we are actively typing in a textarea
-      if (!isInput && !activeTextEditor) {
-        if (matchShortcut(e, getCommand('DELETE')) && selectedAnnotationId) {
-          e.preventDefault();
-          commitAnnotations(annotations.filter(a => a.id !== selectedAnnotationId));
-          setSelectedAnnotationId(null);
-        }
-      }
-    };
+    if (matchShortcut(e, getCommand('ROTATE_CW'))) {
+      e.preventDefault();
+      setRotation(r => (r + 90) % 360);
+      return;
+    }
+    if (matchShortcut(e, getCommand('ROTATE_CCW'))) {
+      e.preventDefault();
+      setRotation(r => (r - 90) % 360);
+      return;
+    }
+    if (matchShortcut(e, getCommand('UNDO'))) {
+      e.preventDefault();
+      handleUndo();
+      return;
+    }
+    if (matchShortcut(e, getCommand('REDO'))) {
+      e.preventDefault();
+      handleRedo();
+      return;
+    }
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [annotations, selectedAnnotationId, past, future, activeTextEditor, getCommand, setRotation, handleUndo, handleRedo, commitAnnotations]);
+    // Don't delete if we are actively typing in a textarea
+    if (!isInput && !activeTextEditor) {
+      if (matchShortcut(e, getCommand('DELETE')) && selectedAnnotationId) {
+        e.preventDefault();
+        commitAnnotations(annotations.filter(a => a.id !== selectedAnnotationId));
+        setSelectedAnnotationId(null);
+      }
+    }
+  });
 
   useEffect(() => {
     if (activeTextEditor && textareaRef.current) {
@@ -292,25 +310,26 @@ export default function DocumentViewer({
   
   useEffect(() => {
     if (pdfDoc && regexRedactions && regexRedactions.length > 0) {
+      let cancelled = false;
       findRegexRedactions(pdfDoc, regexRedactions).then(results => {
-        setAutoRedactions(results);
-        (window as any).currentAutoRedactions = results; // Share with main.tsx download handler
+        if (!cancelled) setAutoRedactions(results);
       });
+      return () => { cancelled = true; };
     } else {
       setAutoRedactions([]);
-      (window as any).currentAutoRedactions = [];
     }
   }, [pdfDoc, regexRedactions]);
 
   const [isCommitModalOpen, setIsCommitModalOpen] = useState(false);
 
-  useEffect(() => {
-    (window as any).currentManualRedactions = manualRedactions;
-  }, [manualRedactions]);
-
   const combinedRedactions = useMemo(() => {
     return [...(redactions || []), ...autoRedactions, ...manualRedactions];
   }, [redactions, autoRedactions, manualRedactions]);
+
+  // Share the live redaction list with the instance (export needs it) instead of window globals.
+  useEffect(() => {
+    callbacksRef.current.onRedactionsChange?.(combinedRedactions);
+  }, [combinedRedactions]);
 
   const pendingRedactionsCount = useMemo(() => {
     return combinedRedactions.filter(r => r.status === 'pending').length;
@@ -328,21 +347,59 @@ export default function DocumentViewer({
 
   const { search, searchResults, isSearching, searchProgress } = usePdfSearch(pdfDoc, combinedRedactions);
 
-  // Load annotations from API once
+  // Load the document. Re-runs when the URL or the reload nonce changes; the previous loading task
+  // (and its worker transport) is destroyed on cleanup so documents never leak across loads.
+  const firstPageRenderedRef = useRef(false);
   useEffect(() => {
-    if (initialDoc) {
-      const loadPdf = async () => {
-        try {
-          const loadingTask = pdfjsLib.getDocument({ url: initialDoc });
-          const doc = await loadingTask.promise;
-          setPdfDoc(doc);
-        } catch (error: any) {
-          console.error("Error loading PDF:", error.message || error, error);
-        }
-      };
-      loadPdf();
-    }
-  }, [initialDoc]);
+    setPdfDoc(null);
+    setLoadError(null);
+    setPageNum(1);
+    firstPageRenderedRef.current = false;
+    if (!initialDoc) return;
+
+    const url = initialDoc;
+    let cancelled = false;
+    let loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
+
+    const loadPdf = async () => {
+      try {
+        if (assetsRef.current) configurePdfAssets(assetsRef.current);
+        assertWorkerConfigured();
+        loadingTask = pdfjsLib.getDocument({ url, withCredentials, ...getDocumentParams() });
+        const doc = await loadingTask.promise;
+        // If the effect was cleaned up meanwhile, the loading task (and its worker transport)
+        // has already been destroyed by the cleanup function.
+        if (cancelled) return;
+        setPdfDoc(doc);
+        callbacksRef.current.onDocumentLoaded?.(doc, url);
+      } catch (error: any) {
+        if (cancelled) return;
+        const err = error instanceof Error ? error : new Error(String(error?.message ?? error));
+        const passwordRequired = error?.name === 'PasswordException';
+        console.error('[teamsync-pdf-viewer] Error loading PDF:', err.message, err);
+        setLoadError(err);
+        callbacksRef.current.onLoadError?.(err, { url, passwordRequired });
+      }
+    };
+    loadPdf();
+
+    return () => {
+      cancelled = true;
+      if (loadingTask) {
+        loadingTask.destroy().catch(() => {});
+      }
+    };
+  }, [initialDoc, loadNonce, withCredentials]);
+
+  const handlePageRendered = useCallback((renderedPage: number) => {
+    if (firstPageRenderedRef.current) return;
+    firstPageRenderedRef.current = true;
+    callbacksRef.current.onFirstPageRendered?.(renderedPage);
+  }, []);
+
+  useEffect(() => {
+    if (pdfDoc) callbacksRef.current.onPageChange?.(pageNum, pdfDoc.numPages);
+  }, [pageNum, pdfDoc]);
 
   // Scroll to initial page
   useEffect(() => {
@@ -360,8 +417,9 @@ export default function DocumentViewer({
     if (pdfDoc) {
       const updateDims = async () => {
         const page = await pdfDoc.getPage(1);
-        // We pass rotation so the viewport correctly reflects swapped dimensions if rotated 90 or 270 degrees
-        const vp = page.getViewport({ scale: 1, rotation });
+        // UI rotation composes on top of the page's intrinsic /Rotate (pdf.js replaces it when an
+        // explicit `rotation` is passed). Dimensions swap for 90/270 so layout stays correct.
+        const vp = page.getViewport({ scale: 1, rotation: normalizeRotation(page.rotate + rotation) });
         setBasePageDims({ width: vp.width, height: vp.height });
       };
       updateDims();
@@ -393,17 +451,8 @@ export default function DocumentViewer({
     }
   }, [basePageDims.width, basePageDims.height, setScale]);
 
-  useEffect(() => {
-    const onFitWidth = () => handleFitToWidth();
-    const onFitPage = () => handleFitToPage();
-
-    window.addEventListener('action-fit-to-width', onFitWidth);
-    window.addEventListener('action-fit-to-page', onFitPage);
-    return () => {
-      window.removeEventListener('action-fit-to-width', onFitWidth);
-      window.removeEventListener('action-fit-to-page', onFitPage);
-    };
-  }, [handleFitToWidth, handleFitToPage]);
+  useBusEvent('action-fit-to-width', () => handleFitToWidth());
+  useBusEvent('action-fit-to-page', () => handleFitToPage());
 
   const getUnrotatedPoint = (e: React.MouseEvent<Element>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -689,13 +738,15 @@ export default function DocumentViewer({
   }, [scrollPos.top, scale, pdfDoc, pageNum, scaledPageHeight, pageTransition, rows]);
 
   return (
-    <div style={{ flex: 1, display: 'flex', backgroundColor: 'var(--bg-color)', overflow: 'hidden' }}>
-      <LeftSidebar 
-        isOpen={leftSidebarOpen} 
-        pdfDoc={pdfDoc}
-        pageNum={pageNum}
-        setPageNum={setPageNum}
-      />
+    <div style={{ flex: 1, display: 'flex', minHeight: 0, backgroundColor: 'var(--bg-color)', overflow: 'hidden' }}>
+      {sidebars && (
+        <LeftSidebar
+          isOpen={leftSidebarOpen}
+          pdfDoc={pdfDoc}
+          pageNum={pageNum}
+          setPageNum={setPageNum}
+        />
+      )}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, backgroundColor: 'var(--bg-color)', overflow: 'hidden' }}>
       {/* Sub-toolbar */}
       {activeTab === 'Annotate' && (
@@ -1093,6 +1144,7 @@ export default function DocumentViewer({
                         watermarkText={watermarkText}
                         redactions={combinedRedactions}
                         onDiscardRedaction={handleDiscardRedaction}
+                        onRendered={handlePageRendered}
                       />
                       {activeTextEditor && activeTextEditor.pageIndex === p && (() => {
                         const unW = rotation % 180 === 0 ? basePageDims.width : basePageDims.height;
@@ -1213,22 +1265,33 @@ export default function DocumentViewer({
           
           {/* Modals and Overlays */}  
             {!pdfDoc && (
-              <div style={{ 
+              <div style={{
                 position: 'absolute',
                 top: 0, left: 0, right: 0, bottom: 0,
-                display: 'flex', 
-                alignItems: 'center', 
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                alignItems: 'center',
                 justifyContent: 'center',
-                color: 'var(--text-muted)'
+                color: 'var(--text-muted)',
+                padding: '24px',
+                textAlign: 'center'
               }}>
-                No document loaded.
+                {loadError ? (
+                  <>
+                    <div style={{ fontWeight: 600, color: 'var(--text-color)' }}>
+                      {loadError.name === 'PasswordException' ? 'This document is password protected.' : 'The document could not be loaded.'}
+                    </div>
+                    <div style={{ fontSize: '12px', maxWidth: '480px', wordBreak: 'break-word' }}>{loadError.message}</div>
+                  </>
+                ) : initialDoc ? 'Loading document…' : 'No document loaded.'}
               </div>
             )}
 
-            {/* Pagination Floating Overlay */}
+            {/* Pagination Floating Overlay (positioned within the viewer, not the window) */}
             {pdfDoc && (
               <div style={{
-                position: 'fixed',
+                position: 'absolute',
                 bottom: '24px',
                 left: '50%',
                 transform: 'translateX(-50%)',
@@ -1332,20 +1395,22 @@ export default function DocumentViewer({
           }}
         />
       )}
-      <Sidebar 
-        isOpen={rightSidebarOpen} 
-        activeTab={sidebarTab}
-        setActiveTab={setSidebarTab}
-        annotations={annotations} 
-        setAnnotations={commitAnnotations}
-        selectedAnnotationId={selectedAnnotationId}
-        setSelectedAnnotationId={setSelectedAnnotationId}
-        onSearch={search}
-        searchResults={searchResults}
-        isSearching={isSearching}
-        searchProgress={searchProgress}
-        onResultClick={handleSearchResultClick}
-      />
+      {sidebars && (
+        <Sidebar
+          isOpen={rightSidebarOpen}
+          activeTab={sidebarTab}
+          setActiveTab={setSidebarTab}
+          annotations={annotations}
+          setAnnotations={commitAnnotations}
+          selectedAnnotationId={selectedAnnotationId}
+          setSelectedAnnotationId={setSelectedAnnotationId}
+          onSearch={search}
+          searchResults={searchResults}
+          isSearching={isSearching}
+          searchProgress={searchProgress}
+          onResultClick={handleSearchResultClick}
+        />
+      )}
     </div>
   );
 }

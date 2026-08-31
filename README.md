@@ -1,242 +1,234 @@
 # TeamSync PDF Viewer SDK
-Open-source PDF SDK for React.
+
+Client-side PDF viewing, annotation, search, redaction and watermarking for React — built on
+[pdf.js](https://mozilla.github.io/pdf.js/) and [pdf-lib](https://pdf-lib.js.org/).
 
 <div align="center">
 
 ![TeamSync PDF Viewer UI](https://raw.githubusercontent.com/angelbot-ai/TeamSync-PDF-Viewer/main/docs/images/viewer_ui.png)
 
-✨ Annotations
-🔐 Permanent redaction
-🔎 PDF search
-🕵️ PII detection
-💧 Watermarking
-⚛️ React 19
-📦 TypeScript
-🌐 Client-side
-
-### **100% Open Source. 100% Client-Side. Enterprise PDF Engine.**
-
 [![License: CPAL-1.0](https://img.shields.io/badge/License-CPAL--1.0-blue.svg)](LICENSE)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-pdfviewer.teamsync.com-000000.svg)](https://pdfviewer.teamsync.com/)
-[![NPM Version](https://img.shields.io/badge/npm-%40angelbot--ai%2Fteamsync--pdf--viewer-blue.svg)](https://www.npmjs.com/package/teamsync-pdf-viewer)
-[![React 19](https://img.shields.io/badge/React-19-61dafb.svg)](https://reactjs.org/)
-[![Vite 8](https://img.shields.io/badge/Vite-8.2-646cff.svg)](https://vitejs.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue.svg)](https://www.typescriptlang.org/)
-
-Try the **[Interactive Live Demo](https://pdfviewer.teamsync.com/)** or integrate the high-performance PDF Viewer SDK into your React applications.
+[![npm](https://img.shields.io/npm/v/teamsync-pdf-viewer.svg)](https://www.npmjs.com/package/teamsync-pdf-viewer)
+[![React 18/19](https://img.shields.io/badge/React-18%20%7C%2019-61dafb.svg)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-types%20included-blue.svg)](https://www.typescriptlang.org/)
 
 </div>
 
 ---
 
-## 🚀 Why TeamSync PDF Viewer?
+## Features
 
-Traditional commercial PDF viewers force developers into expensive per-domain licenses, opaque sales calls, and heavy server-side processing dependencies. **TeamSync PDF Viewer** is built from the ground up to solve these pain points.
+- **Viewing** — continuous or page-by-page scrolling, single / double / cover-facing layouts,
+  thumbnails panel, zoom 10 % – 6400 % with fit-to-width / fit-to-page, pinch and wheel zoom,
+  rotation, pan tool, high-DPI canvas rendering, progressive loading of linearized PDFs (HTTP Range).
+- **Text** — real selectable text layer, client-side search with highlighting and a results panel.
+- **Annotations** — highlighter, freehand ink, shapes (rectangle, ellipse, line, arrow), text,
+  sticky notes, callouts, hyperlinks (page-jump or URL), signature images, undo/redo, keyboard shortcuts.
+- **Redaction** — manual and regex/PII-driven redactions, burned in on export by rasterizing the
+  affected pages so the underlying content is destroyed; redacted text is also stripped from the
+  text layer and search index.
+- **Watermarks** — single or tiled forensic watermarks, rendered live and baked on export.
+- **Export** — download the annotated / redacted / watermarked document; no server round-trip.
+- **Embeddable** — `<TeamSyncViewer>` sizes to its container, several viewers can share a page,
+  keyboard shortcuts apply to the focused viewer only, and importing the package is side-effect free
+  (safe under SSR).
 
-- 💰 **Zero-Cost, Transparent Licensing**: Uncapped usage, no per-server fees, and no commercial paywalls. 100% free and open-source under CPAL 1.0.
-- ⚡ **100% Client-Side WebAssembly**: Documents never leave the browser sandbox. Process, redact, and render PDFs entirely.
-- 🔌 **Universal WebViewer API**: Clean, intuitive `WebViewer({...})` API interface that makes integrating into your web applications effortless.
-- 🎨 **Headless & Customizable**: Built for modern React 19 SPA lifecycles. No bloated iFrames to fight—customize toolbars, sidebars, context menus, and controls natively.
+Not yet supported: printing (planned for 1.2), AcroForm filling, rendering of annotations already
+embedded in the PDF, document outline/bookmarks, password prompts (password-protected files raise
+`onPasswordRequired`).
 
 ---
 
-## 📦 Installation via NPM
-
-Install the package into your React / TypeScript project:
+## Installation
 
 ```bash
-# Using npm
-npm install teamsync-pdf-viewer
-
-# Using yarn
-yarn add teamsync-pdf-viewer
-
-# Using pnpm
-pnpm add teamsync-pdf-viewer
+npm install teamsync-pdf-viewer pdfjs-dist
 ```
 
-### Installing from GitHub Packages (Alternative)
+`react`, `react-dom` (18 or 19) and `pdfjs-dist` (6.x) are **peer dependencies**. `pdf-lib` and
+`lucide-react` are installed automatically.
 
-If installing from GitHub Packages registry:
+### Serve the pdf.js assets
 
-1. Create or update your `.npmrc` file:
-   ```ini
-   @angelbot-ai:registry=https://npm.pkg.github.com
-   ```
-2. Install via npm:
-   ```bash
-   npm install teamsync-pdf-viewer
-   ```
+The library never bundles the pdf.js worker (bundling it produced a 5 MB package with a `data:`
+URL worker that strict Content-Security-Policies reject). Serve the worker — and, for full font /
+CJK / JPEG 2000 support, the CMaps, standard fonts and wasm decoders — from your own origin and tell
+the viewer where they are.
 
----
+**Vite / Rollup**
 
-## 📖 Official Documentation & Wiki
+```ts
+import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { configurePdfAssets } from 'teamsync-pdf-viewer';
 
-Explore detailed SDK guides, parameter options, code snippets, and architecture deep dives:
+configurePdfAssets({ workerSrc });
+```
 
-- 🏠 **[Wiki Home](docs/wiki/Home.md)**: Main documentation index & overview.
-- 🚀 **[Getting Started Guide](docs/wiki/Getting-Started.md)**: Installation, CDN, and framework setups.
-- ⚙️ **[API Reference & Options](docs/wiki/API-Reference-&-Options.md)**: Complete parameter list for `WebViewerOptions` & `SDKPermissions`.
-- 🎨 **[Annotations & Markup Guide](docs/wiki/Annotations-&-Markup-Guide.md)**: Freehand drawing, vector shapes, callouts & links.
-- 🛡️ **[Redactions & PII Sanitization Guide](docs/wiki/Redactions-&-PII-Sanitization.md)**: Binary redactions, regex PII scanning & discard options.
-- 💧 **[Forensic Watermarking Guide](docs/wiki/Forensic-Watermarking.md)**: Dynamic single and tiled watermark setup.
-- 🔌 **[Plugin Architecture Guide](docs/wiki/Plugin-Architecture.md)**: Writing custom extension plugins.
+**Next.js (or any static host)** — copy the files at build time and reference them by URL:
 
----
+```bash
+# e.g. in a prebuild script
+cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdfjs/
+cp -r node_modules/pdfjs-dist/cmaps node_modules/pdfjs-dist/standard_fonts node_modules/pdfjs-dist/wasm public/pdfjs/
+```
 
-## ✨ Uncompromised Feature Set
-
-Everything you need to build collaborative, secure document workflows.
-
-### 🎨 Smart Markup & Annotations
-- **Full Drawing Toolkit**: Freehand ink (`brush`), highlighters, geometric shapes (rectangles, ellipses), arrows, and lines.
-- **Notes & Callouts**: Sticky notes, callout text boxes with directional arrows, and text annotations.
-- **Interactive Hyperlinks**: Create internal page-jump links (`#page=N`) or external web URL links directly on document selections.
-
-### 🛡️ PDF Secure Redaction
-- **Binary-Level Data Obliteration**: We don't just place black boxes over text—redactions are permanently rasterized and burned into the underlying PDF vector structure.
-- **Text Layer Sanitization**: Redacted text is automatically stripped from the DOM `textLayer` and PDF content streams, preventing copy/paste extraction and search indexing.
-- **Automatic Regex Redactions**: Programmatically locate and redact sensitive PII (Aadhaar numbers, SSNs, credit cards, dates of birth) in a single click.
-- **Discard Unapplied Redactions**: Easily discard individual pending redactions or bulk-discard all unapplied redaction marks before committing.
-
-### 🔍 High-DPI Canvas Rendering & Search
-- **Retina 60 FPS Zoom & Pan**: High-DPI `devicePixelRatio` scaling eliminates blurred text. Micro-debounced rendering enables buttery-smooth 60 FPS trackpad pinching and 360° mouse drag panning.
-- **Contextual Document Search**: Instant client-side text search with real-time match highlighting, result jumping, and match counting.
-
-### 💧 Dynamic Forensic Watermarking
-- Programmatic, non-destructive watermarks rendered on the fly (single centered or full-page tiled) with customizable text, color, opacity, font size, and rotation.
-
----
-
-## 💻 Developer SDK Usage
-
-### Standard WebViewer Initialization
-
-Drop the SDK into any container element with a single function call:
-
-```typescript
-import { WebViewer } from 'teamsync-pdf-viewer';
-import 'teamsync-pdf-viewer/style.css';
-
-WebViewer({
-  initialDoc: '/sample.pdf',
-  initialScale: 1.0, // 100% natural size
-  enableAnnotations: true,
-  permissions: {
-    canRedact: true,
-    canAddAnnotations: true
-  },
-  watermark: {
-    text: 'CONFIDENTIAL',
-    mode: 'single',
-    size: 48,
-    opacity: 0.1,
-    color: '#dc2626'
-  }
-}, document.getElementById('viewer-container')).then((instance) => {
-  console.log('TeamSync PDF Viewer is ready!', instance);
-  
-  // Export annotated PDF buffer
-  instance.Core.documentViewer.getDocument().getFileData().then((pdfBytes) => {
-    console.log('Exported PDF byte length:', pdfBytes.length);
-  });
+```ts
+configurePdfAssets({
+  workerSrc: '/pdfjs/pdf.worker.min.mjs',
+  cMapUrl: '/pdfjs/cmaps/',
+  standardFontDataUrl: '/pdfjs/standard_fonts/',
+  wasmUrl: '/pdfjs/wasm/',
 });
 ```
 
-### Native React Component Usage
+The worker **must** come from the same `pdfjs-dist` version the viewer runs against
+(`import { pdfjsVersion } from 'teamsync-pdf-viewer'` tells you which one is loaded).
 
-For native React integration, use the `<DocumentViewer />` component:
+---
+
+## Usage
+
+### React component
 
 ```tsx
-import { DocumentViewer } from 'teamsync-pdf-viewer';
+'use client'; // Next.js App Router: the viewer is client-only
+
+import { TeamSyncViewer, type WebViewerInstance } from 'teamsync-pdf-viewer';
 import 'teamsync-pdf-viewer/style.css';
 
-function App() {
+export function ContractViewer({ url }: { url: string }) {
   return (
-    <div style={{ width: '100vw', height: '100vh' }}>
-      <DocumentViewer
-        initialDoc="/contract.pdf"
-        scale={1.0}
-        enableAnnotations={true}
-        permissions={{ canRedact: true }}
+    <div style={{ height: '80vh' }}>
+      <TeamSyncViewer
+        fileUrl={url}
+        fileName="contract.pdf"
+        assets={{ workerSrc: '/pdfjs/pdf.worker.min.mjs', cMapUrl: '/pdfjs/cmaps/' }}
+        currentUser={{ id: 'u-42', name: 'Jane Doe' }}
+        initialScale="fit-width"
+        watermark={{ text: 'CONFIDENTIAL', mode: 'tiled', opacity: 0.08 }}
+        onReady={(instance: WebViewerInstance) => console.log('ready', instance)}
+        onDocumentLoadError={(error, retry) => {
+          // e.g. mint a fresh presigned URL and retry
+          retry(/* newUrl */);
+        }}
       />
     </div>
   );
 }
 ```
 
+In Next.js, load it with `next/dynamic(() => import('./ContractViewer'), { ssr: false })` or keep
+it inside a client component — the package itself never touches `window` at import time.
+
+### Imperative API
+
+```ts
+import { createWebViewer } from 'teamsync-pdf-viewer';
+import 'teamsync-pdf-viewer/style.css';
+
+const instance = await createWebViewer(
+  { initialDoc: '/sample.pdf', fileName: 'sample.pdf', permissions: { canRedact: true } },
+  document.getElementById('viewer-container')!
+);
+
+instance.on('documentLoaded', ({ numPages }) => console.log(numPages, 'pages'));
+const pdfBytes = await instance.getFileData(); // annotated / redacted / watermarked Uint8Array
+instance.destroy(); // unmounts and releases every listener
+```
+
+`WebViewer()` remains available as a deprecated alias of `createWebViewer()`.
+
 ---
 
-## 🛠️ Local Development Quick Start
+## API overview
 
-### 1. Clone & Install
+### `<TeamSyncViewer>` props / `WebViewerOptions`
+
+| Prop | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `fileUrl` (`initialDoc`) | `string` | — | URL of the PDF. Fetched by pdf.js (CORS + Range supported). |
+| `fileName` | `string` | `annotated_document.pdf` | Name used for downloads. |
+| `assets` | `PdfAssetPaths` | — | Worker / CMap / font / wasm locations (or call `configurePdfAssets`). |
+| `withCredentials` | `boolean` | `false` | Send cookies with the document request. |
+| `initialScale` | `number \| 'fit-width' \| 'fit-page'` | `1` | Initial zoom. |
+| `initialPage` | `number` | `1` | 1-based page to open. |
+| `readOnly` | `boolean` | `false` | Disables all annotation / redaction editing. |
+| `permissions` | `SDKPermissions` | all `true` | `canAddAnnotations`, `canEditAnnotations`, `canDeleteAnnotations`, `canRedact`. |
+| `currentUser` | `{ id, name }` | — | Author of annotations created in this viewer. |
+| `watermark` | `WatermarkOptions` | — | `{ text, mode: 'single' \| 'tiled', size, opacity, color }`. |
+| `redactions`, `regexRedactions` | `Redaction[]`, `RegExp[]` | `[]` | Pre-set and pattern-driven redactions. |
+| `toolbar`, `sidebars`, `leftPanelOpen` | `boolean` | `true` | Chrome toggles. |
+| `autoFocus` | `boolean` | `false` | Focus the viewer on mount (keyboard shortcuts). |
+| `plugins` | `ViewerPlugin[]` | `[]` | Extension plugins. |
+
+Callbacks: `onReady(instance)`, `onDocumentLoaded({ url, numPages })`,
+`onDocumentLoadError(error, retry(newUrl?), { url, passwordRequired })`, `onFirstPageRendered`,
+`onPasswordRequired`, `onPageChange(page, numPages)`, `onAnnotationsChange(annotations)`.
+
+### `WebViewerInstance`
+
+- `on(type, listener)` / `off` — typed events: `documentLoaded`, `documentLoadError`,
+  `firstPageRendered`, `pageChanged`, `annotationsChanged`, `toolChanged`, `destroy`.
+- `loadDocument(url)` — load or reload (resolves on load, rejects on error).
+- `getFileData({ explicitAnnotations? })` — export the document as `Uint8Array`.
+- `getAnnotations()`, `getCurrentPage()`, `getPageCount()`, `getPdfDocument()`.
+- `destroy()` — unmount (imperative API) and release every listener.
+- `UI.*` / `Core.*` — legacy facades (`UI.openElements`, `UI.fitWidth`,
+  `Core.annotationManager.exportAnnotations()`, `Core.documentViewer.getDocument().getFileData()`).
+
+Full reference: [docs/wiki/API-Reference-&-Options.md](docs/wiki/API-Reference-&-Options.md).
+
+---
+
+## Documentation
+
+- [Getting Started](docs/wiki/Getting-Started.md) · [API Reference & Options](docs/wiki/API-Reference-&-Options.md)
+- [Annotations & Markup](docs/wiki/Annotations-&-Markup-Guide.md) · [Redactions & PII Sanitization](docs/wiki/Redactions-&-PII-Sanitization.md)
+- [Forensic Watermarking](docs/wiki/Forensic-Watermarking.md) · [Plugin Architecture](docs/wiki/Plugin-Architecture.md)
+- [Changelog](CHANGELOG.md)
+
+---
+
+## Development
 
 ```bash
 git clone https://github.com/angelbot-ai/TeamSync-PDF-Viewer.git
 cd TeamSync-PDF-Viewer
 npm install
+npm run dev          # demo application at http://localhost:5173
+npm test             # unit tests (vitest)
+npm run build        # library -> dist/
+npm run verify:package   # publint + arethetypeswrong + artifact guards
+npm run build:app    # demo / iframe package build (Vercel)
 ```
 
-### 2. Launch Dev Server
+Layout:
 
-```bash
-npm run dev
+```
+src/
+├── index.ts              # public entry (side-effect free)
+├── core/                 # createWebViewer, WebViewerInstance, event bus, pdf.js assets, export
+├── components/           # TeamSyncViewer + internal UI (DocumentViewer, Header, sidebars, modals)
+├── annotations/          # annotation data model
+├── hooks/, utils/        # search, shortcuts, rotation helpers, regex redaction
+├── plugins/              # plugin interfaces
+└── demo/                 # demo & iframe-package bootstrap (not published)
 ```
 
-Open `http://localhost:5173` in your browser to launch the live SDK viewer.
+### Iframe package (script-tag hosts)
+
+`npm run build:app` produces a self-contained viewer; `public/webviewer.js` wraps it in an iframe
+with a `postMessage` bridge and exposes a `WebViewer(options, element)` function for non-React hosts.
 
 ---
 
-## 🔌 Extensible Plugin Architecture
+## TypeScript notes
 
-TeamSync PDF Viewer features a decoupled **Plugin Architecture**. Core PDF rendering, smart annotations, redaction engines, and search remain lightweight and modular in the main engine, while enterprise extensions plug in as independent modules.
+Declarations ship in `dist/src/`. They resolve under `moduleResolution: "bundler"` (Next.js, Vite,
+webpack) and `node10`; `node16`/`nodenext` resolution is not supported yet because the emitted
+declarations use extension-less relative imports.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│              TeamSync PDF Viewer Core                   │
-│   (Page Rendering, Annotations, Redactions, Search)     │
-└───────────────────────────┬─────────────────────────────┘
-                            │ Plugins Registry API
-┌───────────────────────────▼─────────────────────────────┐
-│                   Custom Extension                      │
-│      (Custom Modals, Action Buttons, Export Hooks)      │
-└─────────────────────────────────────────────────────────┘
-```
+## License
 
----
-
-## 🏛️ Architecture & Tech Stack
-
-- **Core Engine**: HTML5, TypeScript, WebAssembly (PDF.js + pdf-lib)
-- **UI & State**: React 19, Lucide Icons, Pure CSS Modules
-- **Build System**: Vite 8 & Oxlint (Sub-500ms tree-shakable builds)
-
-```
-TeamSync-PDF-Viewer/
-├── src/
-│   ├── components/       # Native React UI (Header, DocumentViewer, Sidebars, Modals)
-│   ├── hooks/            # Search & Keyboard shortcut hooks
-│   ├── utils/            # Redaction algorithms & vector helpers
-│   ├── plugins/          # Plugin API interfaces & registry
-│   ├── index.ts          # Main SDK package exports
-│   ├── main.tsx          # WebViewer SDK entry point & public API bridge
-│   └── App.tsx           # Demo Application Shell
-├── public/               # Static PDF assets & PDF.js workers
-└── docs/images/          # High-res UI documentation screenshots
-```
-
----
-
-## 📄 License
-
-Distributed under the **CPAL 1.0 (Common Public Attribution License)**.  
-100% Free and Open Source for personal and commercial usage.
-
----
-<div align="center">
-  <b>AngelBot AI • TeamSync • </b> <a href="https://www.teamsync.com" target="_blank" rel="noopener noreferrer">https://www.teamsync.com</a>
-</div>
-
-<div align="center">
-  <b>TeamSync PDF Viewer Engine</b> • Engineered with ❤️ for the Open Web.
-</div>
+[CPAL-1.0](LICENSE) — Copyright © 2026 AngelBot Ai Pvt Ltd.

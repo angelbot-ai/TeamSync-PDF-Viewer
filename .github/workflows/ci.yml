@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Build library
+        run: npm run build
+      - name: Verify package contents (types, css, exports)
+        run: npm run verify:package
+      - name: Build demo application
+        run: npm run build:app
+      - name: Upload library artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-lib
+          path: dist
+          if-no-files-found: error

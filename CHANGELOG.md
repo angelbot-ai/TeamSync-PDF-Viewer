@@ -2,6 +2,24 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.2.1] — 2026-09-01
+
+### Fixed
+- **The stylesheet no longer restyles the host application.** `dist/style.css` bundles
+  `pdfjs-dist/web/pdf_viewer.css`, ~900 selectors written for pdf.js's own standalone viewer —
+  including bare generic class names such as `.sidebar`, `.dialog`, `.toggle-button`,
+  `.closeButton` and `.messageBar`. Only this package's own rules were scoped under `.tspdf-root`;
+  the pdf.js ones shipped globally. Because the stylesheet is injected at runtime it won every
+  cascade tie, so a host with its own `.sidebar` had it silently restyled (wrong width, white
+  background, `position: relative` + `inset-block-start`) as soon as the viewer module loaded —
+  which happens on preference selection, before any PDF is opened.
+
+  Every selector is now scoped at build time, after nesting is flattened. `:root`/`html`/`body`
+  are re-targeted to `.tspdf-root` rather than prefixed, so the custom properties the viewer's
+  descendants read still resolve. `npm run verify:package` fails the build if any selector is
+  unscoped, or prefixed more than once (which would match nothing and break the viewer's own
+  styling).
+
 ## [1.2.0] — 2026-08-31
 
 ### Added

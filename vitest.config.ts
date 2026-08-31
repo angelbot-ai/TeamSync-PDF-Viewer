@@ -1,7 +1,8 @@
 /**
  * © 2026 AngelBot Ai Pvt Ltd. All rights reserved.
  */
-import { defineConfig } from 'vitest/config';
+/// <reference types="vitest" />
+import { defineConfig } from 'vite';
 
 export default defineConfig({
   test: {

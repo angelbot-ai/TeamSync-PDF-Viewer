@@ -20,6 +20,12 @@ import { findRegexRedactions } from '../utils/findRegexRedactions';
 import { convertToUnrotated, convertToRotated, normalizeRotation } from '../utils/rotationUtils';
 import { useViewerBus, useBusEvent } from '../hooks/useViewerBus';
 import { assertWorkerConfigured, configurePdfAssets, getDocumentParams } from '../core/pdfAssets';
+import CompareToolbar from './CompareToolbar';
+import CompareCurtainSlider from './CompareCurtainSlider';
+import SideBySideViewer from './SideBySideViewer';
+import DiffSummarySidebar from './DiffSummarySidebar';
+import type { CompareOptions, CompareState, TextDiffSegment } from '../types/compare';
+import { computeTextDiff } from '../utils/pdfDiffEngine';
 
 export interface DocumentLoadErrorInfo {
   url: string;
@@ -64,13 +70,16 @@ interface DocumentViewerProps {
   enableAnnotations?: boolean;
   initialPage?: number;
   permissions?: SDKPermissions;
+  compareDoc?: string | ArrayBuffer | Uint8Array;
+  compareOptions?: CompareOptions;
 }
 
 export default function DocumentViewer({
   leftSidebarOpen, rightSidebarOpen, activeTab, annotationManager, initialDoc, loadNonce = 0, withCredentials = false, assets, sidebars = true,
   redactions, regexRedactions, scale, setScale, sidebarTab, setSidebarTab, onAnnotationsChange, onRedactionsChange,
   onDocumentLoaded, onLoadError, onFirstPageRendered, onPageChange,
-  pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations: _enableAnnotations, initialPage, permissions
+  pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations: _enableAnnotations, initialPage, permissions,
+  compareDoc, compareOptions
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bus = useViewerBus();
@@ -90,7 +99,119 @@ export default function DocumentViewer({
   // We can just move the combinedRedactions useMemo up before usePdfSearch, 
   // or we can pass an empty array initially and it will update.
   // Let's just move usePdfSearch below combinedRedactions.
-  const [activeSearchResult, setActiveSearchResult] = useState<SearchResult | null>(null);
+  // Comparison State & Engine
+  const [compareState, setCompareState] = useState<CompareState>({
+    isActive: false,
+    mode: compareOptions?.mode || 'overlay',
+    colorA: compareOptions?.colorA || '#e11d48',
+    colorB: compareOptions?.colorB || '#0284c7',
+    opacityA: compareOptions?.opacityA || 0.75,
+    opacityB: compareOptions?.opacityB || 0.75,
+    blendMode: compareOptions?.blendMode || 'multiply',
+    curtainPosition: 50,
+    showCurtain: false,
+    diffItems: [],
+    currentDiffIndex: 0
+  });
+  const [pdfDocB, setPdfDocB] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const [textDiffs, setTextDiffs] = useState<TextDiffSegment[]>([]);
+  const [isDiffSidebarOpen, setIsDiffSidebarOpen] = useState(false);
+
+  const loadCompareDoc = useCallback(async (docSource: string | ArrayBuffer | Uint8Array) => {
+    try {
+      assertWorkerConfigured();
+      if (assetsRef.current) configurePdfAssets(assetsRef.current);
+      const params: any = typeof docSource === 'string' ? { url: docSource } : { data: docSource };
+      if (withCredentials) params.withCredentials = true;
+      Object.assign(params, getDocumentParams());
+      const loadingTask = pdfjsLib.getDocument(params);
+      const loadedDocB = await loadingTask.promise;
+      setPdfDocB(loadedDocB);
+      setCompareState(prev => ({ ...prev, isActive: true, docB: docSource }));
+      setIsDiffSidebarOpen(true);
+    } catch (err) {
+      console.error('Failed to load comparison document B:', err);
+    }
+  }, [withCredentials]);
+
+  useEffect(() => {
+    if (compareDoc) {
+      loadCompareDoc(compareDoc);
+    }
+  }, [compareDoc, loadCompareDoc]);
+
+  // Compute text diffs when both pdfDoc and pdfDocB are loaded
+  useEffect(() => {
+    if (compareState.isActive && pdfDoc && pdfDocB) {
+      const computeDiffs = async () => {
+        try {
+          const pageA = await pdfDoc.getPage(pageNum);
+          const pageB = await pdfDocB.getPage(pageNum);
+          const textContentA = await pageA.getTextContent();
+          const textContentB = await pageB.getTextContent();
+          const strA = textContentA.items.map((i: any) => i.str).join(' ');
+          const strB = textContentB.items.map((i: any) => i.str).join(' ');
+
+          const diffs = computeTextDiff(strA, strB, pageNum);
+          setTextDiffs(diffs);
+        } catch (e) {
+          console.error('Error computing page text diff:', e);
+        }
+      };
+      computeDiffs();
+    }
+  }, [compareState.isActive, pdfDoc, pdfDocB, pageNum]);
+
+  // Public Event Listeners for Compare APIs
+  useEffect(() => {
+    const handleStartCompare = (e: any) => {
+      const { docA: _docA, docB, options } = e.detail || {};
+      if (options) {
+        setCompareState(prev => ({
+          ...prev,
+          mode: options.mode || prev.mode,
+          colorA: options.colorA || prev.colorA,
+          colorB: options.colorB || prev.colorB,
+          opacityA: options.opacityA || prev.opacityA,
+          opacityB: options.opacityB || prev.opacityB,
+          blendMode: options.blendMode || prev.blendMode
+        }));
+      }
+      if (docB) {
+        loadCompareDoc(docB);
+      }
+    };
+
+    const handleStopCompare = () => {
+      setCompareState(prev => ({ ...prev, isActive: false }));
+      setPdfDocB(null);
+      setTextDiffs([]);
+    };
+
+    const handleSetCompareMode = (e: any) => {
+      if (e.detail?.mode) {
+        setCompareState(prev => ({ ...prev, mode: e.detail.mode }));
+      }
+    };
+
+    const handleSetCompareColors = (e: any) => {
+      if (e.detail?.colorA && e.detail?.colorB) {
+        setCompareState(prev => ({ ...prev, colorA: e.detail.colorA, colorB: e.detail.colorB }));
+      }
+    };
+
+    window.addEventListener('action-start-compare', handleStartCompare);
+    window.addEventListener('action-stop-compare', handleStopCompare);
+    window.addEventListener('action-set-compare-mode', handleSetCompareMode);
+    window.addEventListener('action-set-compare-colors', handleSetCompareColors);
+
+    return () => {
+      window.removeEventListener('action-start-compare', handleStartCompare);
+      window.removeEventListener('action-stop-compare', handleStopCompare);
+      window.removeEventListener('action-set-compare-mode', handleSetCompareMode);
+      window.removeEventListener('action-set-compare-colors', handleSetCompareColors);
+    };
+  }, [loadCompareDoc]);
 
   // Per-page base dimensions (scale 1, UI rotation composed with the page's /Rotate). Index =
   // pageNumber - 1. Populated progressively after load so mixed-size documents lay out correctly.
@@ -152,6 +273,8 @@ export default function DocumentViewer({
     const i = rowIndexOfPage(p);
     if (i >= 0 && containerRef.current) containerRef.current.scrollTop = rowLayout.tops[i];
   }, [rowIndexOfPage, rowLayout]);
+
+  const [activeSearchResult, setActiveSearchResult] = useState<SearchResult | null>(null);
 
   const handleSearchResultClick = (result: SearchResult) => {
     setPageNum(result.pageIndex);
@@ -783,6 +906,34 @@ export default function DocumentViewer({
         />
       )}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, backgroundColor: 'var(--bg-color)', overflow: 'hidden' }}>
+      {/* Compare Sub-toolbar */}
+      {compareState.isActive && (
+        <CompareToolbar
+          compareState={compareState}
+          onSetMode={(mode) => setCompareState(prev => ({ ...prev, mode }))}
+          onSetColors={(colorA, colorB) => setCompareState(prev => ({ ...prev, colorA, colorB }))}
+          onToggleCurtain={() => setCompareState(prev => ({ ...prev, showCurtain: !prev.showCurtain }))}
+          onPrevDiff={() => {
+            if (compareState.diffItems.length === 0) return;
+            const newIdx = (compareState.currentDiffIndex - 1 + compareState.diffItems.length) % compareState.diffItems.length;
+            setCompareState(prev => ({ ...prev, currentDiffIndex: newIdx }));
+            const item = compareState.diffItems[newIdx];
+            if (item && item.pageIndex) setPageNum(item.pageIndex);
+          }}
+          onNextDiff={() => {
+            if (compareState.diffItems.length === 0) return;
+            const newIdx = (compareState.currentDiffIndex + 1) % compareState.diffItems.length;
+            setCompareState(prev => ({ ...prev, currentDiffIndex: newIdx }));
+            const item = compareState.diffItems[newIdx];
+            if (item && item.pageIndex) setPageNum(item.pageIndex);
+          }}
+          onExit={() => {
+            setCompareState(prev => ({ ...prev, isActive: false }));
+            setPdfDocB(null);
+            setTextDiffs([]);
+          }}
+        />
+      )}
       {/* Sub-toolbar */}
       {activeTab === 'Annotate' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', backgroundColor: '#fff', borderBottom: '1px solid var(--border-color)', height: '40px' }}>
@@ -1000,16 +1151,34 @@ export default function DocumentViewer({
 
 
 
-      {/* Main Canvas Area */}
-      {activeTool === 'highlight' && (
-        <style>{`
-          .pdf-viewer-area, .pdf-viewer-area * {
-            cursor: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTkgMTFsLTYgNnYzaDlsMy0zIi8+PHBhdGggZD0iTTIyIDEybC00LjYgNC42YTIgMiAwIDAgMS0yLjggMGwtNS4yLTUuMmEyIDIgMCAwIDEgMC0yLjhMMTQgNCIvPjwvc3ZnPg==') 0 24, auto !important;
-          }
-        `}</style>
-      )}
-        <div 
-          className="pdf-viewer-area"
+      {/* Main Canvas / Compare Viewport Area */}
+      {compareState.isActive && compareState.mode === 'side-by-side' ? (
+        <SideBySideViewer
+          pdfDocA={pdfDoc}
+          pdfDocB={pdfDocB}
+          pageNum={pageNum}
+          scale={scale}
+          rotation={rotation}
+          basePageDims={dimsFor(pageNum)}
+          activeTab={activeTab}
+          activeTool={activeTool}
+          annotations={annotations}
+          permissions={permissions}
+          watermark={watermark}
+          watermarkText={watermarkText}
+          redactions={combinedRedactions}
+        />
+      ) : (
+        <>
+          {activeTool === 'highlight' && (
+            <style>{`
+              .pdf-viewer-area, .pdf-viewer-area * {
+                cursor: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTkgMTFsLTYgNnYzaDlsMy0zIi8+PHBhdGggZD0iTTIyIDEybC00LjYgNC42YTIgMiAwIDAgMS0yLjggMGwtNS4yLTUuMmEyIDIgMCAwIDEgMC0yLjhMMTQgNCIvPjwvc3ZnPg==') 0 24, auto !important;
+              }
+            `}</style>
+          )}
+          <div 
+            className="pdf-viewer-area"
           style={{ 
             flex: 1, 
             overflow: 'hidden', 
@@ -1393,9 +1562,28 @@ export default function DocumentViewer({
                 permissions={permissions}
               />
             )}
-            
+            {compareState.isActive && compareState.showCurtain && (
+              <CompareCurtainSlider
+                positionPercent={compareState.curtainPosition}
+                onChangePosition={(pos) => setCompareState(prev => ({ ...prev, curtainPosition: pos }))}
+                containerRef={containerRef}
+              />
+            )}
+          </div>
+        </>
+      )}
 
-        </div>
+      {compareState.isActive && (
+        <DiffSummarySidebar
+          isOpen={isDiffSidebarOpen}
+          onClose={() => setIsDiffSidebarOpen(false)}
+          diffItems={compareState.diffItems}
+          textDiffs={textDiffs}
+          currentDiffIndex={compareState.currentDiffIndex}
+          onSelectDiff={(idx) => setCompareState(prev => ({ ...prev, currentDiffIndex: idx }))}
+          onJumpToPage={(p) => setPageNum(p)}
+        />
+      )}
       </div>
       
       {isLinkModalOpen && selectedAnnotationId && (

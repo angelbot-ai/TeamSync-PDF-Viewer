@@ -2,7 +2,7 @@
  * © 2026 AngelBot Ai Pvt Ltd. All rights reserved.
  */
 import * as pdfjsLib from 'pdfjs-dist';
-import type { Redaction } from '../main';
+import type { Redaction } from '../core/types';
 
 export async function findRegexRedactions(
   pdfDoc: pdfjsLib.PDFDocumentProxy,

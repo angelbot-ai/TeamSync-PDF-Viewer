@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Trash2, MessageSquare, MessageCircle, Type, Search, X, Link as LinkIcon } from 'lucide-react';
 import { type SearchResult } from '../hooks/usePdfSearch';
+import { useBusEvent } from '../hooks/useViewerBus';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -61,16 +62,12 @@ export default function Sidebar({
     return () => clearTimeout(handler);
   }, [searchQuery, onSearch]);
 
-  useEffect(() => {
-    const handleFocusSearch = () => {
-      if (searchInputRef.current) {
-        searchInputRef.current.focus();
-        searchInputRef.current.select();
-      }
-    };
-    window.addEventListener('action-focus-search', handleFocusSearch);
-    return () => window.removeEventListener('action-focus-search', handleFocusSearch);
-  }, []);
+  useBusEvent('action-focus-search', () => {
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+      searchInputRef.current.select();
+    }
+  });
 
   const comments = annotations.filter(a => ['note', 'callout', 'text', 'link'].includes(a.type));
 

@@ -3,7 +3,7 @@
  */
 import { useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import type { Redaction } from '../main';
+import type { Redaction } from '../core/types';
 
 export interface SearchBounds {
   x: number;

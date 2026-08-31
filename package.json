@@ -1,22 +1,39 @@
 {
   "name": "teamsync-pdf-viewer",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "license": "CPAL-1.0",
-  "description": "Enterprise PDF Viewer SDK - 100% Client-Side WebAssembly PDF Engine for React",
+  "description": "TeamSync PDF Viewer SDK — client-side PDF viewing, annotation, search, redaction and watermarking for React.",
   "type": "module",
-  "main": "./dist/teamsync-pdf-viewer.umd.cjs",
-  "module": "./dist/teamsync-pdf-viewer.es.js",
-  "types": "./dist/index.d.ts",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "main": "./dist/teamsync-pdf-viewer.js",
+  "module": "./dist/teamsync-pdf-viewer.js",
+  "types": "./dist/src/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/teamsync-pdf-viewer.es.js",
-      "require": "./dist/teamsync-pdf-viewer.umd.cjs",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/teamsync-pdf-viewer.js",
+      "default": "./dist/teamsync-pdf-viewer.js"
     },
-    "./style.css": "./dist/style.css"
+    "./style.css": "./dist/style.css",
+    "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "pdf",
+    "pdf-viewer",
+    "react",
+    "pdfjs",
+    "annotations",
+    "redaction",
+    "watermark",
+    "teamsync"
   ],
   "repository": {
     "type": "git",
@@ -29,28 +46,44 @@
   "publishConfig": {
     "access": "public"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
+    "typecheck": "tsc -b",
     "build": "tsc -b && vite build",
     "build:app": "tsc -b && vite build --config vite.config.app.ts",
     "lint": "oxlint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify:package": "node scripts/verify-package.mjs",
     "preview": "vite preview"
+  },
+  "peerDependencies": {
+    "pdfjs-dist": "^6.2.0",
+    "react": "^18.2.0 || ^19.0.0",
+    "react-dom": "^18.2.0 || ^19.0.0"
   },
   "dependencies": {
     "lucide-react": "^1.28.0",
-    "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^6.2.108",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
+    "jsdom": "^26.1.0",
     "oxlint": "^1.75.0",
+    "pdfjs-dist": "^6.2.108",
+    "publint": "^0.3.12",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
-    "vite-plugin-dts": "^4.5.3"
+    "vite-plugin-dts": "^4.5.3",
+    "vitest": "^3.2.4"
   }
 }

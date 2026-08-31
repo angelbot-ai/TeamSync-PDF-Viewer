@@ -7,6 +7,8 @@ import type * as pdfjsLib from 'pdfjs-dist';
 import { ViewerBus } from './eventBus';
 import { buildPdfBytes, type ExportOptions } from './export';
 import type { Annotation } from '../annotations/types';
+import { AnnotationManager } from '../annotations/AnnotationManager';
+import { createGeometryResolver } from '../annotations/geometry';
 import type { Redaction, WatermarkOptions, ViewerEventMap, ViewerEventType } from './types';
 
 /** Callbacks the React component installs so the instance can reach live state. */
@@ -29,6 +31,8 @@ const noBinding = (): never => {
 
 export class WebViewerInstance {
   readonly bus: ViewerBus;
+  /** Annotation list, history, permissions and XFDF import/export. */
+  readonly annotationManager: AnnotationManager;
   /** Root element of the viewer once mounted. */
   element: HTMLElement | null = null;
 
@@ -36,8 +40,9 @@ export class WebViewerInstance {
   private unmountRoot: (() => void) | null = null;
   private destroyed = false;
 
-  constructor(bus: ViewerBus) {
+  constructor(bus: ViewerBus, annotationManager: AnnotationManager = new AnnotationManager()) {
     this.bus = bus;
+    this.annotationManager = annotationManager;
   }
 
   // ---- lifecycle -------------------------------------------------------------------------
@@ -141,7 +146,12 @@ export class WebViewerInstance {
   // ---- annotations / export --------------------------------------------------------------
 
   getAnnotations(): Annotation[] {
-    return this.binding?.getAnnotations() ?? [];
+    return this.annotationManager.getAnnotationsList();
+  }
+
+  /** Print the exported document (annotations, redactions and watermark baked in). */
+  print(): void {
+    this.bus.emit('action-print');
   }
 
   /**
@@ -164,7 +174,8 @@ export class WebViewerInstance {
     return buildPdfBytes(
       {
         getSourceBytes,
-        annotations: b.getAnnotations(),
+        getPageGeometry: pdf ? createGeometryResolver(pdf) : undefined,
+        annotations: this.annotationManager.getAnnotationsList(),
         redactions: b.getRedactions(),
         watermark: b.getWatermark(),
         signerName: b.getCurrentUserName(),
@@ -190,22 +201,21 @@ export class WebViewerInstance {
     fitToPage: () => this.bus.emit('action-fit-to-page'),
   };
 
-  readonly Core = {
-    annotationManager: {
-      /** Legacy: returns the bespoke JSON annotation list. XFDF import/export arrives in 1.2.0. */
-      exportAnnotations: (): string => JSON.stringify(this.getAnnotations(), null, 2),
-      getAnnotationsList: (): Annotation[] => this.getAnnotations(),
+  readonly Core = ((self: WebViewerInstance) => ({
+    /** The real AnnotationManager (XFDF import/export, granular events, permissions). */
+    get annotationManager(): AnnotationManager {
+      return self.annotationManager;
     },
     documentViewer: {
       addEventListener: (event: string, callback: (detail: unknown) => void): (() => void) =>
-        this.bus.on(event, callback),
+        self.bus.on(event, callback),
       removeEventListener: (event: string, callback: (detail: unknown) => void): void =>
-        this.bus.off(event, callback),
-      getCurrentPage: (): number => this.getCurrentPage(),
-      getPageCount: (): number => this.getPageCount(),
+        self.bus.off(event, callback),
+      getCurrentPage: (): number => self.getCurrentPage(),
+      getPageCount: (): number => self.getPageCount(),
       getDocument: () => ({
-        getFileData: (options?: ExportOptions) => this.getFileData(options),
+        getFileData: (options?: ExportOptions) => self.getFileData(options),
       }),
     },
-  };
+  }))(this);
 }

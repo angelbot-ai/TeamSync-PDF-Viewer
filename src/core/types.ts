@@ -4,6 +4,7 @@
  */
 import type { ViewerPlugin } from '../plugins/types';
 import type { Annotation } from '../annotations/types';
+import type { AnnotationChangedEvent } from '../annotations/AnnotationManager';
 import type { PdfAssetPaths } from './pdfAssets';
 
 export type { PdfAssetPaths };
@@ -32,6 +33,8 @@ export interface SDKPermissions {
   canEditAnnotations?: boolean;
   canDeleteAnnotations?: boolean;
   canRedact?: boolean;
+  /** Allow editing/deleting annotations authored by other users (default false). */
+  canEditOthers?: boolean;
 }
 
 export interface ViewerUser {
@@ -92,6 +95,8 @@ export interface ViewerEventMap {
   firstPageRendered: { url: string; pageNumber: number };
   pageChanged: { pageNumber: number; numPages: number };
   annotationsChanged: { annotations: Annotation[] };
+  /** Granular add / modify / delete (with the `imported` flag) from the AnnotationManager. */
+  annotationChanged: AnnotationChangedEvent;
   toolChanged: { tool: string | null };
   destroy: Record<string, never>;
 }

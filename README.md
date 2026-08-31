@@ -34,8 +34,13 @@ Client-side PDF viewing, annotation, search, redaction and watermarking for Reac
   keyboard shortcuts apply to the focused viewer only, and importing the package is side-effect free
   (safe under SSR).
 
-Not yet supported: printing (planned for 1.2), AcroForm filling, rendering of annotations already
-embedded in the PDF, document outline/bookmarks, password prompts (password-protected files raise
+- **Annotation API** — `instance.annotationManager`: undo/redo, granular `annotationChanged`
+  events, authorship + edit permissions, programmatic add/update/delete and **native XFDF**
+  import/export (Acrobat/Apryse-compatible; unknown markup is preserved as read-only pass-through).
+- **Print** — via the menu or `instance.print()`.
+
+Not yet supported: AcroForm filling, rendering of annotations already embedded in the PDF (only
+XFDF-imported ones), document outline/bookmarks, password prompts (password-protected files raise
 `onPasswordRequired`).
 
 ---
@@ -162,6 +167,9 @@ instance.destroy(); // unmounts and releases every listener
 | `autoFocus` | `boolean` | `false` | Focus the viewer on mount (keyboard shortcuts). |
 | `plugins` | `ViewerPlugin[]` | `[]` | Extension plugins. |
 
+`permissions.canEditOthers` (default `false`) lets a user edit or delete annotations authored by
+someone else; annotations carry `author`/`authorId` from `currentUser`.
+
 Callbacks: `onReady(instance)`, `onDocumentLoaded({ url, numPages })`,
 `onDocumentLoadError(error, retry(newUrl?), { url, passwordRequired })`, `onFirstPageRendered`,
 `onPasswordRequired`, `onPageChange(page, numPages)`, `onAnnotationsChange(annotations)`.
@@ -172,7 +180,12 @@ Callbacks: `onReady(instance)`, `onDocumentLoaded({ url, numPages })`,
   `firstPageRendered`, `pageChanged`, `annotationsChanged`, `toolChanged`, `destroy`.
 - `loadDocument(url)` — load or reload (resolves on load, rejects on error).
 - `getFileData({ explicitAnnotations? })` — export the document as `Uint8Array`.
-- `getAnnotations()`, `getCurrentPage()`, `getPageCount()`, `getPdfDocument()`.
+- `getAnnotations()`, `getCurrentPage()`, `getPageCount()`, `getPdfDocument()`, `print()`.
+- `annotationManager` — `getAnnotationsList()`, `getAnnotationById(id)`, `addAnnotations(list)`,
+  `updateAnnotation(id, patch)`, `deleteAnnotations(ids, { force })`, `undo()`/`redo()`,
+  `importAnnotations(xfdf)`, `exportAnnotations({ annotList?, useDisplayAuthor? })`,
+  `setCurrentUser(name, id?)`, `setReadOnly(bool)`, `canEdit(annotation)`,
+  `addEventListener('annotationChanged', ({ annotations, action, imported }) => …)`.
 - `destroy()` — unmount (imperative API) and release every listener.
 - `UI.*` / `Core.*` — legacy facades (`UI.openElements`, `UI.fitWidth`,
   `Core.annotationManager.exportAnnotations()`, `Core.documentViewer.getDocument().getFileData()`).

@@ -29,6 +29,7 @@ interface HeaderProps {
   onDownload: () => void;
   onFullScreen: () => void;
   onSaveAs: () => void;
+  onPrint?: () => void;
   onOpenSettings: () => void;
   onOpenAbout: () => void;
   onOpenSidebarTab: (tab: 'Comments' | 'Search') => void;
@@ -55,7 +56,7 @@ export default function Header({
   rightSidebarOpen, setRightSidebarOpen: _setRightSidebarOpen,
   sidebarTab,
   scale, onZoomIn, onZoomOut, onZoomSet,
-  onDownload, onFullScreen, onSaveAs, onOpenSettings, onOpenAbout, onOpenSidebarTab,
+  onDownload, onFullScreen, onSaveAs, onPrint, onOpenSettings, onOpenAbout, onOpenSidebarTab,
   pageTransition, setPageTransition, pageLayout, setPageLayout, rotation, setRotation,
   signatureCount = 0,
   enableAnnotations,
@@ -123,7 +124,7 @@ export default function Header({
                 <MenuOption icon={<Download size={16} />} label="Download" onClick={() => { onDownload(); setIsMenuOpen(false); }} />
                 <MenuOption icon={<Maximize size={16} />} label="Enter Full Screen" onClick={() => { onFullScreen(); setIsMenuOpen(false); }} />
                 <MenuOption icon={<Save size={16} />} label="Save As" onClick={() => { onSaveAs(); setIsMenuOpen(false); }} />
-                <MenuOption icon={<Printer size={16} />} label="Print" disabled />
+                <MenuOption icon={<Printer size={16} />} label="Print" disabled={!onPrint} onClick={() => { onPrint?.(); setIsMenuOpen(false); }} />
                 <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
                 <MenuOption icon={<Settings size={16} />} label="Settings" onClick={() => { onOpenSettings(); setIsMenuOpen(false); }} />
               </div>

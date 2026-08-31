@@ -1,7 +1,7 @@
 /**
  * © 2026 AngelBot Ai Pvt Ltd. All rights reserved.
  */
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo, useSyncExternalStore } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import { Pen, Type, Minus, Eraser, Square, Circle as CircleIcon, Highlighter, ChevronLeft, ChevronRight, Brush, MessageSquareQuote, ArrowUpRight, ShieldCheck, Link as LinkIcon, EyeOff, Trash2 } from 'lucide-react';
@@ -13,6 +13,8 @@ import LeftSidebar from './LeftSidebar';
 import { usePdfSearch, type SearchResult } from '../hooks/usePdfSearch';
 import PageRenderer from './PageRenderer';
 import type { Annotation } from '../annotations/types';
+import { newAnnotationId } from '../annotations/ids';
+import type { AnnotationManager } from '../annotations/AnnotationManager';
 import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths } from '../core/types';
 import { findRegexRedactions } from '../utils/findRegexRedactions';
 import { convertToUnrotated, convertToRotated, normalizeRotation } from '../utils/rotationUtils';
@@ -28,6 +30,8 @@ interface DocumentViewerProps {
   leftSidebarOpen: boolean;
   rightSidebarOpen: boolean;
   activeTab: string;
+  /** Canonical annotation list, history, permissions and XFDF (owned by the viewer instance). */
+  annotationManager: AnnotationManager;
   initialDoc?: string;
   /** Bump to force a reload of the same URL (retry after a load error). */
   loadNonce?: number;
@@ -63,7 +67,7 @@ interface DocumentViewerProps {
 }
 
 export default function DocumentViewer({
-  leftSidebarOpen, rightSidebarOpen, activeTab, initialDoc, loadNonce = 0, withCredentials = false, assets, sidebars = true,
+  leftSidebarOpen, rightSidebarOpen, activeTab, annotationManager, initialDoc, loadNonce = 0, withCredentials = false, assets, sidebars = true,
   redactions, regexRedactions, scale, setScale, sidebarTab, setSidebarTab, onAnnotationsChange, onRedactionsChange,
   onDocumentLoaded, onLoadError, onFirstPageRendered, onPageChange,
   pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations: _enableAnnotations, initialPage, permissions
@@ -88,24 +92,75 @@ export default function DocumentViewer({
   // Let's just move usePdfSearch below combinedRedactions.
   const [activeSearchResult, setActiveSearchResult] = useState<SearchResult | null>(null);
 
-  const [basePageDims, setBasePageDims] = useState({ width: 800, height: 1100 });
+  // Per-page base dimensions (scale 1, UI rotation composed with the page's /Rotate). Index =
+  // pageNumber - 1. Populated progressively after load so mixed-size documents lay out correctly.
+  const [pageDims, setPageDims] = useState<Array<{ width: number; height: number }>>([]);
+  const fallbackDims = pageDims[0] ?? { width: 800, height: 1100 };
+  const dimsFor = useCallback(
+    (p: number) => pageDims[p - 1] ?? fallbackDims,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pageDims, fallbackDims.width, fallbackDims.height]
+  );
   const [scrollPos, setScrollPos] = useState({ top: 0, left: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef<{ x: number, y: number, scrollLeft: number, scrollTop: number } | null>(null);
 
+  const GAP = 16;
+
+  // Rows of pages (1 or 2 per row depending on layout)
+  const rows = useMemo(() => {
+    const r: number[][] = [];
+    if (!pdfDoc) return r;
+    if (pageLayout === 'single') {
+      for (let i = 1; i <= pdfDoc.numPages; i++) r.push([i]);
+    } else if (pageLayout === 'double') {
+      for (let i = 1; i <= pdfDoc.numPages; i += 2) {
+        r.push([i, i + 1].filter(p => p <= pdfDoc.numPages));
+      }
+    } else if (pageLayout === 'cover-facing') {
+      r.push([1]);
+      for (let i = 2; i <= pdfDoc.numPages; i += 2) {
+        r.push([i, i + 1].filter(p => p <= pdfDoc.numPages));
+      }
+    }
+    return r;
+  }, [pdfDoc, pageLayout]);
+
+  // Row geometry in scaled pixels: each row is as tall as its tallest page (+ gap).
+  const rowLayout = useMemo(() => {
+    const heights = rows.map(row => Math.max(...row.map(p => dimsFor(p).height)) * scale + GAP);
+    const tops: number[] = [];
+    let acc = 0;
+    for (const h of heights) { tops.push(acc); acc += h; }
+    return { heights, tops, total: acc };
+  }, [rows, scale, dimsFor]);
+
+  const rowIndexOfPage = useCallback((p: number) => rows.findIndex(row => row.includes(p)), [rows]);
+
+  const rowIndexAtOffset = useCallback((y: number) => {
+    const tops = rowLayout.tops;
+    if (tops.length === 0) return 0;
+    let lo = 0, hi = tops.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (tops[mid] <= y) lo = mid; else hi = mid - 1;
+    }
+    return lo;
+  }, [rowLayout]);
+
+  const scrollToPage = useCallback((p: number) => {
+    const i = rowIndexOfPage(p);
+    if (i >= 0 && containerRef.current) containerRef.current.scrollTop = rowLayout.tops[i];
+  }, [rowIndexOfPage, rowLayout]);
+
   const handleSearchResultClick = (result: SearchResult) => {
     setPageNum(result.pageIndex);
     setActiveSearchResult(result);
-    if (containerRef.current) {
-      const GAP = 16;
-      const scaledPageHeight = basePageDims.height * scale + GAP;
-      containerRef.current.scrollTop = (result.pageIndex - 1) * scaledPageHeight;
-    }
+    scrollToPage(result.pageIndex);
   };
 
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
-  const [past, setPast] = useState<Annotation[][]>([]);
-  const [future, setFuture] = useState<Annotation[][]>([]);
+  // The annotation list lives in the AnnotationManager (undo/redo, permissions, events, XFDF).
+  const annotations = useSyncExternalStore(annotationManager.subscribe, annotationManager.getSnapshot, annotationManager.getSnapshot);
   const [activeTool, setActiveTool] = useState<'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand' | 'highlight' | 'text' | 'eraser' | 'note' | 'callout' | 'signature' | 'digital_signature' | 'pan' | 'link' | 'redaction' | null>('pan');
   
   // Set default tools when switching tabs
@@ -182,7 +237,7 @@ export default function DocumentViewer({
         const x = vx + container.scrollLeft;
         const y = vy + container.scrollTop;
         
-        const baseW = basePageDims.width;
+        const baseW = dimsFor(pageNum).width;
         const pLeft1 = Math.max(0, cW / 2 - (baseW * s) / 2);
         const pLeft2 = Math.max(0, cW / 2 - (baseW * newScale) / 2);
         
@@ -194,7 +249,8 @@ export default function DocumentViewer({
         container.scrollTop = (y * (newScale / s)) - vy;
       }
     }
-  }, [scale, basePageDims.width]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scale]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -228,32 +284,17 @@ export default function DocumentViewer({
     return () => container.removeEventListener('wheel', handleWheel);
   }, [setScale]);
 
-  // Function to commit new annotations and push to history
+  // Commit a new list to the manager (diffed into add/modify/delete, permission-checked, undoable).
   const commitAnnotations = useCallback((newAnns: Annotation[]) => {
-    setPast(prev => [...prev, annotations]);
-    setFuture([]);
-    setAnnotations(newAnns);
-  }, [annotations]);
+    annotationManager.commit(newAnns);
+  }, [annotationManager]);
 
   useBusEvent<{ tempAnn: Annotation }>('action-commit-digital-signature-local', (d) => {
     if (d?.tempAnn) commitAnnotations([...annotations, d.tempAnn]);
   });
 
-  const handleUndo = useCallback(() => {
-    if (past.length === 0) return;
-    const previous = past[past.length - 1];
-    setFuture(prev => [annotations, ...prev]);
-    setAnnotations(previous);
-    setPast(prev => prev.slice(0, -1));
-  }, [annotations, past]);
-
-  const handleRedo = useCallback(() => {
-    if (future.length === 0) return;
-    const next = future[0];
-    setPast(prev => [...prev, annotations]);
-    setAnnotations(next);
-    setFuture(prev => prev.slice(1));
-  }, [annotations, future]);
+  const handleUndo = useCallback(() => { annotationManager.undo(); }, [annotationManager]);
+  const handleRedo = useCallback(() => { annotationManager.redo(); }, [annotationManager]);
 
   // Keyboard shortcuts are delivered by <TeamSyncViewer> from its root element, so they only apply
   // to the viewer instance that currently has focus (several viewers can share a page).
@@ -354,6 +395,7 @@ export default function DocumentViewer({
     setPdfDoc(null);
     setLoadError(null);
     setPageNum(1);
+    setPageDims([]);
     firstPageRenderedRef.current = false;
     if (!initialDoc) return;
 
@@ -401,72 +443,84 @@ export default function DocumentViewer({
     if (pdfDoc) callbacksRef.current.onPageChange?.(pageNum, pdfDoc.numPages);
   }, [pageNum, pdfDoc]);
 
-  // Scroll to initial page
+  // Scroll to the initial page once per document, as soon as its row geometry is known.
+  const initialScrollDoneRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
   useEffect(() => {
-    if (pdfDoc && initialPage && initialPage > 1 && containerRef.current) {
-      setTimeout(() => {
-        const GAP = 16;
-        const scaledPageHeight = basePageDims.height * scale + GAP;
-        containerRef.current!.scrollTop = (initialPage - 1) * scaledPageHeight;
-      }, 100);
-    }
-  }, [pdfDoc, initialPage, basePageDims.height, scale]);
+    if (!pdfDoc || !initialPage || initialPage <= 1) return;
+    if (initialScrollDoneRef.current === pdfDoc) return;
+    if (pageDims.length < Math.min(initialPage, pdfDoc.numPages)) return;
+    initialScrollDoneRef.current = pdfDoc;
+    const t = setTimeout(() => scrollToPage(initialPage), 50);
+    return () => clearTimeout(t);
+  }, [pdfDoc, initialPage, pageDims.length, scrollToPage]);
 
-  // Recalculate basePageDims when pdfDoc or rotation changes
+  // Compute every page's base dimensions when the document or the UI rotation changes. The first
+  // page is published immediately so layout can start; the rest stream in.
   useEffect(() => {
-    if (pdfDoc) {
-      const updateDims = async () => {
-        const page = await pdfDoc.getPage(1);
+    if (!pdfDoc) return;
+    let cancelled = false;
+    const doc = pdfDoc;
+    (async () => {
+      const dims: Array<{ width: number; height: number }> = [];
+      for (let p = 1; p <= doc.numPages; p++) {
+        let page: pdfjsLib.PDFPageProxy;
+        try { page = await doc.getPage(p); } catch { return; }
+        if (cancelled) return;
         // UI rotation composes on top of the page's intrinsic /Rotate (pdf.js replaces it when an
         // explicit `rotation` is passed). Dimensions swap for 90/270 so layout stays correct.
         const vp = page.getViewport({ scale: 1, rotation: normalizeRotation(page.rotate + rotation) });
-        setBasePageDims({ width: vp.width, height: vp.height });
-      };
-      updateDims();
-    }
+        dims.push({ width: vp.width, height: vp.height });
+        if (p === 1 || p % 50 === 0) setPageDims([...dims]);
+      }
+      if (!cancelled) setPageDims(dims);
+    })();
+    return () => { cancelled = true; };
   }, [pdfDoc, rotation]);
 
   // Dynamic Fit to Width calculation
   const handleFitToWidth = useCallback(() => {
-    if (!containerRef.current || !basePageDims.width) return;
+    const dims = dimsFor(pageNum);
+    if (!containerRef.current || !dims.width) return;
     const availableWidth = containerRef.current.clientWidth - 48;
-    if (availableWidth > 0 && basePageDims.width > 0) {
-      const newScale = availableWidth / basePageDims.width;
+    if (availableWidth > 0 && dims.width > 0) {
+      const newScale = availableWidth / dims.width;
       const clampedScale = Math.max(0.1, Math.min(32, parseFloat(newScale.toFixed(2))));
       setScale(clampedScale);
     }
-  }, [basePageDims.width, setScale]);
+  }, [dimsFor, pageNum, setScale]);
 
   // Dynamic Fit to Page calculation
   const handleFitToPage = useCallback(() => {
-    if (!containerRef.current || !basePageDims.width || !basePageDims.height) return;
+    const dims = dimsFor(pageNum);
+    if (!containerRef.current || !dims.width || !dims.height) return;
     const availableWidth = containerRef.current.clientWidth - 48;
     const availableHeight = containerRef.current.clientHeight - 48;
-    if (availableWidth > 0 && availableHeight > 0 && basePageDims.width > 0 && basePageDims.height > 0) {
-      const scaleX = availableWidth / basePageDims.width;
-      const scaleY = availableHeight / basePageDims.height;
+    if (availableWidth > 0 && availableHeight > 0 && dims.width > 0 && dims.height > 0) {
+      const scaleX = availableWidth / dims.width;
+      const scaleY = availableHeight / dims.height;
       const newScale = Math.min(scaleX, scaleY);
       const clampedScale = Math.max(0.1, Math.min(32, parseFloat(newScale.toFixed(2))));
       setScale(clampedScale);
     }
-  }, [basePageDims.width, basePageDims.height, setScale]);
+  }, [dimsFor, pageNum, setScale]);
 
   useBusEvent('action-fit-to-width', () => handleFitToWidth());
   useBusEvent('action-fit-to-page', () => handleFitToPage());
 
-  const getUnrotatedPoint = (e: React.MouseEvent<Element>) => {
+  const getUnrotatedPoint = (e: React.MouseEvent<Element>, pageNumber: number) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const rawX = (e.clientX - rect.left) / scale;
     const rawY = (e.clientY - rect.top) / scale;
-    const unW = rotation % 180 === 0 ? basePageDims.width : basePageDims.height;
-    const unH = rotation % 180 === 0 ? basePageDims.height : basePageDims.width;
+    const dims = dimsFor(pageNumber);
+    const unW = rotation % 180 === 0 ? dims.width : dims.height;
+    const unH = rotation % 180 === 0 ? dims.height : dims.width;
     return convertToUnrotated(rawX, rawY, rotation, unW, unH);
   };
 
   const handleMouseDown = (e: React.MouseEvent<Element>, targetPageNum: number) => {
     if (!activeTool) return;
     
-    const { x, y } = getUnrotatedPoint(e);
+    const { x, y } = getUnrotatedPoint(e, targetPageNum);
 
     if (activeTool === 'text' || activeTool === 'note') {
       e.preventDefault();
@@ -500,7 +554,7 @@ export default function DocumentViewer({
           a.id === activeTextEditor.annId ? { ...a, text: currentText } : a
         ));
       } else {
-        const annId = Date.now().toString();
+        const annId = newAnnotationId();
         commitAnnotations([...annotations, {
           id: annId,
           type: activeTextEditor.type,
@@ -522,9 +576,9 @@ export default function DocumentViewer({
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent<Element>, _targetPageNum: number) => {
+  const handleMouseMove = (e: React.MouseEvent<Element>, targetPageNum: number) => {
     if (!isDrawing) return;
-    const { x, y } = getUnrotatedPoint(e);
+    const { x, y } = getUnrotatedPoint(e, targetPageNum);
     setCurrentPos({ x, y });
     if (activeTool === 'freehand') {
       setFreehandPoints(prev => [...prev, { x, y }]);
@@ -533,7 +587,7 @@ export default function DocumentViewer({
 
   const handleMouseUp = (e: React.MouseEvent<Element>, targetPageNum: number) => {
     if (activeTool === 'text' || activeTool === 'note' || activeTool === 'digital_signature' || activeTool === 'link') {
-      const { x, y } = getUnrotatedPoint(e);
+      const { x, y } = getUnrotatedPoint(e, targetPageNum);
       
       if (activeTool === 'link') {
         let width = Math.abs(currentPos.x - startPos.x);
@@ -548,7 +602,7 @@ export default function DocumentViewer({
           height = 35;
         }
 
-        const annId = Date.now().toString();
+        const annId = newAnnotationId();
         commitAnnotations([...annotations, { 
           id: annId, type: 'link', pageIndex: targetPageNum, x: linkX, y: linkY, width, height, points: [],
           color: 'transparent', strokeWidth: 0, opacity: 1, text: ''
@@ -586,9 +640,10 @@ export default function DocumentViewer({
         const maxY = Math.max(...ys);
         
         commitAnnotations([...annotations, { 
-          id: Date.now().toString(), type: activeTool as any, pageIndex: targetPageNum,
+          id: newAnnotationId(), type: activeTool as any, pageIndex: targetPageNum,
           x: minX, y: minY, width: maxX - minX, height: maxY - minY,
           points: [...freehandPoints],
+          strokes: [[...freehandPoints]],
           color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity
         }]);
       }
@@ -630,7 +685,7 @@ export default function DocumentViewer({
         if (permissions?.canAddAnnotations === false) return;
 
         commitAnnotations([...annotations, { 
-          id: Date.now().toString(), type: activeTool as any, pageIndex: targetPageNum, x, y, width, height, points,
+          id: newAnnotationId(), type: activeTool as any, pageIndex: targetPageNum, x, y, width, height, points,
           color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity
         }]);
       }
@@ -657,9 +712,7 @@ export default function DocumentViewer({
       if (ann && ann.linkUrl && activeTab === 'View') {
         if (ann.linkUrl.startsWith('#page=')) {
           const targetPage = parseInt(ann.linkUrl.split('=')[1]);
-          const GAP = 16;
-          const scaledPageHeight = basePageDims.height * scale + GAP;
-          if (containerRef.current) containerRef.current.scrollTop = (targetPage - 1) * scaledPageHeight;
+          scrollToPage(targetPage);
         } else {
           let linkHref = ann.linkUrl;
           if (!/^https?:\/\//i.test(linkHref)) {
@@ -670,13 +723,19 @@ export default function DocumentViewer({
         }
         return;
       } else if (ann && (ann.type === 'note' || ann.type === 'callout' || ann.type === 'text')) {
-        if (permissions?.canEditAnnotations === false) return;
+        if (permissions?.canEditAnnotations === false || !annotationManager.canEdit(ann)) {
+          setSelectedAnnotationId(id);
+          return;
+        }
         // Open edit mode for text-based annotations
         setActiveTextEditor({ x: ann.x, y: ann.y, type: ann.type as any, annId: ann.id, points: ann.points, pageIndex: ann.pageIndex });
         setCurrentText(ann.text || '');
         if (ann.color) setCurrentColor(ann.color);
       } else if (ann && ann.type === 'link') {
-        if (permissions?.canEditAnnotations === false) return;
+        if (permissions?.canEditAnnotations === false || !annotationManager.canEdit(ann)) {
+          setSelectedAnnotationId(id);
+          return;
+        }
         setIsLinkModalOpen(true);
       }
       setSelectedAnnotationId(id);
@@ -699,43 +758,19 @@ export default function DocumentViewer({
       top: e.currentTarget.scrollTop,
       left: e.currentTarget.scrollLeft
     });
-    if (basePageDims.height > 0) {
-      visibleRowRef.current = Math.floor(e.currentTarget.scrollTop / (basePageDims.height * scale + 16));
-    }
+    visibleRowRef.current = rowIndexAtOffset(e.currentTarget.scrollTop);
   };
-
-  const rows = React.useMemo(() => {
-    const r: number[][] = [];
-    if (!pdfDoc) return r;
-    if (pageLayout === 'single') {
-      for (let i = 1; i <= pdfDoc.numPages; i++) r.push([i]);
-    } else if (pageLayout === 'double') {
-      for (let i = 1; i <= pdfDoc.numPages; i += 2) {
-        r.push([i, i + 1].filter(p => p <= pdfDoc.numPages));
-      }
-    } else if (pageLayout === 'cover-facing') {
-      r.push([1]);
-      for (let i = 2; i <= pdfDoc.numPages; i += 2) {
-        r.push([i, i + 1].filter(p => p <= pdfDoc.numPages));
-      }
-    }
-    return r;
-  }, [pdfDoc, pageLayout]);
-
-  const GAP = 16;
-  const scaledPageHeight = basePageDims.height * scale + GAP;
-  const scaledPageWidth = basePageDims.width * scale;
 
   useEffect(() => {
     if (pdfDoc && containerRef.current && pageTransition === 'continuous') {
       const midPoint = scrollPos.top + containerRef.current.clientHeight / 2;
-      const cRowIndex = Math.max(0, Math.min(rows.length - 1, Math.floor(midPoint / scaledPageHeight)));
+      const cRowIndex = Math.max(0, Math.min(rows.length - 1, rowIndexAtOffset(midPoint)));
       const currentPage = rows[cRowIndex] ? rows[cRowIndex][0] : 1;
       if (currentPage !== pageNum) {
         setPageNum(currentPage);
       }
     }
-  }, [scrollPos.top, scale, pdfDoc, pageNum, scaledPageHeight, pageTransition, rows]);
+  }, [scrollPos.top, scale, pdfDoc, pageNum, rowIndexAtOffset, pageTransition, rows]);
 
   return (
     <div style={{ flex: 1, display: 'flex', minHeight: 0, backgroundColor: 'var(--bg-color)', overflow: 'hidden' }}>
@@ -1033,7 +1068,7 @@ export default function DocumentViewer({
           >
             {(() => {
               const renderRow = (row: number[], rIndex: number, isContinuous: boolean) => {
-                const rTop = isContinuous ? rIndex * scaledPageHeight : 0;
+                const rTop = isContinuous ? (rowLayout.tops[rIndex] ?? 0) : 0;
                 
                 // Virtualization filtering (only for continuous)
                 if (isContinuous && containerRef.current) {
@@ -1098,11 +1133,14 @@ export default function DocumentViewer({
                 return row.map((p, pIdx) => {
                   let pLeft: number | undefined = undefined;
                   const cW = containerRef.current?.clientWidth || 0;
+                  const pageDim = dimsFor(p);
+                  const firstWidth = dimsFor(row[0]).width * scale;
+                  const thisWidth = pageDim.width * scale;
                   if (row.length === 2) {
-                    if (pIdx === 0) pLeft = Math.max(0, cW / 2 - scaledPageWidth);
-                    if (pIdx === 1) pLeft = Math.max(scaledPageWidth, cW / 2);
+                    if (pIdx === 0) pLeft = Math.max(0, cW / 2 - firstWidth);
+                    if (pIdx === 1) pLeft = Math.max(firstWidth, cW / 2);
                   } else {
-                    pLeft = Math.max(0, cW / 2 - scaledPageWidth / 2);
+                    pLeft = Math.max(0, cW / 2 - thisWidth / 2);
                   }
                   
                   const pageAnnotations = (liveAnn && liveAnn.pageIndex === p) ? [...annotations, liveAnn] : annotations;
@@ -1120,8 +1158,8 @@ export default function DocumentViewer({
                         scrollLeft={scrollPos.left}
                         pageTop={rTop}
                         pageLeft={pLeft}
-                        basePageWidth={basePageDims.width}
-                        basePageHeight={basePageDims.height}
+                        basePageWidth={pageDim.width}
+                        basePageHeight={pageDim.height}
                         activeTab={activeTab}
                         activeTool={activeTool}
                         annotations={pageAnnotations}
@@ -1147,8 +1185,8 @@ export default function DocumentViewer({
                         onRendered={handlePageRendered}
                       />
                       {activeTextEditor && activeTextEditor.pageIndex === p && (() => {
-                        const unW = rotation % 180 === 0 ? basePageDims.width : basePageDims.height;
-                        const unH = rotation % 180 === 0 ? basePageDims.height : basePageDims.width;
+                        const unW = rotation % 180 === 0 ? pageDim.width : pageDim.height;
+                        const unH = rotation % 180 === 0 ? pageDim.height : pageDim.width;
                         const rotEditorPos = convertToRotated(activeTextEditor.x, activeTextEditor.y, rotation, unW, unH);
                         return (
                           <div style={{
@@ -1207,7 +1245,7 @@ export default function DocumentViewer({
               if (pageTransition === 'continuous') {
                 return (
                   <div style={{ 
-                    position: 'relative', width: '100%', height: `${rows.length * scaledPageHeight}px`
+                    position: 'relative', width: '100%', height: `${rowLayout.total}px`
                   }}>
                     {rows.map((row, rIndex) => renderRow(row, rIndex, true))}
                   </div>
@@ -1217,7 +1255,7 @@ export default function DocumentViewer({
                 const currentRow = rows[currentRowIndex] || [];
                 return (
                   <div style={{ 
-                    position: 'relative', width: '100%', minHeight: `${scaledPageHeight}px`
+                    position: 'relative', width: '100%', minHeight: `${rowLayout.heights[currentRowIndex] ?? 0}px`
                   }}>
                     {renderRow(currentRow, currentRowIndex, false)}
                   </div>
@@ -1307,11 +1345,7 @@ export default function DocumentViewer({
                 backdropFilter: 'blur(4px)'
               }}>
                 <button 
-                  onClick={() => {
-                    const GAP = 16;
-                    const scaledPageHeight = basePageDims.height * scale + GAP;
-                    if(containerRef.current) containerRef.current.scrollTop = (Math.max(1, pageNum - 1) - 1) * scaledPageHeight;
-                  }}
+                  onClick={() => scrollToPage(Math.max(1, pageNum - 1))}
                   disabled={pageNum <= 1}
                   style={{ background: 'none', border: 'none', color: pageNum <= 1 ? 'rgba(255,255,255,0.3)' : 'white', cursor: pageNum <= 1 ? 'default' : 'pointer', display: 'flex', padding: 0 }}
                 >
@@ -1321,11 +1355,7 @@ export default function DocumentViewer({
                   Page {pageNum} / {pdfDoc.numPages}
                 </span>
                 <button 
-                  onClick={() => {
-                    const GAP = 16;
-                    const scaledPageHeight = basePageDims.height * scale + GAP;
-                    if(containerRef.current) containerRef.current.scrollTop = (Math.min(pdfDoc.numPages, pageNum + 1) - 1) * scaledPageHeight;
-                  }}
+                  onClick={() => scrollToPage(Math.min(pdfDoc.numPages, pageNum + 1))}
                   disabled={pageNum >= pdfDoc.numPages}
                   style={{ background: 'none', border: 'none', color: pageNum >= pdfDoc.numPages ? 'rgba(255,255,255,0.3)' : 'white', cursor: pageNum >= pdfDoc.numPages ? 'default' : 'pointer', display: 'flex', padding: 0 }}
                 >
@@ -1342,7 +1372,7 @@ export default function DocumentViewer({
                 onCopy={() => {
                   const annToCopy = annotations.find(a => a.id === selectedAnnotationId);
                   if (annToCopy) {
-                    const newAnn = { ...annToCopy, id: Math.random().toString(36).substr(2, 9), x: annToCopy.x + 20, y: annToCopy.y + 20 };
+                    const newAnn = { ...annToCopy, id: newAnnotationId(), author: undefined, authorId: undefined, createdAt: undefined, modifiedAt: undefined, readOnly: undefined, xfdfExtras: undefined, x: annToCopy.x + 20, y: annToCopy.y + 20 };
                     commitAnnotations([...annotations, newAnn]);
                   }
                   setSelectedAnnotationId(null);

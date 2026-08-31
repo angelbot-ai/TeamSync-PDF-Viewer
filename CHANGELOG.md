@@ -2,6 +2,35 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.2.0] — 2026-08-31
+
+### Added
+- **`AnnotationManager`** (`instance.annotationManager`, also `instance.Core.annotationManager`):
+  the canonical annotation list with undo/redo, granular `annotationChanged` events
+  (`add` | `modify` | `delete`, with an `imported` flag), authorship stamping
+  (`currentUser`), edit permissions (read-only viewer, read-only annotation, other authors —
+  `permissions.canEditOthers`) and programmatic `addAnnotations` / `updateAnnotation` /
+  `deleteAnnotations` / `getAnnotationById`.
+- **Native XFDF**: `annotationManager.importAnnotations(xfdf)` and
+  `exportAnnotations({ annotList?, useDisplayAuthor? })` (bare fragments per annotation, or a full
+  document). Reads Acrobat/Apryse XFDF (square, circle, line/arrow, ink, highlight quads, freetext,
+  callout, sticky note, stamp with image data, link) and keeps everything else as read-only
+  `opaque` annotations that re-export verbatim; unknown attributes/children (e.g. Apryse
+  `trn-custom-data`) are preserved across a round-trip. Stable UUID ids double as the XFDF `name`.
+- **Page geometry module** (`createPageGeometry`, `rectToPdf`, `quadPointsToRects`, …): the single
+  authority for base-page-space ↔ PDF-user-space conversion, mirroring pdf.js's viewport transform.
+- **Print** (menu item enabled, `instance.print()`): the exported document is printed through the
+  browser's PDF viewer in a hidden frame.
+- `instance.on('annotationChanged', …)` typed event; `Annotation.author/authorId/createdAt/
+  modifiedAt/readOnly/strokes/rects` fields; multi-stroke ink and multi-rect highlights render.
+
+### Fixed
+- Export geometry: annotations are baked exactly where they were drawn (any page size, CropBox
+  offset or intrinsic /Rotate) — replaces the hard-coded `scale = 1.5` conversion.
+- Mixed page sizes: layout, scrolling, hit-testing and fit-to-width/page now use per-page
+  dimensions instead of page 1's.
+- Annotation ids were timestamps (collision-prone); now `crypto.randomUUID()`.
+
 ## [1.1.0] — 2026-08-31
 
 ### Breaking

@@ -408,12 +408,33 @@ function elementToAnnotation(el: Element, g: PageGeometry): Annotation | null {
  * Parse an XFDF document OR bare annotation elements (a concatenation of fragments) into
  * annotations. Unknown elements become `opaque` (re-exported verbatim).
  */
+/** Remove every `<?xml … ?>` declaration (linear scan — no regex backtracking on hostile input). */
+function stripXmlDeclarations(input: string): string {
+  let out = '';
+  let pos = 0;
+  for (;;) {
+    const start = input.indexOf('<?xml', pos);
+    if (start === -1) break;
+    const end = input.indexOf('?>', start + 5);
+    if (end === -1) break;
+    out += input.slice(pos, start);
+    pos = end + 2;
+  }
+  return out + input.slice(pos);
+}
+
 export async function parseXfdf(xml: string, resolve: GeometryResolver): Promise<Annotation[]> {
   // Hosts may store one full XFDF document per annotation and concatenate them inside an
   // envelope, so XML declarations can appear anywhere and <xfdf>/<annots> wrappers can nest.
   // Strip every declaration and collect annotation elements from every <annots> at any depth.
-  const cleaned = xml.replace(/<\?xml[^>]*\?>/g, '').trim();
+  const cleaned = stripXmlDeclarations(xml).trim();
   if (!cleaned) return [];
+  // XFDF never carries a DTD; refuse one outright (entity expansion / external entity tricks).
+  if (/<!DOCTYPE|<!ENTITY/i.test(cleaned)) {
+    throw new Error('[teamsync-pdf-viewer] invalid XFDF: DOCTYPE/ENTITY declarations are not allowed');
+  }
+  // Parsed as application/xml: the parser is inert (no script execution, no resource loading)
+  // and the resulting DOM is only read as data.
   const wrapped = `<xfdf xmlns="${XFDF_NS}"><annots>${cleaned}</annots></xfdf>`;
   const doc = new DOMParser().parseFromString(wrapped, 'application/xml');
   const error = doc.getElementsByTagName('parsererror')[0];

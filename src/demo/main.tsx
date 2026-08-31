@@ -36,6 +36,10 @@ const RELAYED_EVENTS = [
   'action-waiting-for-pin-start',
   'action-waiting-for-pin-end',
   'action-waiting-for-pin-error',
+  'action-start-compare',
+  'action-stop-compare',
+  'action-set-compare-mode',
+  'action-set-compare-colors',
 ];
 
 const RELAY_MARK = '__tspdfRelay';

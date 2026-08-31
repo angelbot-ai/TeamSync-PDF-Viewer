@@ -199,6 +199,26 @@ export class WebViewerInstance {
     fitPage: () => this.bus.emit('action-fit-to-page'),
     fitToWidth: () => this.bus.emit('action-fit-to-width'),
     fitToPage: () => this.bus.emit('action-fit-to-page'),
+    startCompare: (docA: any, docB: any, options?: any) => {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('action-start-compare', { detail: { docA, docB, options } }));
+      }
+    },
+    stopCompare: () => {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('action-stop-compare'));
+      }
+    },
+    setCompareMode: (mode: 'overlay' | 'side-by-side' | 'semantic') => {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('action-set-compare-mode', { detail: { mode } }));
+      }
+    },
+    setCompareColors: (colorA: string, colorB: string) => {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('action-set-compare-colors', { detail: { colorA, colorB } }));
+      }
+    },
   };
 
   readonly Core = ((self: WebViewerInstance) => ({

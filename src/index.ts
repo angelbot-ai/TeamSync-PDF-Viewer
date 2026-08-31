@@ -9,6 +9,8 @@ export { createWebViewer, WebViewer } from './core/createWebViewer';
 export { WebViewerInstance } from './core/ViewerInstance';
 export { TeamSyncViewer } from './components/TeamSyncViewer';
 export type { TeamSyncViewerProps } from './components/TeamSyncViewer';
+export * from './types/compare';
+export * from './utils/pdfDiffEngine';
 export { configurePdfAssets, getPdfAssetPaths, isWorkerConfigured, pdfjsVersion } from './core/pdfAssets';
 export type { PdfAssetPaths } from './core/pdfAssets';
 export { ViewerBus } from './core/eventBus';

@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Git ref (branch, tag or SHA) to publish from'
+        description: 'Git ref to publish from — branch, tag, or commit SHA (short SHAs work too)'
         required: true
         default: 'main'
       dry_run:
@@ -35,6 +35,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+          # Full history: actions/checkout resolves a *short* SHA only if the object is already
+          # local. With the default shallow fetch it treats the input as a branch/tag pattern
+          # (refs/heads/<ref>*) and dies with an opaque "git failed with exit code 1".
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22

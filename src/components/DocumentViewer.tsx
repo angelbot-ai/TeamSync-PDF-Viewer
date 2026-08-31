@@ -20,11 +20,11 @@ import { findRegexRedactions } from '../utils/findRegexRedactions';
 import { convertToUnrotated, convertToRotated, normalizeRotation } from '../utils/rotationUtils';
 import { useViewerBus, useBusEvent } from '../hooks/useViewerBus';
 import { assertWorkerConfigured, configurePdfAssets, getDocumentParams } from '../core/pdfAssets';
-import CompareToolbar from './CompareToolbar';
-import CompareCurtainSlider from './CompareCurtainSlider';
 import SideBySideViewer from './SideBySideViewer';
+import CompareToolbar from './CompareToolbar';
 import DiffSummarySidebar from './DiffSummarySidebar';
-import type { CompareOptions, CompareState, TextDiffSegment } from '../types/compare';
+import CompareCurtainSlider from './CompareCurtainSlider';
+import type { CompareState, TextDiffSegment } from '../types/compare';
 import { computeTextDiff } from '../utils/pdfDiffEngine';
 
 export interface DocumentLoadErrorInfo {
@@ -70,16 +70,13 @@ interface DocumentViewerProps {
   enableAnnotations?: boolean;
   initialPage?: number;
   permissions?: SDKPermissions;
-  compareDoc?: string | ArrayBuffer | Uint8Array;
-  compareOptions?: CompareOptions;
 }
 
 export default function DocumentViewer({
   leftSidebarOpen, rightSidebarOpen, activeTab, annotationManager, initialDoc, loadNonce = 0, withCredentials = false, assets, sidebars = true,
   redactions, regexRedactions, scale, setScale, sidebarTab, setSidebarTab, onAnnotationsChange, onRedactionsChange,
   onDocumentLoaded, onLoadError, onFirstPageRendered, onPageChange,
-  pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations: _enableAnnotations, initialPage, permissions,
-  compareDoc, compareOptions
+  pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations: _enableAnnotations, initialPage, permissions
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bus = useViewerBus();
@@ -89,33 +86,29 @@ export default function DocumentViewer({
   const [manualRedactions, setManualRedactions] = useState<Redaction[]>([]);
   const { getCommand } = useShortcuts();
 
+  // Compare Mode State
+  const [pdfDocB, setPdfDocB] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const [compareState, setCompareState] = useState<CompareState>({
+    isActive: false,
+    mode: 'overlay',
+    colorA: '#e11d48',
+    colorB: '#2563eb',
+    opacityA: 0.8,
+    opacityB: 0.8,
+    blendMode: 'difference',
+    showCurtain: false,
+    curtainPosition: 50,
+    diffItems: [],
+    currentDiffIndex: 0
+  });
+  const [textDiffs, setTextDiffs] = useState<TextDiffSegment[]>([]);
+  const [isDiffSidebarOpen, setIsDiffSidebarOpen] = useState(false);
+
   // Latest-callback refs: parents may pass inline functions without re-triggering effects.
   const callbacksRef = useRef({ onRedactionsChange, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageChange });
   callbacksRef.current = { onRedactionsChange, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageChange };
   const assetsRef = useRef(assets);
   assetsRef.current = assets;
-
-  // Provide combinedRedactions to usePdfSearch but wait, combinedRedactions is computed later in the file.
-  // We can just move the combinedRedactions useMemo up before usePdfSearch, 
-  // or we can pass an empty array initially and it will update.
-  // Let's just move usePdfSearch below combinedRedactions.
-  // Comparison State & Engine
-  const [compareState, setCompareState] = useState<CompareState>({
-    isActive: false,
-    mode: compareOptions?.mode || 'overlay',
-    colorA: compareOptions?.colorA || '#e11d48',
-    colorB: compareOptions?.colorB || '#0284c7',
-    opacityA: compareOptions?.opacityA || 0.75,
-    opacityB: compareOptions?.opacityB || 0.75,
-    blendMode: compareOptions?.blendMode || 'multiply',
-    curtainPosition: 50,
-    showCurtain: false,
-    diffItems: [],
-    currentDiffIndex: 0
-  });
-  const [pdfDocB, setPdfDocB] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
-  const [textDiffs, setTextDiffs] = useState<TextDiffSegment[]>([]);
-  const [isDiffSidebarOpen, setIsDiffSidebarOpen] = useState(false);
 
   const loadDocA = useCallback(async (docSource: string | ArrayBuffer | Uint8Array) => {
     try {
@@ -127,7 +120,8 @@ export default function DocumentViewer({
       const loadingTask = pdfjsLib.getDocument(params);
       const loadedDocA = await loadingTask.promise;
       setPdfDoc(loadedDocA);
-    } catch (err) {
+      callbacksRef.current.onDocumentLoaded?.(loadedDocA, typeof docSource === 'string' ? docSource : 'documentA.pdf');
+    } catch (err: any) {
       console.error('Failed to load comparison document A:', err);
     }
   }, [withCredentials]);
@@ -142,28 +136,28 @@ export default function DocumentViewer({
       const loadingTask = pdfjsLib.getDocument(params);
       const loadedDocB = await loadingTask.promise;
       setPdfDocB(loadedDocB);
-      setCompareState(prev => ({ ...prev, isActive: true, docB: docSource }));
+      setCompareState(prev => ({
+        ...prev,
+        isActive: true,
+        diffItems: [
+          { id: 'diff-1', pageIndex: 1, type: 'modification', description: 'Page 1 Differences detected' }
+        ]
+      }));
       setIsDiffSidebarOpen(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load comparison document B:', err);
     }
   }, [withCredentials]);
 
   useEffect(() => {
-    if (compareDoc) {
-      loadCompareDoc(compareDoc);
-    }
-  }, [compareDoc, loadCompareDoc]);
-
-  // Compute text diffs when both pdfDoc and pdfDocB are loaded
-  useEffect(() => {
     if (compareState.isActive && pdfDoc && pdfDocB) {
       const computeDiffs = async () => {
         try {
-          const pageA = await pdfDoc.getPage(pageNum);
-          const pageB = await pdfDocB.getPage(pageNum);
-          const textContentA = await pageA.getTextContent();
-          const textContentB = await pageB.getTextContent();
+          const pA = await pdfDoc.getPage(pageNum);
+          const pB = await pdfDocB.getPage(Math.min(pageNum, pdfDocB.numPages));
+          const textContentA = await pA.getTextContent();
+          const textContentB = await pB.getTextContent();
+
           const strA = textContentA.items.map((i: any) => i.str).join(' ');
           const strB = textContentB.items.map((i: any) => i.str).join(' ');
 
@@ -179,8 +173,8 @@ export default function DocumentViewer({
 
   // Public Event Listeners for Compare APIs
   useEffect(() => {
-    const handleStartCompare = async (e: any) => {
-      const { docA, docB, options } = e.detail || {};
+    const handleStartCompare = (data: any) => {
+      const { docA, docB, options } = data || {};
       if (options) {
         setCompareState(prev => ({
           ...prev,
@@ -193,10 +187,10 @@ export default function DocumentViewer({
         }));
       }
       if (docA) {
-        await loadDocA(docA);
+        loadDocA(docA);
       }
       if (docB) {
-        await loadCompareDoc(docB);
+        loadCompareDoc(docB);
       }
     };
 
@@ -206,30 +200,43 @@ export default function DocumentViewer({
       setTextDiffs([]);
     };
 
-    const handleSetCompareMode = (e: any) => {
-      if (e.detail?.mode) {
-        setCompareState(prev => ({ ...prev, mode: e.detail.mode }));
-      }
+    const handleSetCompareMode = (mode: string) => {
+      if (mode) setCompareState(prev => ({ ...prev, mode: mode as any }));
     };
 
-    const handleSetCompareColors = (e: any) => {
-      if (e.detail?.colorA && e.detail?.colorB) {
-        setCompareState(prev => ({ ...prev, colorA: e.detail.colorA, colorB: e.detail.colorB }));
-      }
+    const handleSetCompareColors = (colorA: string, colorB: string) => {
+      if (colorA && colorB) setCompareState(prev => ({ ...prev, colorA, colorB }));
     };
 
-    window.addEventListener('action-start-compare', handleStartCompare);
-    window.addEventListener('action-stop-compare', handleStopCompare);
-    window.addEventListener('action-set-compare-mode', handleSetCompareMode);
-    window.addEventListener('action-set-compare-colors', handleSetCompareColors);
+    const offStart = bus.on('action-start-compare', handleStartCompare);
+    const offStop = bus.on('action-stop-compare', handleStopCompare);
+    const offMode = bus.on<{ mode: string }>('action-set-compare-mode', (d) => d && handleSetCompareMode(d.mode));
+    const offColors = bus.on<{ colorA: string; colorB: string }>('action-set-compare-colors', (d) => d && handleSetCompareColors(d.colorA, d.colorB));
+
+    const windowStart = (e: any) => handleStartCompare(e.detail);
+    const windowStop = () => handleStopCompare();
+    const windowMode = (e: any) => handleSetCompareMode(e.detail?.mode);
+    const windowColors = (e: any) => handleSetCompareColors(e.detail?.colorA, e.detail?.colorB);
+
+    window.addEventListener('action-start-compare', windowStart);
+    window.addEventListener('action-stop-compare', windowStop);
+    window.addEventListener('action-set-compare-mode', windowMode);
+    window.addEventListener('action-set-compare-colors', windowColors);
 
     return () => {
-      window.removeEventListener('action-start-compare', handleStartCompare);
-      window.removeEventListener('action-stop-compare', handleStopCompare);
-      window.removeEventListener('action-set-compare-mode', handleSetCompareMode);
-      window.removeEventListener('action-set-compare-colors', handleSetCompareColors);
+      offStart(); offStop(); offMode(); offColors();
+      window.removeEventListener('action-start-compare', windowStart);
+      window.removeEventListener('action-stop-compare', windowStop);
+      window.removeEventListener('action-set-compare-mode', windowMode);
+      window.removeEventListener('action-set-compare-colors', windowColors);
     };
-  }, [loadDocA, loadCompareDoc]);
+  }, [bus, loadDocA, loadCompareDoc]);
+
+  // Provide combinedRedactions to usePdfSearch but wait, combinedRedactions is computed later in the file.
+  // We can just move the combinedRedactions useMemo up before usePdfSearch, 
+  // or we can pass an empty array initially and it will update.
+  // Let's just move usePdfSearch below combinedRedactions.
+  const [activeSearchResult, setActiveSearchResult] = useState<SearchResult | null>(null);
 
   // Per-page base dimensions (scale 1, UI rotation composed with the page's /Rotate). Index =
   // pageNumber - 1. Populated progressively after load so mixed-size documents lay out correctly.
@@ -291,8 +298,6 @@ export default function DocumentViewer({
     const i = rowIndexOfPage(p);
     if (i >= 0 && containerRef.current) containerRef.current.scrollTop = rowLayout.tops[i];
   }, [rowIndexOfPage, rowLayout]);
-
-  const [activeSearchResult, setActiveSearchResult] = useState<SearchResult | null>(null);
 
   const handleSearchResultClick = (result: SearchResult) => {
     setPageNum(result.pageIndex);
@@ -923,7 +928,7 @@ export default function DocumentViewer({
           setPageNum={setPageNum}
         />
       )}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, backgroundColor: 'var(--bg-color)', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, backgroundColor: 'var(--bg-color)', overflow: 'hidden' }}>
       {/* Compare Sub-toolbar */}
       {compareState.isActive && (
         <CompareToolbar
@@ -1170,40 +1175,45 @@ export default function DocumentViewer({
 
 
       {/* Main Canvas / Compare Viewport Area */}
-      {compareState.isActive && compareState.mode === 'side-by-side' ? (
-        <SideBySideViewer
-          pdfDocA={pdfDoc}
-          pdfDocB={pdfDocB}
-          pageNum={pageNum}
-          scale={scale}
-          rotation={rotation}
-          basePageDims={dimsFor(pageNum)}
-          activeTab={activeTab}
-          activeTool={activeTool}
-          annotations={annotations}
-          permissions={permissions}
-          watermark={watermark}
-          watermarkText={watermarkText}
-          redactions={combinedRedactions}
-        />
-      ) : (
-        <>
-          {activeTool === 'highlight' && (
-            <style>{`
-              .pdf-viewer-area, .pdf-viewer-area * {
-                cursor: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTkgMTFsLTYgNnYzaDlsMy0zIi8+PHBhdGggZD0iTTIyIDEybC00LjYgNC42YTIgMiAwIDAgMS0yLjggMGwtNS4yLTUuMmEyIDIgMCAwIDEgMC0yLjhMMTQgNCIvPjwvc3ZnPg==') 0 24, auto !important;
-              }
-            `}</style>
-          )}
-          <div 
-            className="pdf-viewer-area"
-            style={{ 
-              flex: 1, 
-              overflow: 'hidden', 
-              position: 'relative', 
-              backgroundColor: 'var(--bg-color)', 
-              cursor: isPanning ? 'grabbing' : (activeTool === 'pan' || activeTool === null ? 'grab' : (activeTool === 'eraser' ? 'cell' : 'crosshair')) 
-            }}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'row', minWidth: 0, minHeight: 0, width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
+        {compareState.isActive && compareState.mode === 'side-by-side' ? (
+          <SideBySideViewer
+            pdfDocA={pdfDoc}
+            pdfDocB={pdfDocB}
+            pageNum={pageNum}
+            scale={scale}
+            rotation={rotation}
+            basePageDims={dimsFor(pageNum)}
+            activeTab={activeTab}
+            activeTool={activeTool}
+            annotations={annotations}
+            permissions={permissions}
+            watermark={watermark}
+            watermarkText={watermarkText}
+            redactions={combinedRedactions}
+          />
+        ) : (
+          <>
+            {activeTool === 'highlight' && (
+              <style>{`
+                .pdf-viewer-area, .pdf-viewer-area * {
+                  cursor: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTkgMTFsLTYgNnYzaDlsMy0zIi8+PHBhdGggZD0iTTIyIDEybC00LjYgNC42YTIgMiAwIDAgMS0yLjggMGwtNS4yLTUuMmEyIDIgMCAwIDEgMC0yLjhMMTQgNCIvPjwvc3ZnPg==') 0 24, auto !important;
+                }
+              `}</style>
+            )}
+            <div 
+              className="pdf-viewer-area"
+              style={{ 
+                flex: 1, 
+                display: 'flex',
+                flexDirection: 'column',
+                minWidth: 0,
+                minHeight: 0,
+                overflow: 'hidden', 
+                position: 'relative', 
+                backgroundColor: 'var(--bg-color)', 
+                cursor: isPanning ? 'grabbing' : (activeTool === 'pan' || activeTool === null ? 'grab' : (activeTool === 'eraser' ? 'cell' : 'crosshair')) 
+              }}
           onMouseMove={(e) => {
             if (isPanning && panStartRef.current && containerRef.current) {
               const dx = e.clientX - panStartRef.current.x;
@@ -1642,7 +1652,9 @@ export default function DocumentViewer({
           onJumpToPage={(p) => setPageNum(p)}
         />
       )}
-
+      </div>
+      </div>
+      
       {isLinkModalOpen && selectedAnnotationId && (
         <InsertLinkModal
           initialUrl={annotations.find(a => a.id === selectedAnnotationId)?.linkUrl || ''}
@@ -1686,7 +1698,6 @@ export default function DocumentViewer({
           onResultClick={handleSearchResultClick}
         />
       )}
-      </div>
     </div>
   );
 }

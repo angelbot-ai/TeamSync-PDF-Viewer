@@ -101,7 +101,7 @@ export default function SideBySideViewer({
   const scaledHeightB = (dimsB.height || 800) * scale;
 
   return (
-    <div style={{ flex: 1, display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
+    <div style={{ flex: 1, display: 'flex', minHeight: 0, width: '100%', height: '100%', overflow: 'hidden' }}>
       {/* Panel A - Document A (Base) */}
       <div
         ref={containerARef}

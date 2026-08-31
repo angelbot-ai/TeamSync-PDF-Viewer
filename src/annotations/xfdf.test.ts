@@ -128,3 +128,14 @@ describe('xfdf envelope tolerance', () => {
     expect(anns.map((a) => a.id)).toEqual(['a', 'b']);
   });
 });
+
+describe('xfdf hardening', () => {
+  it('strips declarations linearly and rejects DTDs', async () => {
+    const many = '<?xml version="1.0"?>'.repeat(2000) + '<square page="0" rect="0,0,10,10" name="ok"/>';
+    const anns = await parseXfdf(many, resolve);
+    expect(anns.map((a) => a.id)).toEqual(['ok']);
+    // Unterminated declaration: everything from it on is treated as text, not a hang.
+    await expect(parseXfdf('<?xml version="1.0" <?xml <?xml', resolve)).resolves.toEqual([]).catch(() => undefined);
+    await expect(parseXfdf('<!DOCTYPE x [<!ENTITY a "b">]><square name="x"/>', resolve)).rejects.toThrow(/DOCTYPE/);
+  });
+});

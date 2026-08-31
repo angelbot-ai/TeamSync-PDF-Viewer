@@ -7,7 +7,7 @@ import {
   Hand, Search, MessageSquare, 
   FileText, Download, Maximize, Save, Printer, Settings, Info,
   MinusCircle, PlusCircle, Maximize2, MoveHorizontal, ChevronUp, ChevronDown, ScanSearch,
-  FileCode2, File, Copy, Expand, RotateCw, RotateCcw, ShieldCheck, Pen
+  FileCode2, File, Copy, Expand, RotateCw, RotateCcw, ShieldCheck, Pen, Layers
 } from 'lucide-react';
 
 import type { SDKPermissions } from '../core/types';
@@ -126,6 +126,7 @@ export default function Header({
                 <MenuOption icon={<Save size={16} />} label="Save As" onClick={() => { onSaveAs(); setIsMenuOpen(false); }} />
                 <MenuOption icon={<Printer size={16} />} label="Print" disabled={!onPrint} onClick={() => { onPrint?.(); setIsMenuOpen(false); }} />
                 <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
+                <MenuOption icon={<Layers size={16} color="#0284c7" />} label="Compare PDF (Demo)" onClick={() => { window.dispatchEvent(new CustomEvent('action-start-compare', { detail: { docB: '/TeamSync.pdf?v=2' } })); setIsMenuOpen(false); }} />
                 <MenuOption icon={<Settings size={16} />} label="Settings" onClick={() => { onOpenSettings(); setIsMenuOpen(false); }} />
               </div>
             )}

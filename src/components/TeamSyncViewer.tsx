@@ -364,7 +364,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
       <div
         ref={rootRef}
         className={['tspdf-root', className].filter(Boolean).join(' ')}
-        style={style}
+        style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflow: 'hidden', ...style }}
         tabIndex={-1}
         data-teamsync-pdf-viewer=""
         onKeyDownCapture={handleRootKeyDownCapture}

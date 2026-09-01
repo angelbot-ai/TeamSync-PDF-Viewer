@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Layers, FileText, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { Layers, FileText, CheckCircle2, MinusCircle, PlusCircle, AlertCircle } from 'lucide-react';
 import type { DiffItem, TextDiffSegment } from '../types/compare';
 
 interface DiffSummarySidebarProps {
@@ -12,7 +12,7 @@ interface DiffSummarySidebarProps {
   diffItems: DiffItem[];
   textDiffs: TextDiffSegment[];
   currentDiffIndex: number;
-  onSelectDiff: (index: number) => void;
+  onSelectDiff: (index: number, item?: DiffItem) => void;
   onJumpToPage: (pageIndex: number) => void;
 }
 
@@ -54,17 +54,89 @@ export default function DiffSummarySidebar({
           fontSize: '11px', padding: '2px 8px', borderRadius: '12px',
           backgroundColor: '#0284c7', color: '#ffffff', fontWeight: 600
         }}>
-          {diffItems.length + textDiffs.filter(t => t.type !== 'equal').length} Diffs
+          {diffItems.length} Differences
         </span>
       </div>
 
       {/* List Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
-        {textDiffs.length > 0 && (
+        {diffItems.length > 0 && (
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Layers size={14} />
+              <span>Differences on Page ({diffItems.length})</span>
+            </div>
+
+            {diffItems.map((item, idx) => {
+              const isSelected = idx === currentDiffIndex;
+              const isDel = item.type === 'deletion';
+              const isAdd = item.type === 'addition';
+
+              let badgeColor = isDel ? '#e11d48' : isAdd ? '#10b981' : '#f59e0b';
+              let badgeBg = isDel ? '#ffe4e6' : isAdd ? '#dcfce7' : '#fef3c7';
+              let badgeLabel = isDel ? 'Removed' : isAdd ? 'Added' : 'Changed';
+
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => {
+                    onSelectDiff(idx, item);
+                    if (item.pageIndex) onJumpToPage(item.pageIndex);
+                  }}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    backgroundColor: isSelected ? '#f0f9ff' : '#ffffff',
+                    border: isSelected ? '2px solid #0284c7' : '1px solid #e2e8f0',
+                    borderLeft: isSelected ? '4px solid #0284c7' : `3px solid ${badgeColor}`,
+                    marginBottom: '8px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    boxShadow: isSelected ? '0 2px 8px rgba(2, 132, 199, 0.18)' : '0 1px 3px rgba(0,0,0,0.03)',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {isDel && <MinusCircle size={13} color="#e11d48" />}
+                      {isAdd && <PlusCircle size={13} color="#10b981" />}
+                      {!isDel && !isAdd && <AlertCircle size={13} color="#f59e0b" />}
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        backgroundColor: badgeBg,
+                        color: badgeColor
+                      }}>
+                        {badgeLabel}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                      Page {item.pageIndex}
+                    </span>
+                  </div>
+                  <div style={{
+                    fontSize: '12px',
+                    color: isSelected ? '#0369a1' : '#334155',
+                    fontWeight: isSelected ? 600 : 400,
+                    lineHeight: '1.4',
+                    wordBreak: 'break-word'
+                  }}>
+                    {item.description}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {textDiffs.length > 0 && diffItems.length === 0 && (
           <div style={{ marginBottom: '16px' }}>
             <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <FileText size={14} />
-              <span>Text & Structure Differences</span>
+              <span>Text Differences</span>
             </div>
 
             {textDiffs.filter(t => t.type !== 'equal').map((seg, i) => (
@@ -101,50 +173,6 @@ export default function DiffSummarySidebar({
           </div>
         )}
 
-        {diffItems.length > 0 && (
-          <div>
-            <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Layers size={14} />
-              <span>Visual Differences ({diffItems.length})</span>
-            </div>
-
-            {diffItems.map((item, idx) => {
-              const isSelected = idx === currentDiffIndex;
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => {
-                    onSelectDiff(idx);
-                    if (item.pageIndex) onJumpToPage(item.pageIndex);
-                  }}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '6px',
-                    backgroundColor: isSelected ? '#e0f2fe' : '#f8fafc',
-                    border: isSelected ? '1px solid #0284c7' : '1px solid #e2e8f0',
-                    marginBottom: '8px',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between'
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 600, color: '#0f172a', marginBottom: '2px' }}>
-                      Page {item.pageIndex}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#64748b' }}>
-                      {item.description}
-                    </div>
-                  </div>
-                  <ChevronRight size={16} color={isSelected ? '#0284c7' : '#94a3b8'} />
-                </div>
-              );
-            })}
-          </div>
-        )}
-
         {diffItems.length === 0 && textDiffs.filter(t => t.type !== 'equal').length === 0 && (
           <div style={{ padding: '32px 16px', textAlign: 'center', color: '#64748b' }}>
             <CheckCircle2 size={32} color="#16a34a" style={{ margin: '0 auto 8px auto' }} />
@@ -156,3 +184,4 @@ export default function DiffSummarySidebar({
     </div>
   );
 }
+

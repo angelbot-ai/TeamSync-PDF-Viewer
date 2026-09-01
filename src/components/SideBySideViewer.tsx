@@ -83,6 +83,22 @@ export default function SideBySideViewer({
     };
   }, []);
 
+  // Smooth scroll to selected diff box
+  useEffect(() => {
+    if (!selectedDiffId) return;
+    const allDiffs = [...(diffsA || []), ...(diffsB || [])];
+    const targetBox = allDiffs.find(d => d.id === selectedDiffId);
+    if (targetBox && containerARef.current) {
+      const viewH = containerARef.current.clientHeight || 600;
+      const targetY = targetBox.y * scale;
+      const scrollToY = Math.max(0, targetY - viewH / 3);
+      containerARef.current.scrollTo({
+        top: scrollToY,
+        behavior: 'smooth'
+      });
+    }
+  }, [selectedDiffId, diffsA, diffsB, scale]);
+
   const [dimsA, setDimsA] = useState<{ width: number; height: number }>(basePageDims);
   const [dimsB, setDimsB] = useState<{ width: number; height: number }>(basePageDims);
 

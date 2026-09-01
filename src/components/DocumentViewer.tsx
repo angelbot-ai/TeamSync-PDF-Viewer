@@ -25,7 +25,7 @@ import CompareToolbar from './CompareToolbar';
 import DiffSummarySidebar from './DiffSummarySidebar';
 import CompareCurtainSlider from './CompareCurtainSlider';
 import DiffHighlightOverlay from './DiffHighlightOverlay';
-import type { CompareState, TextDiffSegment } from '../types/compare';
+import type { CompareState, TextDiffSegment, DiffItem, DiffBoundingBox } from '../types/compare';
 import { computeTextDiff, computePageDiffBoxes } from '../utils/pdfDiffEngine';
 
 export interface DocumentLoadErrorInfo {
@@ -153,17 +153,29 @@ export default function DocumentViewer({
   useEffect(() => {
     if (compareState.isActive && pdfDoc && pdfDocB) {
       let cancelled = false;
-      const computeDiffs = async () => {
+      const computeAllDiffs = async () => {
         try {
-          const { diffsA, diffsB, summary } = await computePageDiffBoxes(pdfDoc, pdfDocB, pageNum);
-          if (cancelled) return;
+          const totalPages = Math.min(pdfDoc.numPages, pdfDocB.numPages);
+          let allSummary: DiffItem[] = [];
+          const mapA: Record<number, DiffBoundingBox[]> = {};
+          const mapB: Record<number, DiffBoundingBox[]> = {};
 
-          setCompareState(prev => ({
-            ...prev,
-            diffItems: summary,
-            pageDiffsA: { ...(prev.pageDiffsA || {}), [pageNum]: diffsA },
-            pageDiffsB: { ...(prev.pageDiffsB || {}), [pageNum]: diffsB }
-          }));
+          for (let p = 1; p <= totalPages; p++) {
+            const { diffsA, diffsB, summary } = await computePageDiffBoxes(pdfDoc, pdfDocB, p);
+            if (cancelled) return;
+            mapA[p] = diffsA;
+            mapB[p] = diffsB;
+            allSummary = allSummary.concat(summary);
+          }
+
+          if (!cancelled) {
+            setCompareState(prev => ({
+              ...prev,
+              diffItems: allSummary,
+              pageDiffsA: mapA,
+              pageDiffsB: mapB
+            }));
+          }
 
           const pA = await pdfDoc.getPage(pageNum);
           const pB = await pdfDocB.getPage(Math.min(pageNum, pdfDocB.numPages));
@@ -176,10 +188,10 @@ export default function DocumentViewer({
           const diffs = computeTextDiff(strA, strB, pageNum);
           if (!cancelled) setTextDiffs(diffs);
         } catch (e) {
-          console.error('Error computing page diff boxes:', e);
+          console.error('Error computing document diffs:', e);
         }
       };
-      computeDiffs();
+      computeAllDiffs();
       return () => { cancelled = true; };
     }
   }, [compareState.isActive, pdfDoc, pdfDocB, pageNum]);
@@ -317,6 +329,37 @@ export default function DocumentViewer({
     setActiveSearchResult(result);
     scrollToPage(result.pageIndex);
   };
+
+  const handleSelectDiff = useCallback((idx: number, item?: DiffItem) => {
+    const diffItem = item || compareState.diffItems[idx];
+    setCompareState(prev => ({ ...prev, currentDiffIndex: idx }));
+
+    if (!diffItem) return;
+
+    if (diffItem.pageIndex && diffItem.pageIndex !== pageNum) {
+      setPageNum(diffItem.pageIndex);
+    }
+
+    const targetY = (diffItem.y ?? 0) * scale;
+    const targetX = (diffItem.x ?? 0) * scale;
+
+    if (containerRef.current) {
+      const p = diffItem.pageIndex || pageNum;
+      const rIdx = rowIndexOfPage(p);
+      const rowTop = pageTransition === 'continuous' && rIdx >= 0 ? (rowLayout.tops[rIdx] ?? 0) : 0;
+      const viewHeight = containerRef.current.clientHeight || 600;
+      const viewWidth = containerRef.current.clientWidth || 800;
+
+      const scrollToY = Math.max(0, rowTop + targetY - viewHeight / 3);
+      const scrollToX = Math.max(0, targetX - viewWidth / 4);
+
+      containerRef.current.scrollTo({
+        top: scrollToY,
+        left: scrollToX,
+        behavior: 'smooth'
+      });
+    }
+  }, [compareState.diffItems, pageNum, scale, pageTransition, rowIndexOfPage, rowLayout.tops]);
 
   // The annotation list lives in the AnnotationManager (undo/redo, permissions, events, XFDF).
   const annotations = useSyncExternalStore(annotationManager.subscribe, annotationManager.getSnapshot, annotationManager.getSnapshot);
@@ -952,16 +995,12 @@ export default function DocumentViewer({
           onPrevDiff={() => {
             if (compareState.diffItems.length === 0) return;
             const newIdx = (compareState.currentDiffIndex - 1 + compareState.diffItems.length) % compareState.diffItems.length;
-            setCompareState(prev => ({ ...prev, currentDiffIndex: newIdx }));
-            const item = compareState.diffItems[newIdx];
-            if (item && item.pageIndex) setPageNum(item.pageIndex);
+            handleSelectDiff(newIdx);
           }}
           onNextDiff={() => {
             if (compareState.diffItems.length === 0) return;
             const newIdx = (compareState.currentDiffIndex + 1) % compareState.diffItems.length;
-            setCompareState(prev => ({ ...prev, currentDiffIndex: newIdx }));
-            const item = compareState.diffItems[newIdx];
-            if (item && item.pageIndex) setPageNum(item.pageIndex);
+            handleSelectDiff(newIdx);
           }}
           onExit={() => {
             setCompareState(prev => ({ ...prev, isActive: false }));
@@ -1209,7 +1248,7 @@ export default function DocumentViewer({
             selectedDiffId={compareState.diffItems[compareState.currentDiffIndex]?.id}
             onSelectDiff={(id) => {
               const idx = compareState.diffItems.findIndex(d => d.id === id);
-              if (idx !== -1) setCompareState(prev => ({ ...prev, currentDiffIndex: idx }));
+              if (idx !== -1) handleSelectDiff(idx);
             }}
           />
         ) : (
@@ -1460,7 +1499,7 @@ export default function DocumentViewer({
                             selectedDiffId={compareState.diffItems[compareState.currentDiffIndex]?.id}
                             onSelectDiff={(id) => {
                               const idx = compareState.diffItems.findIndex(d => d.id === id);
-                              if (idx !== -1) setCompareState(prev => ({ ...prev, currentDiffIndex: idx }));
+                              if (idx !== -1) handleSelectDiff(idx);
                             }}
                           />
                         </div>
@@ -1692,7 +1731,7 @@ export default function DocumentViewer({
           diffItems={compareState.diffItems}
           textDiffs={textDiffs}
           currentDiffIndex={compareState.currentDiffIndex}
-          onSelectDiff={(idx) => setCompareState(prev => ({ ...prev, currentDiffIndex: idx }))}
+          onSelectDiff={(idx, item) => handleSelectDiff(idx, item)}
           onJumpToPage={(p) => setPageNum(p)}
         />
       )}

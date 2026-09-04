@@ -7,7 +7,7 @@ import {
   Hand, Search, MessageSquare, 
   FileText, Download, Maximize, Save, Printer, Settings, Info,
   MinusCircle, PlusCircle, Maximize2, MoveHorizontal, ChevronUp, ChevronDown, ScanSearch,
-  FileCode2, File, Copy, Expand, RotateCw, RotateCcw, ShieldCheck, Pen, Layers
+  FileCode2, File, Copy, Expand, RotateCw, RotateCcw, ShieldCheck, Pen, Layers, FolderOpen
 } from 'lucide-react';
 
 import type { SDKPermissions } from '../core/types';
@@ -26,6 +26,7 @@ interface HeaderProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomSet: (scale: number) => void;
+  onOpenFile?: () => void;
   onDownload: () => void;
   onFullScreen: () => void;
   onSaveAs: () => void;
@@ -56,6 +57,7 @@ export default function Header({
   rightSidebarOpen, setRightSidebarOpen: _setRightSidebarOpen,
   sidebarTab,
   scale, onZoomIn, onZoomOut, onZoomSet,
+  onOpenFile,
   onDownload, onFullScreen, onSaveAs, onPrint, onOpenSettings, onOpenAbout, onOpenSidebarTab,
   pageTransition, setPageTransition, pageLayout, setPageLayout, rotation, setRotation,
   signatureCount = 0,
@@ -121,6 +123,9 @@ export default function Header({
                 width: '220px', zIndex: 1000, display: 'flex', flexDirection: 'column',
                 border: '1px solid var(--border-color)', overflow: 'hidden'
               }}>
+                {onOpenFile && (
+                  <MenuOption icon={<FolderOpen size={16} />} label="Open PDF..." onClick={() => { onOpenFile(); setIsMenuOpen(false); }} />
+                )}
                 <MenuOption icon={<Download size={16} />} label="Download" onClick={() => { onDownload(); setIsMenuOpen(false); }} />
                 <MenuOption icon={<Maximize size={16} />} label="Enter Full Screen" onClick={() => { onFullScreen(); setIsMenuOpen(false); }} />
                 <MenuOption icon={<Save size={16} />} label="Save As" onClick={() => { onSaveAs(); setIsMenuOpen(false); }} />

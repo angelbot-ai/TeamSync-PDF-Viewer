@@ -435,6 +435,7 @@ export default function DocumentViewer({
   const [contextMenuPos, setContextMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const justCreatedLinkRef = useRef(false);
+  const clipboardAnnotationRef = useRef<Annotation | null>(null);
 
 
   useBusEvent<{ tool: typeof activeTool }>('action-set-tool', (d) => setActiveTool(d?.tool ?? null));
@@ -549,13 +550,52 @@ export default function DocumentViewer({
       handleRedo();
       return;
     }
+    if (matchShortcut(e, getCommand('SEARCH'))) {
+      e.preventDefault();
+      bus.emit('action-open-search');
+      return;
+    }
+    if (matchShortcut(e, getCommand('FILE_PICKER'))) {
+      e.preventDefault();
+      bus.emit('action-open-file-picker');
+      return;
+    }
 
-    // Don't delete if we are actively typing in a textarea
+    // Annotation clipboard & manipulation (only when not typing in text fields)
     if (!isInput && !activeTextEditor) {
+      if (matchShortcut(e, getCommand('COPY')) && selectedAnnotationId) {
+        const annToCopy = annotations.find(a => a.id === selectedAnnotationId);
+        if (annToCopy) {
+          e.preventDefault();
+          clipboardAnnotationRef.current = annToCopy;
+        }
+        return;
+      }
+      if (matchShortcut(e, getCommand('PASTE')) && clipboardAnnotationRef.current) {
+        e.preventDefault();
+        const base = clipboardAnnotationRef.current;
+        const newAnn: Annotation = {
+          ...base,
+          id: newAnnotationId(),
+          pageIndex: pageNum,
+          x: base.x + 20,
+          y: base.y + 20,
+          author: undefined,
+          authorId: undefined,
+          createdAt: undefined,
+          modifiedAt: undefined,
+          readOnly: undefined,
+          xfdfExtras: undefined
+        };
+        commitAnnotations([...annotations, newAnn]);
+        setSelectedAnnotationId(newAnn.id);
+        return;
+      }
       if (matchShortcut(e, getCommand('DELETE')) && selectedAnnotationId) {
         e.preventDefault();
         commitAnnotations(annotations.filter(a => a.id !== selectedAnnotationId));
         setSelectedAnnotationId(null);
+        return;
       }
     }
   });
@@ -615,6 +655,12 @@ export default function DocumentViewer({
   }, []);
 
   const { search, searchResults, isSearching, searchProgress } = usePdfSearch(pdfDoc, combinedRedactions);
+
+  useEffect(() => {
+    if (searchResults.length === 0) {
+      setActiveSearchResult(null);
+    }
+  }, [searchResults]);
 
   // Load the document. Re-runs when the URL or the reload nonce changes; the previous loading task
   // (and its worker transport) is destroyed on cleanup so documents never leak across loads.

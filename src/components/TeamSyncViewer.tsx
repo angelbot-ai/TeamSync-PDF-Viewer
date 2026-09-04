@@ -20,6 +20,7 @@ import { ViewerBusContext } from '../core/busContext';
 import { WebViewerInstance } from '../core/ViewerInstance';
 import { AnnotationManager } from '../annotations/AnnotationManager';
 import { printPdfBytes } from '../core/print';
+import { useShortcuts, matchShortcut } from '../hooks/useShortcuts';
 import type { WebViewerOptions, SDKPermissions, Redaction, TransientHighlight } from '../core/types';
 import type { Annotation } from '../annotations/types';
 
@@ -347,15 +348,90 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     redactionsRef.current = reds;
   }, []);
 
+  const { getCommand } = useShortcuts();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const openSearchSidebar = useCallback(() => {
+    if (sidebars) {
+      setRightSidebarOpen(true);
+      setSidebarTab('Search');
+      setTimeout(() => bus.emit('action-focus-search'), 50);
+    }
+  }, [sidebars, bus]);
+
+  const openFilePicker = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  useEffect(() => {
+    const offSearch = bus.on('action-open-search', openSearchSidebar);
+    const offFilePicker = bus.on('action-open-file-picker', openFilePicker);
+    return () => {
+      offSearch();
+      offFilePicker();
+    };
+  }, [bus, openSearchSidebar, openFilePicker]);
+
+  // Focus root element on mount if document is not currently focused elsewhere
+  useEffect(() => {
+    if (rootRef.current && (document.activeElement === document.body || !document.activeElement)) {
+      rootRef.current.focus({ preventScroll: true });
+    }
+  }, []);
+
+  // Global window keydown fallback so shortcuts fire reliably
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      const root = rootRef.current;
+      if (!root) return;
+
+      if (
+        document.activeElement === document.body ||
+        document.activeElement === document.documentElement ||
+        document.activeElement === null ||
+        root.contains(document.activeElement)
+      ) {
+        if (!root.contains(document.activeElement)) {
+          if (matchShortcut(e, getCommand('SEARCH'))) {
+            e.preventDefault();
+            openSearchSidebar();
+            return;
+          }
+          if (matchShortcut(e, getCommand('FILE_PICKER'))) {
+            e.preventDefault();
+            openFilePicker();
+            return;
+          }
+          bus.emit('viewer-keydown', e);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [bus, getCommand, openSearchSidebar, openFilePicker]);
+
   // ---- root element handlers -------------------------------------------------------------------
   const handleRootKeyDownCapture = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+    if (matchShortcut(e.nativeEvent, getCommand('SEARCH'))) {
       e.preventDefault();
-      if (sidebars) {
-        setRightSidebarOpen(true);
-        setSidebarTab('Search');
-        setTimeout(() => bus.emit('action-focus-search'), 50);
-      }
+      openSearchSidebar();
+      return;
+    }
+    if (matchShortcut(e.nativeEvent, getCommand('FILE_PICKER'))) {
+      e.preventDefault();
+      openFilePicker();
       return;
     }
     bus.emit('viewer-keydown', e.nativeEvent);
@@ -383,6 +459,9 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     } else {
       setRightSidebarOpen(true);
       setSidebarTab(tab);
+      if (tab === 'Search') {
+        setTimeout(() => bus.emit('action-focus-search'), 50);
+      }
     }
   };
 
@@ -413,6 +492,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             onZoomIn={() => setScale((s) => Math.min(s + 0.25, MAX_SCALE))}
             onZoomOut={() => setScale((s) => Math.max(s - 0.25, MIN_SCALE))}
             onZoomSet={(s) => setScale(Math.min(MAX_SCALE, Math.max(MIN_SCALE, s)))}
+            onOpenFile={openFilePicker}
             onDownload={() => bus.emit('action-download')}
             onFullScreen={toggleFullscreen}
             onSaveAs={() => bus.emit('action-download')}
@@ -432,6 +512,21 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             permissions={effectivePermissions}
           />
         )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              const url = URL.createObjectURL(file);
+              loadDocument(url);
+            }
+            e.target.value = '';
+          }}
+          aria-hidden="true"
+        />
         <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
           <DocumentViewer
             leftSidebarOpen={sidebars && leftSidebarOpen}

@@ -62,6 +62,16 @@ export default function Sidebar({
     return () => clearTimeout(handler);
   }, [searchQuery, onSearch]);
 
+  useEffect(() => {
+    if (isOpen && activeTab === 'Search') {
+      const timer = setTimeout(() => {
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, activeTab]);
+
   useBusEvent('action-focus-search', () => {
     if (searchInputRef.current) {
       searchInputRef.current.focus();
@@ -136,14 +146,40 @@ export default function Sidebar({
               placeholder="Search..." 
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  onSearch(searchQuery);
+                }
+              }}
               style={{
-                width: '100%', padding: '8px 32px', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '13px', outline: 'none'
+                width: '100%',
+                padding: '8px 32px 8px 36px',
+                border: '1px solid var(--border-color)',
+                borderRadius: '4px',
+                fontSize: '13px',
+                outline: 'none',
+                boxSizing: 'border-box'
               }}
             />
             {searchQuery && (
               <button 
-                onClick={() => setSearchQuery('')}
-                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-muted)' }}
+                onClick={() => {
+                  setSearchQuery('');
+                  onSearch('');
+                }}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
+                  color: 'var(--text-muted)'
+                }}
+                title="Clear search"
               >
                 <X size={14} />
               </button>

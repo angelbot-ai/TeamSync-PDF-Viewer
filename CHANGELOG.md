@@ -2,6 +2,17 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.3.2] — 2026-09-04
+
+### Fixed
+- **Hardware-Bounded Canvas Texture Clamping**: Fixed crash and invisible content when zooming past 800% (up to 1000%) by clamping internal raster buffers to safe hardware limits (`MAX_CANVAS_DIM` = 4096 / 8192 px, `MAX_CANVAS_PIXELS` = 16.7 MP / ~64MB buffer) while keeping CSS layout full-sized for smooth, distortion-free GPU scaling.
+- **In-Flight Render Task Cancellation**: Resolved UI freezing and crashes during rapid clicking of `+` / `-` zoom buttons by cancelling running PDF.js render tasks directly by reference and releasing completed/cancelled page resources (`page.cleanup()`).
+- **Immediate GPU Texture Deallocation**: Zeroed offscreen `tempCanvas` dimensions immediately after raster blitting to return GPU backing texture memory to the system without waiting for garbage collection.
+- **Zoom Gesture Debouncing**: Added 150ms debounce on zoom changes to allow existing textures to scale at 60fps via CSS transforms before triggering expensive PDF.js vector rasterization upon motion settling.
+- **Eliminated False Cache Invalidation in `React.memo`**: Removed stale `scrollTop` / `scrollLeft` checks in `PageRenderer`, preventing re-rendering of all mounted pages on every scroll and zoom frame.
+- **Scale-Aware Virtualization Window**: Virtualized document rows dynamically based on zoom scale, keeping mounted pages to a maximum of 3 at high zoom levels.
+- **Intuitive Zoom Stepping Curves & Controls**: Implemented responsive stepping curves (+0.25 under 2x, +0.5 under 5x, +1.0 above 5x), capped max zoom at 1000% (`MAX_SCALE = 10.0`), and disabled `+` / `-` toolbar buttons at boundary limits. Exported `MIN_SCALE`, `MAX_SCALE`, `clampScale`, `calculateNextZoomIn`, and `calculateNextZoomOut`.
+
 ## [1.3.1] — 2026-09-04
 
 ### Fixed

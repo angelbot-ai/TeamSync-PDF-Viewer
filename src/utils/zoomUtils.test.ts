@@ -27,19 +27,19 @@ describe('zoomUtils', () => {
 
     it('steps by 1.0 when scale >= 5', () => {
       expect(calculateNextZoomIn(5.0)).toBe(6.0);
-      expect(calculateNextZoomIn(8.0)).toBe(9.0);
-      expect(calculateNextZoomIn(9.5)).toBe(10.0);
+      expect(calculateNextZoomIn(6.0)).toBe(7.0);
+      expect(calculateNextZoomIn(7.0)).toBe(8.0);
     });
 
     it('clamps to MAX_SCALE', () => {
       expect(calculateNextZoomIn(MAX_SCALE)).toBe(MAX_SCALE);
-      expect(calculateNextZoomIn(9.8)).toBe(MAX_SCALE);
+      expect(calculateNextZoomIn(7.8)).toBe(MAX_SCALE);
     });
   });
 
   describe('calculateNextZoomOut', () => {
     it('steps by 1.0 when scale > 5', () => {
-      expect(calculateNextZoomOut(10.0)).toBe(9.0);
+      expect(calculateNextZoomOut(8.0)).toBe(7.0);
       expect(calculateNextZoomOut(7.0)).toBe(6.0);
     });
 
@@ -80,11 +80,11 @@ describe('zoomUtils', () => {
       expect(pixelH).toBeLessThanOrEqual(MAX_CANVAS_DIM);
     });
 
-    it('clamps renderScale at 1000% zoom to safe hardware dimensions and pixel limits', () => {
-      // 612x792 pt page at 1000% zoom on 2x retina
-      const uncappedScale = 10.0 * 2.0; // 20.0
-      // 612 * 20 = 12,240 px, 792 * 20 = 15,840 px (would be 193 MP, exceeding maxDim and maxPixels!)
-      const renderScale = calculateSafeRenderScale(10.0, 2.0, 612, 792, MAX_CANVAS_DIM, MAX_CANVAS_PIXELS);
+    it('clamps renderScale at 800% zoom to safe hardware dimensions and pixel limits', () => {
+      // 612x792 pt page at 800% zoom on 2x retina
+      const uncappedScale = 8.0 * 2.0; // 16.0
+      // 612 * 16 = 9,792 px, 792 * 16 = 12,672 px (would be 124 MP, exceeding maxDim and maxPixels!)
+      const renderScale = calculateSafeRenderScale(8.0, 2.0, 612, 792, MAX_CANVAS_DIM, MAX_CANVAS_PIXELS);
       expect(renderScale).toBeLessThan(uncappedScale);
 
       const clampedW = 612 * renderScale;
@@ -97,7 +97,7 @@ describe('zoomUtils', () => {
 
     it('clamps to mobile max dimension (2048px) when specified', () => {
       const mobileMaxDim = 2048;
-      const renderScale = calculateSafeRenderScale(10.0, 2.0, 612, 792, mobileMaxDim, MAX_CANVAS_PIXELS);
+      const renderScale = calculateSafeRenderScale(8.0, 2.0, 612, 792, mobileMaxDim, MAX_CANVAS_PIXELS);
       const clampedW = 612 * renderScale;
       const clampedH = 792 * renderScale;
       expect(clampedW).toBeLessThanOrEqual(mobileMaxDim);

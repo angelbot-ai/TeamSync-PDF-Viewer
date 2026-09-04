@@ -13,6 +13,7 @@ import {
 import type { SDKPermissions } from '../core/types';
 import type { ViewerPlugin } from '../plugins/types';
 import { useViewerBus, useBusEvent } from '../hooks/useViewerBus';
+import { MIN_SCALE, MAX_SCALE } from '../utils/zoomUtils';
 
 interface HeaderProps {
   activeTab: string;
@@ -263,7 +264,7 @@ export default function Header({
                   <MenuOption icon={<MoveHorizontal size={16} />} label="Fit To Width" onClick={() => { bus.emit('action-fit-to-width'); setIsZoomMenuOpen(false); }} />
                   <MenuOption icon={<Maximize2 size={16} />} label="Fit To Page" onClick={() => { bus.emit('action-fit-to-page'); setIsZoomMenuOpen(false); }} />
                   <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
-                  {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5, 8, 10].map(zoomLevel => (
+                  {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5, 8].map(zoomLevel => (
                     <div 
                       key={zoomLevel}
                       onClick={() => { if(onZoomSet) onZoomSet(zoomLevel); setIsZoomMenuOpen(false); }}
@@ -283,16 +284,16 @@ export default function Header({
               )}
             </div>
             <IconButton 
-              icon={<MinusCircle size={18} color={scale <= 0.1 ? 'var(--border-color)' : 'var(--text-muted)'} />} 
+              icon={<MinusCircle size={18} color={scale <= MIN_SCALE ? 'var(--border-color)' : 'var(--text-muted)'} />} 
               title="Zoom Out" 
               onClick={onZoomOut} 
-              disabled={scale <= 0.1}
+              disabled={scale <= MIN_SCALE}
             />
             <IconButton 
-              icon={<PlusCircle size={18} color={scale >= 10.0 ? 'var(--border-color)' : 'var(--text-muted)'} />} 
+              icon={<PlusCircle size={18} color={scale >= MAX_SCALE ? 'var(--border-color)' : 'var(--text-muted)'} />} 
               title="Zoom In" 
               onClick={onZoomIn} 
-              disabled={scale >= 10.0}
+              disabled={scale >= MAX_SCALE}
             />
           </div>
           <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border-color)', margin: '0 4px' }} />

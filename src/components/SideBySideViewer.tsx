@@ -28,6 +28,7 @@ interface SideBySideViewerProps {
   selectedDiffId?: string | null;
   onSelectDiff?: (id: string) => void;
   onScrollSync?: (scrollTop: number, scrollLeft: number) => void;
+  hideAnnotationsUntilPageRendered?: boolean;
 }
 
 export default function SideBySideViewer({
@@ -46,7 +47,8 @@ export default function SideBySideViewer({
   diffsA = [],
   diffsB = [],
   selectedDiffId,
-  onSelectDiff
+  onSelectDiff,
+  hideAnnotationsUntilPageRendered = true
 }: SideBySideViewerProps) {
   const containerARef = useRef<HTMLDivElement>(null);
   const containerBRef = useRef<HTMLDivElement>(null);
@@ -177,6 +179,7 @@ export default function SideBySideViewer({
               watermark={watermark}
               watermarkText={watermarkText}
               redactions={redactions}
+              hideAnnotationsUntilPageRendered={hideAnnotationsUntilPageRendered}
             />
           )}
           <DiffHighlightOverlay
@@ -237,6 +240,7 @@ export default function SideBySideViewer({
               watermark={watermark}
               watermarkText={watermarkText}
               redactions={redactions}
+              hideAnnotationsUntilPageRendered={hideAnnotationsUntilPageRendered}
             />
           )}
           <DiffHighlightOverlay

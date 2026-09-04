@@ -46,6 +46,8 @@ interface PageRendererProps {
   onDiscardRedaction?: (redaction: Redaction) => void;
   /** Called after the page canvas has been painted (used for first-page-rendered telemetry). */
   onRendered?: (pageNum: number) => void;
+  /** Whether to hide annotations and transient highlights until the page canvas has finished rendering. Default: true. */
+  hideAnnotationsUntilPageRendered?: boolean;
 }
 
 function PageRendererComponent({
@@ -53,7 +55,8 @@ function PageRendererComponent({
   scrollTop: _scrollTop, scrollLeft: _scrollLeft, pageTop, pageLeft = 0, basePageWidth, basePageHeight,
   activeTab, activeTool, annotations, selectedAnnotationId, activeSearchResult, transientHighlights,
   onMouseDown, onMouseMove, onMouseUp, onAnnotationClick, onAnnotationMouseEnter, onClearSelection,
-  watermark, watermarkText, redactions, onDiscardRedaction, onRendered
+  watermark, watermarkText, redactions, onDiscardRedaction, onRendered,
+  hideAnnotationsUntilPageRendered = true
 }: PageRendererProps) {
   const onRenderedRef = useRef(onRendered);
   onRenderedRef.current = onRendered;
@@ -62,14 +65,21 @@ function PageRendererComponent({
   const renderTaskRef = useRef<any>(null);
   const pageProxyRef = useRef<pdfjsLib.PDFPageProxy | null>(null);
   const hasRenderedOnceRef = useRef(false);
+  const [isCanvasRendered, setIsCanvasRendered] = useState(false);
   const [textContent, setTextContent] = useState<any>(null);
 
   const scaledWidth = basePageWidth * scale;
   const scaledHeight = basePageHeight * scale;
 
+  const [prevDocAndPage, setPrevDocAndPage] = useState({ pdfDoc, pageNum, rotation });
+  if (prevDocAndPage.pdfDoc !== pdfDoc || prevDocAndPage.pageNum !== pageNum || prevDocAndPage.rotation !== rotation) {
+    setPrevDocAndPage({ pdfDoc, pageNum, rotation });
+    setIsCanvasRendered(false);
+  }
+
   useEffect(() => {
     hasRenderedOnceRef.current = false;
-  }, [pdfDoc, pageNum]);
+  }, [pdfDoc, pageNum, rotation]);
 
   // Intersection logic for canvas rendering (tile rendering to save memory)
   useEffect(() => {
@@ -216,6 +226,7 @@ function PageRendererComponent({
             destCtx.drawImage(tempCanvas, 0, 0);
           }
           hasRenderedOnceRef.current = true;
+          setIsCanvasRendered(true);
           onRenderedRef.current?.(pageNum);
         }
         // Immediately release offscreen canvas GPU texture memory
@@ -347,6 +358,7 @@ function PageRendererComponent({
     renderText();
   }, [textContent, pdfDoc, pageNum, rotation, redactions]);
   const pageAnnotations = annotations.filter(a => a.pageIndex === pageNum);
+  const isOverlayVisible = !hideAnnotationsUntilPageRendered || isCanvasRendered;
 
   return (
     <div 
@@ -374,8 +386,9 @@ function PageRendererComponent({
           top: 0, left: 0,
           transform: `scale(${scale})`,
           transformOrigin: 'top left',
-          pointerEvents: 'auto',
-          opacity: 1,
+          pointerEvents: isOverlayVisible ? 'auto' : 'none',
+          opacity: isOverlayVisible ? 1 : 0,
+          visibility: isOverlayVisible ? 'visible' : 'hidden',
           width: `${basePageWidth}px`,
           height: `${basePageHeight}px`
         }}
@@ -387,7 +400,12 @@ function PageRendererComponent({
         const unH = rotation % 180 === 0 ? basePageHeight : basePageWidth;
 
         return (
-          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 6 }}>
+          <div style={{
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+            pointerEvents: 'none', zIndex: 6,
+            visibility: isOverlayVisible ? 'visible' : 'hidden',
+            opacity: isOverlayVisible ? 1 : 0
+          }}>
             <style>{`
               @keyframes tspdf-transient-pulse {
                 0% {
@@ -483,8 +501,10 @@ function PageRendererComponent({
             style={{ 
               position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', 
               cursor: ['Annotate', 'Shapes'].includes(activeTab) && activeTool ? (activeTool === 'eraser' ? 'cell' : 'crosshair') : 'default', 
-              pointerEvents: (activeTool === null || activeTool === 'pan') ? 'none' : 'auto',
-              zIndex: 10
+              pointerEvents: (activeTool === null || activeTool === 'pan' || !isOverlayVisible) ? 'none' : 'auto',
+              zIndex: 10,
+              visibility: isOverlayVisible ? 'visible' : 'hidden',
+              opacity: isOverlayVisible ? 1 : 0
             }}
             viewBox={`0 0 ${basePageWidth} ${basePageHeight}`}
             onMouseDown={(e) => onMouseDown(e, pageNum)}
@@ -733,7 +753,8 @@ const PageRenderer = React.memo(PageRendererComponent, (prevProps, nextProps) =>
          prevProps.watermarkText === nextProps.watermarkText &&
          prevProps.redactions === nextProps.redactions &&
          prevProps.annotations === nextProps.annotations &&
-         prevProps.transientHighlights === nextProps.transientHighlights;
+         prevProps.transientHighlights === nextProps.transientHighlights &&
+         prevProps.hideAnnotationsUntilPageRendered === nextProps.hideAnnotationsUntilPageRendered;
 });
 
 export default PageRenderer;

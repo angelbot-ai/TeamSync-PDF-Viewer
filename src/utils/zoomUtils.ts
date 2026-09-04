@@ -3,7 +3,7 @@
  */
 
 export const MIN_SCALE = 0.1;
-export const MAX_SCALE = 10.0;
+export const MAX_SCALE = 8.0;
 
 export const isMobileOrTablet = (): boolean =>
   typeof navigator !== 'undefined' && (
@@ -22,7 +22,7 @@ export const MAX_CANVAS_PIXELS_MOBILE = 4194304; // 4.2 Megapixels (~16MB RGBA t
  * Calculates the next step when zooming in.
  * - Below 200%: steps by +25%
  * - 200% to 500%: steps by +50%
- * - 500% to 1000%: steps by +100%
+ * - 500% to 800%: steps by +100%
  */
 export function calculateNextZoomIn(currentScale: number, maxScale = MAX_SCALE): number {
   const step = currentScale < 2 ? 0.25 : currentScale < 5 ? 0.5 : 1.0;

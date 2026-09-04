@@ -198,4 +198,14 @@ describe('WebViewerInstance', () => {
     expect(results[0].pageIndex).toBe(1);
     expect(results[0].bounds).toBeDefined();
   });
+
+  it('supports pageRendered event subscription and emission', () => {
+    const bus = new ViewerBus();
+    const inst = new WebViewerInstance(bus);
+    const onPageRendered = vi.fn();
+    inst.on('pageRendered', onPageRendered);
+
+    bus.emit('pageRendered', { url: '/doc.pdf', pageNumber: 2 });
+    expect(onPageRendered).toHaveBeenCalledWith({ url: '/doc.pdf', pageNumber: 2 });
+  });
 });

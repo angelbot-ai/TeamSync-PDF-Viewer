@@ -113,6 +113,12 @@ export interface WebViewerOptions {
   leftPanelOpen?: boolean;
   /** Focus the viewer on mount so keyboard shortcuts work immediately. Default false. */
   autoFocus?: boolean;
+  /**
+   * Hide SVG annotation overlays and transient highlights until the underlying page canvas has finished rendering.
+   * Prevents annotations from rendering over a blank white page container on initial load, scroll, or fit re-render.
+   * Default true.
+   */
+  hideAnnotationsUntilPageRendered?: boolean;
 }
 
 /** Events available through `instance.on(type, listener)`. */
@@ -120,6 +126,7 @@ export interface ViewerEventMap {
   documentLoaded: { url: string; numPages: number };
   documentLoadError: { url: string; error: Error; passwordRequired: boolean };
   firstPageRendered: { url: string; pageNumber: number };
+  pageRendered: { url: string; pageNumber: number };
   pageChanged: { pageNumber: number; numPages: number };
   annotationsChanged: { annotations: Annotation[] };
   /** Granular add / modify / delete (with the `imported` flag) from the AnnotationManager. */

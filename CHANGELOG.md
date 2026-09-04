@@ -2,6 +2,14 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.3.5] — 2026-09-04
+
+### Fixed
+- **Annotations Before Document Canvas**: Fixed bug where the SVG annotation overlay and transient citation highlights rendered synchronously over a still-blank white container on initial load, virtualized scroll (pages 2+), and post-open fit re-renders. Annotations now wait until the underlying page canvas has finished rendering its pixels before becoming visible.
+- **`hideAnnotationsUntilPageRendered` Option**: Added `hideAnnotationsUntilPageRendered?: boolean` (defaults to `true`) across `WebViewerOptions`, `TeamSyncViewerProps`, and `DocumentViewerProps`.
+- **`pageRendered` Lifecycle Event**: Added `pageRendered: { url: string; pageNumber: number }` to `ViewerEventMap` and `onPageRendered` callback to `TeamSyncViewerProps` and `DocumentViewerProps`, giving consumers a lifecycle hook whenever any page finishes canvas rendering.
+- **Capped Zoom Level to 800%**: Changed `MAX_SCALE = 8.0` (800%), updated zoom stepping and boundary checks, and updated toolbar preset dropdown to cap at 800%.
+
 ## [1.3.4] — 2026-09-04
 
 ### Fixed

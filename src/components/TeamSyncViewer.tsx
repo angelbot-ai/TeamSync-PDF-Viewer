@@ -38,6 +38,8 @@ export interface TeamSyncViewerProps extends Omit<WebViewerOptions, 'path'> {
   onDocumentLoadError?: (error: Error, retry: (newUrl?: string) => void, info: DocumentLoadErrorInfo) => void;
   /** Fires once per document, after the first page canvas has been painted. */
   onFirstPageRendered?: (info: { url: string; pageNumber: number }) => void;
+  /** Fires whenever any page canvas has finished rendering. */
+  onPageRendered?: (info: { url: string; pageNumber: number }) => void;
   /** Fires (in addition to onDocumentLoadError) when the document is password protected. */
   onPasswordRequired?: (info: { url: string }) => void;
   onPageChange?: (pageNumber: number, numPages: number) => void;
@@ -58,7 +60,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     enableAnnotations, enableSign = false, watermark, permissions, enableRedactions,
     canAddAnnotations, canEditAnnotations, canDeleteAnnotations, readOnly = false,
     assets, withCredentials = false, toolbar = true, sidebars = true, leftPanelOpen = true,
-    className, style,
+    className, style, hideAnnotationsUntilPageRendered = true,
   } = props;
 
   // Latest props for callbacks/bindings that must not re-subscribe on every render.
@@ -325,6 +327,15 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     [bus]
   );
 
+  const handlePageRendered = useCallback(
+    (pageNumber: number) => {
+      const url = docUrlRef.current ?? '';
+      bus.emit('pageRendered', { url, pageNumber });
+      latest.current.onPageRendered?.({ url, pageNumber });
+    },
+    [bus]
+  );
+
   const handlePageChange = useCallback(
     (pageNumber: number, numPages: number) => {
       pageRef.current = { current: pageNumber, count: numPages };
@@ -547,6 +558,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             onDocumentLoaded={handleDocumentLoaded}
             onLoadError={handleLoadError}
             onFirstPageRendered={handleFirstPageRendered}
+            onPageRendered={handlePageRendered}
             onPageChange={handlePageChange}
             pageTransition={pageTransition}
             pageLayout={pageLayout}
@@ -559,6 +571,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             page={page}
             transientHighlights={transientHighlights}
             permissions={effectivePermissions}
+            hideAnnotationsUntilPageRendered={hideAnnotationsUntilPageRendered}
           />
         </div>
         {isSettingsOpen && (

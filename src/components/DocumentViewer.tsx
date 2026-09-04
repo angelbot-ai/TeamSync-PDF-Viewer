@@ -63,6 +63,8 @@ interface DocumentViewerProps {
   onLoadError?: (error: Error, info: DocumentLoadErrorInfo) => void;
   /** Fires once per loaded document, after the first page canvas has been painted. */
   onFirstPageRendered?: (pageNumber: number) => void;
+  /** Fires whenever any page canvas has finished rendering. */
+  onPageRendered?: (pageNumber: number) => void;
   onPageChange?: (pageNumber: number, numPages: number) => void;
   pageTransition: 'continuous' | 'page-by-page';
   pageLayout: 'single' | 'double' | 'cover-facing';
@@ -75,13 +77,16 @@ interface DocumentViewerProps {
   page?: number;
   transientHighlights?: TransientHighlight[];
   permissions?: SDKPermissions;
+  /** Whether to hide annotations and transient highlights until the page canvas has finished rendering. Default: true. */
+  hideAnnotationsUntilPageRendered?: boolean;
 }
 
 export default function DocumentViewer({
   leftSidebarOpen, rightSidebarOpen, activeTab, annotationManager, initialDoc, loadNonce = 0, withCredentials = false, assets, sidebars = true,
   redactions, regexRedactions, scale, setScale, sidebarTab, setSidebarTab, onAnnotationsChange, onRedactionsChange,
-  onDocumentLoaded, onLoadError, onFirstPageRendered, onPageChange,
-  pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations: _enableAnnotations, initialPage, page, transientHighlights, permissions
+  onDocumentLoaded, onLoadError, onFirstPageRendered, onPageRendered, onPageChange,
+  pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations: _enableAnnotations, initialPage, page, transientHighlights, permissions,
+  hideAnnotationsUntilPageRendered = true
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bus = useViewerBus();
@@ -110,8 +115,8 @@ export default function DocumentViewer({
   const [isDiffSidebarOpen, setIsDiffSidebarOpen] = useState(false);
 
   // Latest-callback refs: parents may pass inline functions without re-triggering effects.
-  const callbacksRef = useRef({ onRedactionsChange, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageChange });
-  callbacksRef.current = { onRedactionsChange, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageChange };
+  const callbacksRef = useRef({ onRedactionsChange, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageRendered, onPageChange });
+  callbacksRef.current = { onRedactionsChange, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageRendered, onPageChange };
   const assetsRef = useRef(assets);
   assetsRef.current = assets;
 
@@ -733,6 +738,7 @@ export default function DocumentViewer({
   }, [initialDoc, loadNonce, withCredentials, rotation]);
 
   const handlePageRendered = useCallback((renderedPage: number) => {
+    callbacksRef.current.onPageRendered?.(renderedPage);
     if (firstPageRenderedRef.current) return;
     firstPageRenderedRef.current = true;
     callbacksRef.current.onFirstPageRendered?.(renderedPage);
@@ -1619,6 +1625,7 @@ export default function DocumentViewer({
                         redactions={combinedRedactions}
                         onDiscardRedaction={handleDiscardRedaction}
                         onRendered={handlePageRendered}
+                        hideAnnotationsUntilPageRendered={hideAnnotationsUntilPageRendered}
                       />
                       {compareState.isActive && compareState.mode === 'overlay' && pdfDocB && (
                         <div style={{

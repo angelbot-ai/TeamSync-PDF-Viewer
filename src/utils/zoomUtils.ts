@@ -5,15 +5,18 @@
 export const MIN_SCALE = 0.1;
 export const MAX_SCALE = 10.0;
 
-export const isSafariOrMobile = (): boolean =>
+export const isMobileOrTablet = (): boolean =>
   typeof navigator !== 'undefined' && (
-    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(navigator.userAgent) ||
     (/^((?!chrome|android).)*safari/i.test(navigator.userAgent))
   );
 
-export const MAX_CANVAS_DIM = 8192;
-export const MAX_CANVAS_DIM_MOBILE = 4096;
-export const MAX_CANVAS_PIXELS = 16777216; // 16.7 Megapixels (~64MB RGBA texture buffer)
+export const isSafariOrMobile = isMobileOrTablet;
+
+export const MAX_CANVAS_DIM = 4096;
+export const MAX_CANVAS_DIM_MOBILE = 2048;
+export const MAX_CANVAS_PIXELS = 8388608; // 8.4 Megapixels (~32MB RGBA texture buffer)
+export const MAX_CANVAS_PIXELS_MOBILE = 4194304; // 4.2 Megapixels (~16MB RGBA texture buffer)
 
 /**
  * Calculates the next step when zooming in.
@@ -53,8 +56,8 @@ export function calculateSafeRenderScale(
   outputScale: number,
   unscaledWidth: number,
   unscaledHeight: number,
-  maxDim = isSafariOrMobile() ? MAX_CANVAS_DIM_MOBILE : MAX_CANVAS_DIM,
-  maxPixels = MAX_CANVAS_PIXELS
+  maxDim = isMobileOrTablet() ? MAX_CANVAS_DIM_MOBILE : MAX_CANVAS_DIM,
+  maxPixels = isMobileOrTablet() ? MAX_CANVAS_PIXELS_MOBILE : MAX_CANVAS_PIXELS
 ): number {
   let renderScale = scale * outputScale;
   if (unscaledWidth * renderScale > maxDim) {

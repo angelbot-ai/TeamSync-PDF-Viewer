@@ -402,6 +402,8 @@ function IconButton({ icon, onClick, active = false, disabled = false, title }: 
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.4 : 1,
         outline: 'none',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
       onMouseOver={(e) => {
         if (!active && !disabled) e.currentTarget.style.backgroundColor = 'var(--hover-bg)';

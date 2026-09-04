@@ -95,8 +95,8 @@ describe('zoomUtils', () => {
       expect(clampedW * clampedH).toBeLessThanOrEqual(MAX_CANVAS_PIXELS + 1); // floating point tolerance
     });
 
-    it('clamps to mobile max dimension (4096px) when specified', () => {
-      const mobileMaxDim = 4096;
+    it('clamps to mobile max dimension (2048px) when specified', () => {
+      const mobileMaxDim = 2048;
       const renderScale = calculateSafeRenderScale(10.0, 2.0, 612, 792, mobileMaxDim, MAX_CANVAS_PIXELS);
       const clampedW = 612 * renderScale;
       const clampedH = 792 * renderScale;

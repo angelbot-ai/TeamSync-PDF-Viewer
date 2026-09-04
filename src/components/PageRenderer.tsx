@@ -83,31 +83,41 @@ function PageRendererComponent({
         renderTaskRef.current = null;
       }
 
+      let currentPage: pdfjsLib.PDFPageProxy | null = null;
       try {
         const page = await pdfDoc.getPage(pageNum);
         if (isCancelled) {
           try { page.cleanup?.(); } catch {}
           return;
         }
+        currentPage = page;
         pageProxyRef.current = page;
 
         const outputScale = Math.min(window.devicePixelRatio || 1, 2);
         const normalizedRot = normalizeRotation(page.rotate + rotation);
         const unscaledViewport = page.getViewport({ scale: 1.0, rotation: normalizedRot });
 
-        const renderScale = calculateSafeRenderScale(
+        let renderScale = calculateSafeRenderScale(
           scale,
           outputScale,
           unscaledViewport.width,
           unscaledViewport.height
         );
 
-        const viewport = page.getViewport({ scale: renderScale, rotation: normalizedRot });
+        let viewport = page.getViewport({ scale: renderScale, rotation: normalizedRot });
 
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = Math.floor(viewport.width);
         tempCanvas.height = Math.floor(viewport.height);
-        const ctx = tempCanvas.getContext('2d');
+        let ctx = tempCanvas.getContext('2d');
+        if (!ctx) {
+          // If GPU canvas memory allocation fails, fall back to safe half scale
+          renderScale = renderScale * 0.5;
+          viewport = page.getViewport({ scale: renderScale, rotation: normalizedRot });
+          tempCanvas.width = Math.floor(viewport.width);
+          tempCanvas.height = Math.floor(viewport.height);
+          ctx = tempCanvas.getContext('2d');
+        }
         if (!ctx || isCancelled) {
           tempCanvas.width = 0;
           tempCanvas.height = 0;
@@ -216,8 +226,10 @@ function PageRendererComponent({
           console.error(`Page ${pageNum} render failed:`, err);
         }
       } finally {
-        if (pageProxyRef.current) {
-          try { pageProxyRef.current.cleanup?.(); } catch {}
+        if (currentPage) {
+          try { currentPage.cleanup?.(); } catch {}
+        }
+        if (pageProxyRef.current === currentPage) {
           pageProxyRef.current = null;
         }
       }

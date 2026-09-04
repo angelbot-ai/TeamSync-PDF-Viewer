@@ -2,6 +2,13 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.3.0] — 2026-09-04
+
+### Added
+- **Programmatic & Reactive Page Navigation**: Added `instance.goToPage(pageNumber, options?)` and `instance.setCurrentPage(pageNumber)` (also available via `instance.UI.setCurrentPageNumber` and `instance.Core.documentViewer.goToPage`). Added reactive navigation when `page` or `initialPage` props update on `<TeamSyncViewer>` or `<DocumentViewer>` while the viewer is already open, enabling citation jumping without reopening documents.
+- **Exported Text Search Utilities**: Extracted standalone asynchronous search function `searchPdfText(pdfDoc, query, redactions?, onProgress?)` and exported `usePdfSearch`, `searchPdfText`, `SearchResult`, and `SearchBounds` from the library root. Added `instance.searchText(query)` to execute document searches programmatically.
+- **Transient Citation Highlights Layer**: Added dedicated transient highlights system (`TransientHighlight`, `instance.setTransientHighlights`, `instance.getTransientHighlights`, `instance.addTransientHighlight`, `instance.clearTransientHighlights`, and `instance.highlightSnippet`). Highlights render on an isolated overlay layer with pulse animations and tooltips without polluting `AnnotationManager`, `getAnnotations()`, or XFDF exports.
+
 ## [1.2.1] — 2026-09-01
 
 ### Fixed

@@ -2,6 +2,14 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.3.4] — 2026-09-04
+
+### Fixed
+- **Mobile & Android Canvas Clamping**: Expanded `isMobileOrTablet()` to comprehensively detect Android and mobile devices, capping max dimension to 2048px and pixel buffer to 4.2 MP (~16MB) to eliminate canvas crashes and blank pages on mobile devices.
+- **Render Task Lifecycle & Race Condition Fix**: Scoped `currentPage` locally within `renderCanvas` so cancelling in-flight renders during rapid zoom clicks never accidentally destroys resources of a newly scheduled page proxy.
+- **Graceful Context Allocation Fallback**: Added half-resolution fallback if `getContext('2d')` ever encounters device memory pressure, preventing invisible pages.
+- **Rapid Click Selection Prevention**: Added `userSelect: none` on toolbar zoom buttons to eliminate browser text selection during rapid clicking.
+
 ## [1.3.3] — 2026-09-04
 
 ### Fixed

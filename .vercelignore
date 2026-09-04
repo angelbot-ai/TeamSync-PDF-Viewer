@@ -3,3 +3,6 @@ node_modules
 dist
 dist-app
 wiki
+*.jpg
+*.zip
+scratch

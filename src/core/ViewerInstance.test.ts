@@ -71,4 +71,131 @@ describe('WebViewerInstance', () => {
     expect(inst.isDestroyed).toBe(true);
     expect(bus.isDestroyed).toBe(true);
   });
+
+  it('supports programmatic page navigation via goToPage and setCurrentPage', () => {
+    const bus = new ViewerBus();
+    const inst = new WebViewerInstance(bus);
+    const goToPageMock = vi.fn();
+    inst._bind(
+      {
+        getAnnotations: () => [],
+        getRedactions: () => [],
+        getWatermark: () => undefined,
+        getPdfDocument: () => null,
+        getDocumentUrl: () => undefined,
+        getFileName: () => undefined,
+        getCurrentUserName: () => undefined,
+        getCurrentPage: () => 1,
+        getPageCount: () => 10,
+        loadDocument: vi.fn(),
+        goToPage: goToPageMock,
+      },
+      null
+    );
+
+    inst.goToPage(3, { smooth: true });
+    expect(goToPageMock).toHaveBeenCalledWith(3, { smooth: true });
+
+    inst.setCurrentPage(5);
+    expect(goToPageMock).toHaveBeenCalledWith(5, {});
+
+    inst.UI.setCurrentPageNumber(7);
+    expect(goToPageMock).toHaveBeenCalledWith(7, {});
+
+    inst.Core.documentViewer.setCurrentPage(2);
+    expect(goToPageMock).toHaveBeenCalledWith(2, {});
+  });
+
+  it('manages transient highlights without polluting getAnnotations()', () => {
+    const bus = new ViewerBus();
+    const inst = new WebViewerInstance(bus);
+    const setHighlightsMock = vi.fn();
+    let currentHighlights: any[] = [];
+    inst._bind(
+      {
+        getAnnotations: () => [],
+        getRedactions: () => [],
+        getWatermark: () => undefined,
+        getPdfDocument: () => null,
+        getDocumentUrl: () => undefined,
+        getFileName: () => undefined,
+        getCurrentUserName: () => undefined,
+        getCurrentPage: () => 1,
+        getPageCount: () => 10,
+        loadDocument: vi.fn(),
+        getTransientHighlights: () => currentHighlights,
+        setTransientHighlights: setHighlightsMock.mockImplementation((hl) => {
+          currentHighlights = hl;
+        }),
+      },
+      null
+    );
+
+    const onHighlightsChanged = vi.fn();
+    inst.on('transientHighlightsChanged', onHighlightsChanged);
+
+    const sample = {
+      id: 'th-1',
+      pageIndex: 1,
+      bounds: [{ x: 10, y: 20, width: 100, height: 15 }],
+      color: 'rgba(255, 220, 0, 0.4)',
+    };
+
+    inst.setTransientHighlights([sample]);
+    expect(setHighlightsMock).toHaveBeenCalledWith([sample]);
+    expect(onHighlightsChanged).toHaveBeenCalledWith({ highlights: [sample] });
+
+    // Ensure getAnnotations() remains completely clean / unaffected
+    expect(inst.getAnnotations()).toEqual([]);
+
+    inst.addTransientHighlight({
+      id: 'th-2',
+      pageIndex: 2,
+      bounds: [{ x: 30, y: 40, width: 50, height: 12 }],
+    });
+    expect(currentHighlights).toHaveLength(2);
+
+    inst.clearTransientHighlights();
+    expect(currentHighlights).toEqual([]);
+    expect(inst.getAnnotations()).toEqual([]);
+  });
+
+  it('searchText performs text searching across the document', async () => {
+    const bus = new ViewerBus();
+    const inst = new WebViewerInstance(bus);
+    
+    const mockPage = {
+      getTextContent: vi.fn().mockResolvedValue({
+        items: [
+          { str: 'Hello World', transform: [10, 0, 0, 10, 50, 100], width: 80, height: 12 },
+        ],
+      }),
+    };
+    const mockPdfDoc = {
+      numPages: 1,
+      getPage: vi.fn().mockResolvedValue(mockPage),
+    };
+
+    inst._bind(
+      {
+        getAnnotations: () => [],
+        getRedactions: () => [],
+        getWatermark: () => undefined,
+        getPdfDocument: () => mockPdfDoc as any,
+        getDocumentUrl: () => undefined,
+        getFileName: () => undefined,
+        getCurrentUserName: () => undefined,
+        getCurrentPage: () => 1,
+        getPageCount: () => 1,
+        loadDocument: vi.fn(),
+      },
+      null
+    );
+
+    const results = await inst.searchText('Hello');
+    expect(results).toHaveLength(1);
+    expect(results[0].snippet).toContain('Hello World');
+    expect(results[0].pageIndex).toBe(1);
+    expect(results[0].bounds).toBeDefined();
+  });
 });

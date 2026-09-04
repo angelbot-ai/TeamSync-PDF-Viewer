@@ -15,7 +15,7 @@ import PageRenderer from './PageRenderer';
 import type { Annotation } from '../annotations/types';
 import { newAnnotationId } from '../annotations/ids';
 import type { AnnotationManager } from '../annotations/AnnotationManager';
-import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths } from '../core/types';
+import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths, TransientHighlight } from '../core/types';
 import { findRegexRedactions } from '../utils/findRegexRedactions';
 import { convertToUnrotated, convertToRotated, normalizeRotation } from '../utils/rotationUtils';
 import { useViewerBus, useBusEvent } from '../hooks/useViewerBus';
@@ -70,6 +70,8 @@ interface DocumentViewerProps {
   watermarkText?: string;
   enableAnnotations?: boolean;
   initialPage?: number;
+  page?: number;
+  transientHighlights?: TransientHighlight[];
   permissions?: SDKPermissions;
 }
 
@@ -77,7 +79,7 @@ export default function DocumentViewer({
   leftSidebarOpen, rightSidebarOpen, activeTab, annotationManager, initialDoc, loadNonce = 0, withCredentials = false, assets, sidebars = true,
   redactions, regexRedactions, scale, setScale, sidebarTab, setSidebarTab, onAnnotationsChange, onRedactionsChange,
   onDocumentLoaded, onLoadError, onFirstPageRendered, onPageChange,
-  pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations: _enableAnnotations, initialPage, permissions
+  pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations: _enableAnnotations, initialPage, page, transientHighlights, permissions
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bus = useViewerBus();
@@ -319,10 +321,34 @@ export default function DocumentViewer({
     return lo;
   }, [rowLayout]);
 
-  const scrollToPage = useCallback((p: number) => {
-    const i = rowIndexOfPage(p);
-    if (i >= 0 && containerRef.current) containerRef.current.scrollTop = rowLayout.tops[i];
-  }, [rowIndexOfPage, rowLayout]);
+  const scrollToPage = useCallback((p: number, options: { smooth?: boolean } = {}) => {
+    const clampedPage = pdfDoc ? Math.max(1, Math.min(p, pdfDoc.numPages)) : Math.max(1, p);
+    setPageNum(clampedPage);
+    const i = rowIndexOfPage(clampedPage);
+    if (i >= 0 && containerRef.current) {
+      if (options.smooth) {
+        containerRef.current.scrollTo({ top: rowLayout.tops[i], behavior: 'smooth' });
+      } else {
+        containerRef.current.scrollTop = rowLayout.tops[i];
+      }
+    }
+  }, [pdfDoc, rowIndexOfPage, rowLayout]);
+
+  useEffect(() => {
+    const handleGoToPage = (detail?: { page: number; smooth?: boolean }) => {
+      if (detail?.page) {
+        scrollToPage(detail.page, { smooth: detail.smooth ?? true });
+      }
+    };
+    const offGoToPage = bus.on<{ page: number; smooth?: boolean }>('action-go-to-page', (d) => handleGoToPage(d));
+    const windowGoToPage = (e: any) => handleGoToPage(e.detail);
+    window.addEventListener('action-go-to-page', windowGoToPage);
+
+    return () => {
+      offGoToPage();
+      window.removeEventListener('action-go-to-page', windowGoToPage);
+    };
+  }, [bus, scrollToPage]);
 
   const handleSearchResultClick = (result: SearchResult) => {
     setPageNum(result.pageIndex);
@@ -645,16 +671,22 @@ export default function DocumentViewer({
     if (pdfDoc) callbacksRef.current.onPageChange?.(pageNum, pdfDoc.numPages);
   }, [pageNum, pdfDoc]);
 
-  // Scroll to the initial page once per document, as soon as its row geometry is known.
+  // Scroll to the target page (page ?? initialPage) as soon as row geometry is known,
+  // and handle subsequent page/initialPage prop updates when citations are clicked.
   const initialScrollDoneRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
+  const lastTargetPageRef = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (!pdfDoc || !initialPage || initialPage <= 1) return;
-    if (initialScrollDoneRef.current === pdfDoc) return;
-    if (pageDims.length < Math.min(initialPage, pdfDoc.numPages)) return;
+    const target = page ?? initialPage;
+    if (!pdfDoc || !target) return;
+    if (initialScrollDoneRef.current === pdfDoc && lastTargetPageRef.current === target) return;
+    if (pageDims.length < Math.min(target, pdfDoc.numPages)) return;
+
+    const isInitial = initialScrollDoneRef.current !== pdfDoc;
     initialScrollDoneRef.current = pdfDoc;
-    const t = setTimeout(() => scrollToPage(initialPage), 50);
+    lastTargetPageRef.current = target;
+    const t = setTimeout(() => scrollToPage(target, { smooth: !isInitial }), 50);
     return () => clearTimeout(t);
-  }, [pdfDoc, initialPage, pageDims.length, scrollToPage]);
+  }, [pdfDoc, page, initialPage, pageDims.length, scrollToPage]);
 
   // Compute every page's base dimensions when the document or the UI rotation changes. The first
   // page is published immediately so layout can start; the rest stream in.
@@ -981,7 +1013,7 @@ export default function DocumentViewer({
           isOpen={leftSidebarOpen}
           pdfDoc={pdfDoc}
           pageNum={pageNum}
-          setPageNum={setPageNum}
+          setPageNum={(p) => scrollToPage(p)}
         />
       )}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, backgroundColor: 'var(--bg-color)', overflow: 'hidden' }}>
@@ -1419,6 +1451,7 @@ export default function DocumentViewer({
                         activeTab={activeTab}
                         activeTool={activeTool}
                         annotations={pageAnnotations}
+                        transientHighlights={transientHighlights?.filter(h => h.pageIndex === p) || []}
                         selectedAnnotationId={selectedAnnotationId}
                         activeSearchResult={activeSearchResult}
                         onMouseDown={handleMouseDown}
@@ -1732,7 +1765,7 @@ export default function DocumentViewer({
           textDiffs={textDiffs}
           currentDiffIndex={compareState.currentDiffIndex}
           onSelectDiff={(idx, item) => handleSelectDiff(idx, item)}
-          onJumpToPage={(p) => setPageNum(p)}
+          onJumpToPage={(p) => scrollToPage(p)}
         />
       )}
       </div>

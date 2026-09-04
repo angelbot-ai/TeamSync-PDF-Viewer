@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { type SearchResult } from '../hooks/usePdfSearch';
-import type { Redaction, WatermarkOptions } from '../core/types';
+import type { Redaction, WatermarkOptions, TransientHighlight } from '../core/types';
 import type { Annotation } from '../annotations/types';
 import { getRotationTransform, convertToRotatedRect, normalizeRotation } from '../utils/rotationUtils';
 
@@ -30,6 +30,7 @@ interface PageRendererProps {
   annotations: Annotation[];
   selectedAnnotationId: string | null;
   activeSearchResult: SearchResult | null;
+  transientHighlights?: TransientHighlight[];
 
   // Handlers
   onMouseDown: (e: React.MouseEvent<Element>, pageNum: number) => void;
@@ -49,7 +50,7 @@ interface PageRendererProps {
 function PageRendererComponent({
   pageNum, pdfDoc, scale, rotation, containerWidth: _containerWidth, containerHeight: _containerHeight,
   scrollTop: _scrollTop, scrollLeft: _scrollLeft, pageTop, pageLeft = 0, basePageWidth, basePageHeight,
-  activeTab, activeTool, annotations, selectedAnnotationId, activeSearchResult,
+  activeTab, activeTool, annotations, selectedAnnotationId, activeSearchResult, transientHighlights,
   onMouseDown, onMouseMove, onMouseUp, onAnnotationClick, onAnnotationMouseEnter, onClearSelection,
   watermark, watermarkText, redactions, onDiscardRedaction, onRendered
 }: PageRendererProps) {
@@ -332,24 +333,97 @@ function PageRendererComponent({
         }}
       />
 
-      {/* Custom Search Highlighting Layer */}
-      {activeSearchResult && activeSearchResult.pageIndex === pageNum && (
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 5 }}>
-          {activeSearchResult.bounds.map((b, idx) => (
-            <div key={idx} style={{
-              position: 'absolute',
-              left: `${b.x * scale}px`,
-              bottom: `${b.y * scale}px`,
-              width: `${b.width * scale}px`,
-              height: `${b.height * scale}px`,
-              backgroundColor: 'rgba(255, 255, 0, 0.4)',
-              border: '1px solid rgba(255, 255, 0, 0.8)',
-              borderRadius: '2px',
-              boxShadow: '0 0 4px rgba(255, 255, 0, 0.5)'
-            }} />
-          ))}
-        </div>
-      )}
+      {/* Transient Citation / Search Highlights Layer */}
+      {((activeSearchResult && activeSearchResult.pageIndex === pageNum) || (transientHighlights && transientHighlights.length > 0)) && (() => {
+        const unW = rotation % 180 === 0 ? basePageWidth : basePageHeight;
+        const unH = rotation % 180 === 0 ? basePageHeight : basePageWidth;
+
+        return (
+          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 6 }}>
+            <style>{`
+              @keyframes tspdf-transient-pulse {
+                0% {
+                  box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.75), 0 0 8px rgba(234, 179, 8, 0.4);
+                }
+                50% {
+                  box-shadow: 0 0 0 6px rgba(234, 179, 8, 0.25), 0 0 18px rgba(234, 179, 8, 0.7);
+                }
+                100% {
+                  box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.75), 0 0 8px rgba(234, 179, 8, 0.4);
+                }
+              }
+            `}</style>
+            {/* Active search result */}
+            {activeSearchResult && activeSearchResult.pageIndex === pageNum && activeSearchResult.bounds.map((b, idx) => {
+              const rot = convertToRotatedRect(b.x, unH - b.y - b.height, b.width, b.height, rotation, unW, unH);
+              return (
+                <div key={`search-${idx}`} style={{
+                  position: 'absolute',
+                  left: `${rot.x * scale}px`,
+                  top: `${rot.y * scale}px`,
+                  width: `${rot.width * scale}px`,
+                  height: `${rot.height * scale}px`,
+                  backgroundColor: 'rgba(255, 255, 0, 0.4)',
+                  border: '1px solid rgba(255, 255, 0, 0.8)',
+                  borderRadius: '2px',
+                  boxShadow: '0 0 4px rgba(255, 255, 0, 0.5)'
+                }} />
+              );
+            })}
+
+            {/* Transient Highlights (Citations, external highlights) */}
+            {transientHighlights && transientHighlights.filter(th => th.pageIndex === pageNum).map((th, thIdx) => (
+              <React.Fragment key={th.id || `th-${thIdx}`}>
+                {th.bounds.map((b, bIdx) => {
+                  const rot = convertToRotatedRect(b.x, unH - b.y - b.height, b.width, b.height, rotation, unW, unH);
+                  const bg = th.color || 'rgba(250, 204, 21, 0.45)';
+                  const border = th.borderColor || 'rgba(234, 179, 8, 0.85)';
+                  return (
+                    <div
+                      key={`th-box-${bIdx}`}
+                      style={{
+                        position: 'absolute',
+                        left: `${rot.x * scale}px`,
+                        top: `${rot.y * scale}px`,
+                        width: `${rot.width * scale}px`,
+                        height: `${rot.height * scale}px`,
+                        backgroundColor: bg,
+                        border: `1.5px solid ${border}`,
+                        borderRadius: '3px',
+                        animation: th.pulse !== false ? 'tspdf-transient-pulse 2s infinite ease-in-out' : 'none',
+                        boxShadow: '0 0 6px rgba(234, 179, 8, 0.4)',
+                        zIndex: 7
+                      }}
+                    >
+                      {th.tooltip && bIdx === 0 && (
+                        <div style={{
+                          position: 'absolute',
+                          bottom: '100%',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          marginBottom: '4px',
+                          backgroundColor: '#0f172a',
+                          color: '#ffffff',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          whiteSpace: 'nowrap',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                          zIndex: 10,
+                          pointerEvents: 'none'
+                        }}>
+                          {th.tooltip.length > 60 ? `${th.tooltip.slice(0, 60)}...` : th.tooltip}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </div>
+        );
+      })()}
       
       {/* SVG Annotation Overlay */}
       {(() => {
@@ -611,7 +685,8 @@ const PageRenderer = React.memo(PageRendererComponent, (prevProps, nextProps) =>
            prevProps.activeSearchResult === nextProps.activeSearchResult &&
            prevProps.watermarkText === nextProps.watermarkText &&
            prevProps.redactions === nextProps.redactions &&
-           prevProps.annotations === nextProps.annotations; // Assume reference equality for annotations is maintained
+           prevProps.annotations === nextProps.annotations &&
+           prevProps.transientHighlights === nextProps.transientHighlights; // Assume reference equality for annotations is maintained
   }
   
   // If scale > 4, tiling is active, so we MUST re-render if scroll position changes significantly
@@ -632,7 +707,8 @@ const PageRenderer = React.memo(PageRendererComponent, (prevProps, nextProps) =>
          prevProps.activeSearchResult === nextProps.activeSearchResult &&
          prevProps.watermarkText === nextProps.watermarkText &&
          prevProps.redactions === nextProps.redactions &&
-         prevProps.annotations === nextProps.annotations;
+         prevProps.annotations === nextProps.annotations &&
+         prevProps.transientHighlights === nextProps.transientHighlights;
 });
 
 export default PageRenderer;

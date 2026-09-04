@@ -47,4 +47,7 @@ export { annotationsToXfdf, annotationToXfdfFragment, parseXfdf, toPdfDate, from
 export type { XfdfExportOptions } from './annotations/xfdf';
 export { printPdfBytes } from './core/print';
 export type { PrintOptions } from './core/print';
+export { usePdfSearch, searchPdfText } from './hooks/usePdfSearch';
+export type { SearchResult, SearchBounds } from './hooks/usePdfSearch';
+export type { TransientHighlight } from './core/types';
 export * from './plugins/types';

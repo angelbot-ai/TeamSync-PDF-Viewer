@@ -9,7 +9,8 @@ import { buildPdfBytes, type ExportOptions } from './export';
 import type { Annotation } from '../annotations/types';
 import { AnnotationManager } from '../annotations/AnnotationManager';
 import { createGeometryResolver } from '../annotations/geometry';
-import type { Redaction, WatermarkOptions, ViewerEventMap, ViewerEventType } from './types';
+import type { Redaction, WatermarkOptions, ViewerEventMap, ViewerEventType, TransientHighlight } from './types';
+import { searchPdfText, type SearchResult } from '../hooks/usePdfSearch';
 
 /** Callbacks the React component installs so the instance can reach live state. */
 export interface ViewerBinding {
@@ -23,6 +24,9 @@ export interface ViewerBinding {
   getCurrentPage(): number;
   getPageCount(): number;
   loadDocument(url: string): void;
+  goToPage(pageNumber: number, options?: { smooth?: boolean }): void;
+  getTransientHighlights(): TransientHighlight[];
+  setTransientHighlights(highlights: TransientHighlight[]): void;
 }
 
 const noBinding = (): never => {
@@ -143,6 +147,99 @@ export class WebViewerInstance {
     return this.binding?.getPageCount() ?? 0;
   }
 
+  /** Navigate to a specific page number (1-based). */
+  goToPage(pageNumber: number, options: { smooth?: boolean } = {}): void {
+    const b = this.binding;
+    if (b) {
+      b.goToPage(pageNumber, options);
+    } else {
+      this.bus.emit('action-go-to-page', { page: pageNumber, smooth: options.smooth });
+    }
+  }
+
+  /** Set the current page number (1-based). Alias of goToPage. */
+  setCurrentPage(pageNumber: number): void {
+    this.goToPage(pageNumber);
+  }
+
+  /**
+   * Search the document for text matches, returning snippets and page bounding boxes.
+   */
+  async searchText(query: string): Promise<SearchResult[]> {
+    const pdf = this.getPdfDocument();
+    if (!pdf) return [];
+    const b = this.binding;
+    const redactions = b ? b.getRedactions() : [];
+    return searchPdfText(pdf, query, redactions);
+  }
+
+  // ---- transient highlights (citations, search matches) -----------------------------------
+
+  /** Get the current list of transient highlights. */
+  getTransientHighlights(): TransientHighlight[] {
+    return this.binding?.getTransientHighlights() ?? [];
+  }
+
+  /**
+   * Set transient visual highlights across one or more pages.
+   * These render directly on the PDF canvas but are NEVER saved into AnnotationManager
+   * or exported to XFDF.
+   */
+  setTransientHighlights(highlights: TransientHighlight[]): void {
+    const b = this.binding;
+    if (b) {
+      b.setTransientHighlights(highlights);
+    } else {
+      this.bus.emit('action-set-transient-highlights', { highlights });
+    }
+    this.bus.emit('transientHighlightsChanged', { highlights });
+  }
+
+  /** Add a single transient highlight to the current list. */
+  addTransientHighlight(highlight: TransientHighlight): void {
+    const current = this.getTransientHighlights();
+    this.setTransientHighlights([...current, highlight]);
+  }
+
+  /** Clear all active transient highlights. */
+  clearTransientHighlights(): void {
+    this.setTransientHighlights([]);
+  }
+
+  /**
+   * Search for a snippet or citation query, scroll to its page, and highlight it temporarily.
+   * Returns the matched SearchResult or null if not found.
+   */
+  async highlightSnippet(
+    query: string,
+    options: { pageIndex?: number; pulse?: boolean; scrollTo?: boolean; color?: string; tooltip?: string } = {}
+  ): Promise<SearchResult | null> {
+    const results = await this.searchText(query);
+    let match = results[0];
+    if (options.pageIndex) {
+      match = results.find(r => r.pageIndex === options.pageIndex) || match;
+    }
+    if (!match) return null;
+
+    const highlight: TransientHighlight = {
+      id: match.id,
+      pageIndex: match.pageIndex,
+      bounds: match.bounds,
+      color: options.color || 'rgba(250, 204, 21, 0.45)',
+      borderColor: 'rgba(234, 179, 8, 0.85)',
+      pulse: options.pulse !== false,
+      tooltip: options.tooltip || match.snippet,
+    };
+
+    this.setTransientHighlights([highlight]);
+
+    if (options.scrollTo !== false) {
+      this.goToPage(match.pageIndex, { smooth: true });
+    }
+
+    return match;
+  }
+
   // ---- annotations / export --------------------------------------------------------------
 
   getAnnotations(): Annotation[] {
@@ -189,6 +286,8 @@ export class WebViewerInstance {
   readonly UI = {
     /** Theming is not implemented; kept for API compatibility. */
     setTheme: (_theme: string) => {},
+    goToPage: (pageNumber: number) => this.goToPage(pageNumber),
+    setCurrentPageNumber: (pageNumber: number) => this.goToPage(pageNumber),
     openElements: (elements: string[]) => this.bus.emit('action-open-elements', { elements }),
     closeElements: (elements: string[]) => this.bus.emit('action-close-elements', { elements }),
     enableElements: (elements: string[]) => this.bus.emit('action-open-elements', { elements }),
@@ -233,6 +332,9 @@ export class WebViewerInstance {
         self.bus.off(event, callback),
       getCurrentPage: (): number => self.getCurrentPage(),
       getPageCount: (): number => self.getPageCount(),
+      goToPage: (pageNumber: number): void => self.goToPage(pageNumber),
+      setCurrentPage: (pageNumber: number): void => self.goToPage(pageNumber),
+      setCurrentPageNumber: (pageNumber: number): void => self.goToPage(pageNumber),
       getDocument: () => ({
         getFileData: (options?: ExportOptions) => self.getFileData(options),
       }),

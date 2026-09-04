@@ -20,7 +20,7 @@ import { ViewerBusContext } from '../core/busContext';
 import { WebViewerInstance } from '../core/ViewerInstance';
 import { AnnotationManager } from '../annotations/AnnotationManager';
 import { printPdfBytes } from '../core/print';
-import type { WebViewerOptions, SDKPermissions, Redaction } from '../core/types';
+import type { WebViewerOptions, SDKPermissions, Redaction, TransientHighlight } from '../core/types';
 import type { Annotation } from '../annotations/types';
 
 export interface TeamSyncViewerProps extends Omit<WebViewerOptions, 'path'> {
@@ -40,6 +40,8 @@ export interface TeamSyncViewerProps extends Omit<WebViewerOptions, 'path'> {
   onPasswordRequired?: (info: { url: string }) => void;
   onPageChange?: (pageNumber: number, numPages: number) => void;
   onAnnotationsChange?: (annotations: Annotation[]) => void;
+  /** Fires whenever transient highlights change. */
+  onTransientHighlightsChange?: (highlights: TransientHighlight[]) => void;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -52,7 +54,8 @@ const newId = (): string =>
 
 export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewerProps>(function TeamSyncViewer(props, ref) {
   const {
-    fileUrl, initialDoc, initialScale, initialPage, plugins, redactions, regexRedactions,
+    fileUrl, initialDoc, initialScale, initialPage, page, transientHighlights: propTransientHighlights,
+    plugins, redactions, regexRedactions,
     enableAnnotations, enableSign = false, watermark, permissions, enableRedactions,
     canAddAnnotations, canEditAnnotations, canDeleteAnnotations, readOnly = false,
     assets, withCredentials = false, toolbar = true, sidebars = true, leftPanelOpen = true,
@@ -145,6 +148,19 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   const signedBytesRef = useRef<Uint8Array | null>(null);
   const initialFitAppliedRef = useRef(false);
 
+  // Transient highlights (citations, search matches)
+  const [internalTransientHighlights, setInternalTransientHighlights] = useState<TransientHighlight[]>([]);
+  const transientHighlights = useMemo(() => {
+    return propTransientHighlights ?? internalTransientHighlights;
+  }, [propTransientHighlights, internalTransientHighlights]);
+  const transientHighlightsRef = useRef(transientHighlights);
+  transientHighlightsRef.current = transientHighlights;
+
+  const setTransientHighlights = useCallback((highlights: TransientHighlight[]) => {
+    setInternalTransientHighlights(highlights);
+    latest.current.onTransientHighlightsChange?.(highlights);
+  }, []);
+
   useEffect(() => {
     instance._bind(
       {
@@ -158,11 +174,16 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
         getCurrentPage: () => pageRef.current.current,
         getPageCount: () => pageRef.current.count,
         loadDocument,
+        goToPage: (pageNum: number, options?: { smooth?: boolean }) => {
+          bus.emit('action-go-to-page', { page: pageNum, smooth: options?.smooth });
+        },
+        getTransientHighlights: () => transientHighlightsRef.current,
+        setTransientHighlights,
       },
       rootRef.current
     );
     return () => instance._unbind();
-  }, [instance, annotationManager, loadDocument]);
+  }, [instance, annotationManager, loadDocument, bus, setTransientHighlights]);
 
   // onReady + autoFocus, exactly once.
   const readyRef = useRef(false);
@@ -252,13 +273,19 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
           }
         }
       ),
+      bus.on<{ highlights: TransientHighlight[] }>('action-set-transient-highlights', (d) => {
+        setTransientHighlights(d?.highlights ?? []);
+      }),
+      bus.on('action-clear-transient-highlights', () => {
+        setTransientHighlights([]);
+      }),
       // No external signing plugin in the loop: commit the placeholder to the page directly.
       bus.on<{ tempAnn: Annotation }>('action-commit-digital-signature', (d) =>
         bus.emit('action-commit-digital-signature-local', d)
       ),
     ];
     return () => offs.forEach((off) => off());
-  }, [bus, instance]);
+  }, [bus, instance, setTransientHighlights]);
 
   // ---- DocumentViewer callbacks ----------------------------------------------------------------
   const handleDocumentLoaded = useCallback(
@@ -436,6 +463,8 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             watermarkText={watermarkText}
             enableAnnotations={annotationsEnabled}
             initialPage={initialPage}
+            page={page}
+            transientHighlights={transientHighlights}
             permissions={effectivePermissions}
           />
         </div>

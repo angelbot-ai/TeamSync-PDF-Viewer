@@ -9,6 +9,29 @@ import type { PdfAssetPaths } from './pdfAssets';
 
 export type { PdfAssetPaths };
 
+export interface SearchBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface TransientHighlight {
+  id?: string;
+  /** 1-based page number */
+  pageIndex: number;
+  /** Bounding boxes on the page in PDF coordinate points */
+  bounds: SearchBounds[];
+  /** Background fill color (default 'rgba(250, 204, 21, 0.4)') */
+  color?: string;
+  /** Border color (default 'rgba(234, 179, 8, 0.8)') */
+  borderColor?: string;
+  /** Whether to animate with a pulsing focus ring */
+  pulse?: boolean;
+  /** Optional tooltip text displayed above the highlight */
+  tooltip?: string;
+}
+
 export interface Redaction {
   id?: string;
   /** 1-based page number */
@@ -58,6 +81,10 @@ export interface WebViewerOptions {
   initialScale?: InitialScale;
   /** 1-based page to scroll to after load. */
   initialPage?: number;
+  /** Current 1-based page to display. Changes navigate to the given page. */
+  page?: number;
+  /** Transient visual highlights that render on pages without polluting AnnotationManager. */
+  transientHighlights?: TransientHighlight[];
   plugins?: ViewerPlugin[];
   redactions?: Redaction[];
   regexRedactions?: RegExp[];
@@ -97,6 +124,7 @@ export interface ViewerEventMap {
   annotationsChanged: { annotations: Annotation[] };
   /** Granular add / modify / delete (with the `imported` flag) from the AnnotationManager. */
   annotationChanged: AnnotationChangedEvent;
+  transientHighlightsChanged: { highlights: TransientHighlight[] };
   toolChanged: { tool: string | null };
   destroy: Record<string, never>;
 }

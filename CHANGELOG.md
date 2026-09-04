@@ -2,6 +2,14 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.3.3] — 2026-09-04
+
+### Fixed
+- **Initial Programmatic Fit Scroll Compensation**: Fixed view jump on initial fit where scaling from seed 1.0 to ~2.27 at `scrollTop = 0` triggered viewport center compensation and hid page 1's top. Added `calculateScrollCompensation` with programmatic fit bypass and top-of-document boundary guard.
+- **Capped Canvas Output Scale**: Capped `outputScale = Math.min(window.devicePixelRatio || 1, 2)` in `PageRenderer` and `LeftSidebar`, reducing GPU canvas raster memory and repaint strain on 3x+ Retina and mobile displays by over 55% while preserving 2x sharpness.
+- **Scroll Shaking & Up-Front Dimension Reservation**: Replaced asynchronous sequential dimension streaming with up-front dimension measurement and space pre-allocation (`estimatePageDimensions`). Full scroll container height and row tops are reserved on the first frame, eliminating layout recalculations and page shifting/shaking during scrolling.
+- **Exported Layout & Zoom Utilities**: Exported `calculateScrollCompensation`, `estimatePageDimensions`, `computeRowLayout`, `DEFAULT_FALLBACK_DIMS`, and related types from the package root.
+
 ## [1.3.2] — 2026-09-04
 
 ### Fixed

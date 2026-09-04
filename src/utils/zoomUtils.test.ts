@@ -4,6 +4,7 @@ import {
   calculateNextZoomOut,
   clampScale,
   calculateSafeRenderScale,
+  calculateScrollCompensation,
   MAX_SCALE,
   MIN_SCALE,
   MAX_CANVAS_DIM,
@@ -101,6 +102,74 @@ describe('zoomUtils', () => {
       const clampedH = 792 * renderScale;
       expect(clampedW).toBeLessThanOrEqual(mobileMaxDim);
       expect(clampedH).toBeLessThanOrEqual(mobileMaxDim);
+    });
+  });
+
+  describe('calculateScrollCompensation', () => {
+    it('prevents view jumping on initial programmatic fit from 1.0 to 2.27 at top of document', () => {
+      // Recreates the exact user scenario:
+      // Seed scale: 1.0, newScale: 2.27, container: 1000x800, starting at top (scrollTop: 0)
+      const res = calculateScrollCompensation({
+        prevScale: 1.0,
+        newScale: 2.27,
+        containerWidth: 1000,
+        containerHeight: 800,
+        currentScrollLeft: 0,
+        currentScrollTop: 0,
+        basePageWidth: 612,
+        isProgrammatic: true,
+      });
+      // MUST NOT be pushed down to 508px!
+      expect(res.scrollTop).toBe(0);
+      expect(res.scrollLeft).toBe(0);
+    });
+
+    it('prevents view jumping on scale change when user is at top of document (scrollTop <= 0) without focus point', () => {
+      const res = calculateScrollCompensation({
+        prevScale: 1.0,
+        newScale: 2.27,
+        containerWidth: 1000,
+        containerHeight: 800,
+        currentScrollLeft: 0,
+        currentScrollTop: 0,
+        basePageWidth: 612,
+        focusPoint: null,
+      });
+      expect(res.scrollTop).toBe(0);
+      expect(res.scrollLeft).toBe(0);
+    });
+
+    it('centers zoom around viewport center when user is scrolled down into document with toolbar zoom', () => {
+      // User is reading page at scrollTop = 1000
+      const res = calculateScrollCompensation({
+        prevScale: 1.0,
+        newScale: 1.5,
+        containerWidth: 1000,
+        containerHeight: 800,
+        currentScrollLeft: 0,
+        currentScrollTop: 1000,
+        basePageWidth: 612,
+        focusPoint: null,
+      });
+      // y = vy + scrollTop = 400 + 1000 = 1400.
+      // newScrollTop = 1400 * 1.5 - 400 = 2100 - 400 = 1700.
+      expect(res.scrollTop).toBe(1700);
+    });
+
+    it('centers zoom around explicit focus point during wheel zoom', () => {
+      const res = calculateScrollCompensation({
+        prevScale: 1.0,
+        newScale: 2.0,
+        containerWidth: 1000,
+        containerHeight: 800,
+        currentScrollLeft: 0,
+        currentScrollTop: 500,
+        basePageWidth: 612,
+        focusPoint: { vx: 200, vy: 100 },
+      });
+      // y = 100 + 500 = 600.
+      // newScrollTop = 600 * 2.0 - 100 = 1200 - 100 = 1100.
+      expect(res.scrollTop).toBe(1100);
     });
   });
 });

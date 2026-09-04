@@ -68,3 +68,77 @@ export function calculateSafeRenderScale(
   }
   return renderScale;
 }
+
+export interface ScrollCompensationParams {
+  prevScale: number;
+  newScale: number;
+  containerWidth: number;
+  containerHeight: number;
+  currentScrollLeft: number;
+  currentScrollTop: number;
+  basePageWidth: number;
+  focusPoint?: { vx: number | null; vy: number | null } | null;
+  isProgrammatic?: boolean;
+}
+
+export interface ScrollPosition {
+  scrollLeft: number;
+  scrollTop: number;
+}
+
+/**
+ * Calculates compensating scroll offsets during scale changes.
+ * Prevents view jumping or pushing page 1 down on initial fit or programmatic fit.
+ */
+export function calculateScrollCompensation(params: ScrollCompensationParams): ScrollPosition {
+  const {
+    prevScale,
+    newScale,
+    containerWidth: cW,
+    containerHeight: cH,
+    currentScrollLeft,
+    currentScrollTop,
+    basePageWidth: baseW,
+    focusPoint,
+    isProgrammatic = false,
+  } = params;
+
+  // On programmatic fit (e.g. fit-width, fit-page, initial document fit),
+  // do not run user-driven center-zoom compensation.
+  if (isProgrammatic) {
+    return {
+      scrollLeft: 0,
+      scrollTop: currentScrollTop <= 1 ? 0 : currentScrollTop,
+    };
+  }
+
+  const hasFocusPoint = focusPoint?.vx != null && focusPoint?.vy != null;
+
+  // If user is at the top of the document (scrollTop <= 0) and no explicit focus point was set:
+  // Keep the top of the page pinned to the top rather than pushing it down into negative space.
+  if (!hasFocusPoint && currentScrollTop <= 0) {
+    return {
+      scrollLeft: 0,
+      scrollTop: 0,
+    };
+  }
+
+  const vx = hasFocusPoint ? focusPoint!.vx! : cW / 2;
+  const vy = hasFocusPoint ? focusPoint!.vy! : cH / 2;
+
+  const x = vx + currentScrollLeft;
+  const y = vy + currentScrollTop;
+
+  const pLeft1 = Math.max(0, cW / 2 - (baseW * prevScale) / 2);
+  const pLeft2 = Math.max(0, cW / 2 - (baseW * newScale) / 2);
+
+  const pageX = x - pLeft1;
+  const newPageX = pageX * (newScale / prevScale);
+  const newX = pLeft2 + newPageX;
+
+  return {
+    scrollLeft: Math.max(0, newX - vx),
+    scrollTop: Math.max(0, (y * (newScale / prevScale)) - vy),
+  };
+}
+

@@ -50,5 +50,6 @@ export type { PrintOptions } from './core/print';
 export { usePdfSearch, searchPdfText } from './hooks/usePdfSearch';
 export type { SearchResult, SearchBounds } from './hooks/usePdfSearch';
 export type { TransientHighlight } from './core/types';
-export { MIN_SCALE, MAX_SCALE, clampScale, calculateNextZoomIn, calculateNextZoomOut } from './utils/zoomUtils';
+export { MIN_SCALE, MAX_SCALE, clampScale, calculateNextZoomIn, calculateNextZoomOut, calculateScrollCompensation } from './utils/zoomUtils';
+export type { ScrollCompensationParams, ScrollPosition } from './utils/zoomUtils';
 export * from './plugins/types';

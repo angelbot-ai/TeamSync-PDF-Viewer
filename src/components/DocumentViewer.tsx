@@ -18,7 +18,7 @@ import type { AnnotationManager } from '../annotations/AnnotationManager';
 import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths, TransientHighlight } from '../core/types';
 import { findRegexRedactions } from '../utils/findRegexRedactions';
 import { convertToUnrotated, convertToRotated, normalizeRotation } from '../utils/rotationUtils';
-import { clampScale } from '../utils/zoomUtils';
+import { clampScale, calculateScrollCompensation } from '../utils/zoomUtils';
 import { useViewerBus, useBusEvent } from '../hooks/useViewerBus';
 import { assertWorkerConfigured, configurePdfAssets, getDocumentParams } from '../core/pdfAssets';
 import SideBySideViewer from './SideBySideViewer';
@@ -443,8 +443,14 @@ export default function DocumentViewer({
 
   const zoomFocusRef = useRef<{vx: number | null, vy: number | null}>({ vx: null, vy: null });
   const prevScaleRef = useRef(scale);
+  const isProgrammaticScaleRef = useRef(false);
+  const initialFitDoneRef = useRef(false);
 
-  // Unified scroll offset maintenance for any scale change (wheel or toolbar)
+  useEffect(() => {
+    initialFitDoneRef.current = false;
+  }, [pdfDoc]);
+
+  // Unified scroll offset maintenance for user-driven scale changes (wheel or toolbar)
   useEffect(() => {
     if (prevScaleRef.current !== scale) {
       const s = prevScaleRef.current;
@@ -452,31 +458,35 @@ export default function DocumentViewer({
       prevScaleRef.current = scale;
       
       const container = containerRef.current;
-      if (container) {
-        const cW = container.clientWidth;
-        const cH = container.clientHeight;
-        
-        let vx = cW / 2;
-        let vy = cH / 2;
-        if (zoomFocusRef.current.vx !== null && zoomFocusRef.current.vy !== null) {
-          vx = zoomFocusRef.current.vx;
-          vy = zoomFocusRef.current.vy;
-          zoomFocusRef.current = { vx: null, vy: null };
+      if (!container) return;
+
+      const isProgrammatic = isProgrammaticScaleRef.current || !initialFitDoneRef.current || initialScrollDoneRef.current !== pdfDoc;
+      initialFitDoneRef.current = true;
+      isProgrammaticScaleRef.current = false;
+
+      const newPos = calculateScrollCompensation({
+        prevScale: s,
+        newScale,
+        containerWidth: container.clientWidth,
+        containerHeight: container.clientHeight,
+        currentScrollLeft: container.scrollLeft,
+        currentScrollTop: container.scrollTop,
+        basePageWidth: dimsFor(pageNum).width,
+        focusPoint: zoomFocusRef.current,
+        isProgrammatic,
+      });
+
+      zoomFocusRef.current = { vx: null, vy: null };
+
+      if (isProgrammatic && pageNum > 1 && pageTransition === 'continuous') {
+        const rIdx = rowIndexOfPage(pageNum);
+        if (rIdx >= 0) {
+          container.scrollTop = rowLayout.tops[rIdx] ?? 0;
         }
-        
-        const x = vx + container.scrollLeft;
-        const y = vy + container.scrollTop;
-        
-        const baseW = dimsFor(pageNum).width;
-        const pLeft1 = Math.max(0, cW / 2 - (baseW * s) / 2);
-        const pLeft2 = Math.max(0, cW / 2 - (baseW * newScale) / 2);
-        
-        const pageX = x - pLeft1;
-        const newPageX = pageX * (newScale / s);
-        const newX = pLeft2 + newPageX;
-        
-        container.scrollLeft = newX - vx;
-        container.scrollTop = (y * (newScale / s)) - vy;
+        container.scrollLeft = 0;
+      } else {
+        container.scrollLeft = newPos.scrollLeft;
+        container.scrollTop = newPos.scrollTop;
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -763,9 +773,13 @@ export default function DocumentViewer({
     if (!containerRef.current || !dims.width) return;
     const availableWidth = containerRef.current.clientWidth - 48;
     if (availableWidth > 0 && dims.width > 0) {
-      const newScale = availableWidth / dims.width;
-      const clampedScale = Math.max(0.1, Math.min(32, parseFloat(newScale.toFixed(2))));
-      setScale(clampedScale);
+      const newScale = clampScale(availableWidth / dims.width);
+      isProgrammaticScaleRef.current = true;
+      if (containerRef.current && (pageNum === 1 || containerRef.current.scrollTop <= 1)) {
+        containerRef.current.scrollTop = 0;
+        containerRef.current.scrollLeft = 0;
+      }
+      setScale(newScale);
     }
   }, [dimsFor, pageNum, setScale]);
 
@@ -778,9 +792,13 @@ export default function DocumentViewer({
     if (availableWidth > 0 && availableHeight > 0 && dims.width > 0 && dims.height > 0) {
       const scaleX = availableWidth / dims.width;
       const scaleY = availableHeight / dims.height;
-      const newScale = Math.min(scaleX, scaleY);
-      const clampedScale = Math.max(0.1, Math.min(32, parseFloat(newScale.toFixed(2))));
-      setScale(clampedScale);
+      const newScale = clampScale(Math.min(scaleX, scaleY));
+      isProgrammaticScaleRef.current = true;
+      if (containerRef.current && (pageNum === 1 || containerRef.current.scrollTop <= 1)) {
+        containerRef.current.scrollTop = 0;
+        containerRef.current.scrollLeft = 0;
+      }
+      setScale(newScale);
     }
   }, [dimsFor, pageNum, setScale]);
 

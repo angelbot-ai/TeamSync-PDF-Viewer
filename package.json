@@ -1,6 +1,6 @@
 {
   "name": "teamsync-pdf-viewer",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "license": "CPAL-1.0",
   "description": "TeamSync PDF Viewer SDK — client-side PDF viewing, annotation, search, redaction and watermarking for React.",
   "type": "module",

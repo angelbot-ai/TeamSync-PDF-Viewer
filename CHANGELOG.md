@@ -2,6 +2,14 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.3.1] — 2026-09-04
+
+### Fixed
+- **Settings & Keyboard Shortcuts Customization**: Fixed settings search bar filtering across all shortcuts and general settings. Resolved shortcut recording and key normalization for US keyboard layouts (such as `Meta+Shift+=` and `Meta+Shift+-`), enabled `Escape` cancellation, and added a "Reset to Defaults" option.
+- **Cross-Component Shortcut Synchronization**: Replaced local hook state with a shared reactive pub/sub store backed by `window.localStorage`, ensuring shortcut customizations sync immediately across all active viewer instances.
+- **Viewer-Side Shortcut Execution**: Enabled full shortcut action handling in the viewer, adding support for `SEARCH` (`Meta+F`), `FILE_PICKER` (`Meta+O`), `COPY` (`Meta+C`), and `PASTE` (`Meta+V`) alongside existing rotation and undo/redo shortcuts. Added an "Open PDF..." action to the header menu and window-level shortcut handling.
+- **Sidebar Search Bar**: Enabled immediate search on `Enter` keypress, immediate query and highlight clearing, auto-focus when opening the search tab, and corrected box-sizing to eliminate container overflow.
+
 ## [1.3.0] — 2026-09-04
 
 ### Added

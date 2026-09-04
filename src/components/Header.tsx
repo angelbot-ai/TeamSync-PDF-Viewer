@@ -263,7 +263,7 @@ export default function Header({
                   <MenuOption icon={<MoveHorizontal size={16} />} label="Fit To Width" onClick={() => { bus.emit('action-fit-to-width'); setIsZoomMenuOpen(false); }} />
                   <MenuOption icon={<Maximize2 size={16} />} label="Fit To Page" onClick={() => { bus.emit('action-fit-to-page'); setIsZoomMenuOpen(false); }} />
                   <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '4px 0' }} />
-                  {[0.1, 0.25, 0.5, 1, 1.25, 1.5, 2, 4, 8, 16, 32, 64].map(zoomLevel => (
+                  {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 5, 8, 10].map(zoomLevel => (
                     <div 
                       key={zoomLevel}
                       onClick={() => { if(onZoomSet) onZoomSet(zoomLevel); setIsZoomMenuOpen(false); }}
@@ -282,8 +282,18 @@ export default function Header({
                 </div>
               )}
             </div>
-            <IconButton icon={<MinusCircle size={18} color="var(--text-muted)" />} title="Zoom Out" onClick={onZoomOut} />
-            <IconButton icon={<PlusCircle size={18} color="var(--text-muted)" />} title="Zoom In" onClick={onZoomIn} />
+            <IconButton 
+              icon={<MinusCircle size={18} color={scale <= 0.1 ? 'var(--border-color)' : 'var(--text-muted)'} />} 
+              title="Zoom Out" 
+              onClick={onZoomOut} 
+              disabled={scale <= 0.1}
+            />
+            <IconButton 
+              icon={<PlusCircle size={18} color={scale >= 10.0 ? 'var(--border-color)' : 'var(--text-muted)'} />} 
+              title="Zoom In" 
+              onClick={onZoomIn} 
+              disabled={scale >= 10.0}
+            />
           </div>
           <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border-color)', margin: '0 4px' }} />
           <IconButton icon={<Hand size={18} />} title="Pan Tool" active={headerTool === 'pan'} onClick={() => bus.emit('action-set-tool', { tool: 'pan' })} />
@@ -373,11 +383,12 @@ export default function Header({
   );
 }
 
-function IconButton({ icon, onClick, active = false, title }: { icon: React.ReactNode, onClick?: () => void, active?: boolean, title?: string }) {
+function IconButton({ icon, onClick, active = false, disabled = false, title }: { icon: React.ReactNode, onClick?: () => void, active?: boolean, disabled?: boolean, title?: string }) {
   return (
     <button 
       title={title}
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -388,14 +399,15 @@ function IconButton({ icon, onClick, active = false, title }: { icon: React.Reac
         borderRadius: '4px',
         backgroundColor: active ? '#e6f0fa' : 'transparent',
         color: active ? 'var(--primary)' : 'inherit',
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
         outline: 'none',
       }}
       onMouseOver={(e) => {
-        if (!active) e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
+        if (!active && !disabled) e.currentTarget.style.backgroundColor = 'var(--hover-bg)';
       }}
       onMouseOut={(e) => {
-        if (!active) e.currentTarget.style.backgroundColor = 'transparent';
+        if (!active && !disabled) e.currentTarget.style.backgroundColor = 'transparent';
       }}
     >
       {icon}

@@ -18,6 +18,7 @@ import type { AnnotationManager } from '../annotations/AnnotationManager';
 import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths, TransientHighlight } from '../core/types';
 import { findRegexRedactions } from '../utils/findRegexRedactions';
 import { convertToUnrotated, convertToRotated, normalizeRotation } from '../utils/rotationUtils';
+import { clampScale } from '../utils/zoomUtils';
 import { useViewerBus, useBusEvent } from '../hooks/useViewerBus';
 import { assertWorkerConfigured, configurePdfAssets, getDocumentParams } from '../core/pdfAssets';
 import SideBySideViewer from './SideBySideViewer';
@@ -484,7 +485,6 @@ export default function DocumentViewer({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    if (!container) return;
 
     const handleWheel = (e: WheelEvent) => {
       if (e.metaKey || e.ctrlKey) {
@@ -497,14 +497,14 @@ export default function DocumentViewer({
         const multiplier = Math.exp(-e.deltaY * 0.002);
         
         setScale(s => {
-          const newScale = Math.min(Math.max(s * multiplier, 0.5), 64);
-          if (newScale !== s) {
+          const roundedScale = clampScale(s * multiplier);
+          if (roundedScale !== s) {
             zoomFocusRef.current = { 
               vx: clientX - rect.left, 
               vy: clientY - rect.top 
             };
           }
-          return newScale;
+          return roundedScale;
         });
       }
     };
@@ -1406,10 +1406,11 @@ export default function DocumentViewer({
                 
                 // Virtualization filtering (only for continuous)
                 if (isContinuous && containerRef.current) {
-                  // Render 5 rows before and 8 rows after the currently visible row.
-                  // By relying on visibleRowRef, we decouple virtualization from the 
-                  // transient async lag of scrollPos during rapid scale changes.
-                  if (rIndex < visibleRowRef.current - 5 || rIndex > visibleRowRef.current + 8) {
+                  // Scale-aware virtualization buffer: at high zoom levels each page is enormous,
+                  // so a smaller row buffer prevents mounting excessive gigantic canvas elements in DOM.
+                  const bufferBefore = scale >= 4 ? 1 : scale >= 2 ? 2 : 4;
+                  const bufferAfter = scale >= 4 ? 1 : scale >= 2 ? 2 : 5;
+                  if (rIndex < visibleRowRef.current - bufferBefore || rIndex > visibleRowRef.current + bufferAfter) {
                     return null;
                   }
                 }

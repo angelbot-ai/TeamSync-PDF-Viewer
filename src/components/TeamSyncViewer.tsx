@@ -23,6 +23,7 @@ import { printPdfBytes } from '../core/print';
 import { useShortcuts, matchShortcut } from '../hooks/useShortcuts';
 import type { WebViewerOptions, SDKPermissions, Redaction, TransientHighlight } from '../core/types';
 import type { Annotation } from '../annotations/types';
+import { calculateNextZoomIn, calculateNextZoomOut, clampScale, MIN_SCALE, MAX_SCALE } from '../utils/zoomUtils';
 
 export interface TeamSyncViewerProps extends Omit<WebViewerOptions, 'path'> {
   /** URL of the PDF to display. Alias of `initialDoc`; `fileUrl` wins when both are set. */
@@ -46,9 +47,6 @@ export interface TeamSyncViewerProps extends Omit<WebViewerOptions, 'path'> {
   className?: string;
   style?: React.CSSProperties;
 }
-
-const MIN_SCALE = 0.1;
-const MAX_SCALE = 64;
 
 const newId = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -489,9 +487,9 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             setRightSidebarOpen={setRightSidebarOpen}
             sidebarTab={sidebarTab}
             scale={scale}
-            onZoomIn={() => setScale((s) => Math.min(s + 0.25, MAX_SCALE))}
-            onZoomOut={() => setScale((s) => Math.max(s - 0.25, MIN_SCALE))}
-            onZoomSet={(s) => setScale(Math.min(MAX_SCALE, Math.max(MIN_SCALE, s)))}
+            onZoomIn={() => setScale((s) => calculateNextZoomIn(s))}
+            onZoomOut={() => setScale((s) => calculateNextZoomOut(s))}
+            onZoomSet={(s) => setScale(clampScale(s))}
             onOpenFile={openFilePicker}
             onDownload={() => bus.emit('action-download')}
             onFullScreen={toggleFullscreen}

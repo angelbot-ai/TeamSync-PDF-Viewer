@@ -7,6 +7,7 @@ import { type SearchResult } from '../hooks/usePdfSearch';
 import type { Redaction, WatermarkOptions, TransientHighlight } from '../core/types';
 import type { Annotation } from '../annotations/types';
 import { getRotationTransform, convertToRotatedRect, normalizeRotation } from '../utils/rotationUtils';
+import { calculateSafeRenderScale } from '../utils/zoomUtils';
 
 export type { Annotation };
 
@@ -60,10 +61,15 @@ function PageRendererComponent({
   const textLayerRef = useRef<HTMLDivElement>(null);
   const renderTaskRef = useRef<any>(null);
   const pageProxyRef = useRef<pdfjsLib.PDFPageProxy | null>(null);
+  const hasRenderedOnceRef = useRef(false);
   const [textContent, setTextContent] = useState<any>(null);
 
   const scaledWidth = basePageWidth * scale;
   const scaledHeight = basePageHeight * scale;
+
+  useEffect(() => {
+    hasRenderedOnceRef.current = false;
+  }, [pdfDoc, pageNum]);
 
   // Intersection logic for canvas rendering (tile rendering to save memory)
   useEffect(() => {
@@ -73,29 +79,49 @@ function PageRendererComponent({
     const renderCanvas = async () => {
       if (!canvasRef.current || !pdfDoc) return;
       if (renderTaskRef.current) {
-        renderTaskRef.current.cancel();
+        try { renderTaskRef.current.cancel(); } catch {}
+        renderTaskRef.current = null;
       }
 
       try {
         const page = await pdfDoc.getPage(pageNum);
-        if (isCancelled) return;
+        if (isCancelled) {
+          try { page.cleanup?.(); } catch {}
+          return;
+        }
+        pageProxyRef.current = page;
 
-        let outputScale = window.devicePixelRatio || 1;
-        // Compose UI rotation with the page's intrinsic /Rotate (pdf.js replaces it otherwise).
-        const viewport = page.getViewport({ scale: scale * outputScale, rotation: normalizeRotation(page.rotate + rotation) });
+        const outputScale = window.devicePixelRatio || 1;
+        const normalizedRot = normalizeRotation(page.rotate + rotation);
+        const unscaledViewport = page.getViewport({ scale: 1.0, rotation: normalizedRot });
+
+        const renderScale = calculateSafeRenderScale(
+          scale,
+          outputScale,
+          unscaledViewport.width,
+          unscaledViewport.height
+        );
+
+        const viewport = page.getViewport({ scale: renderScale, rotation: normalizedRot });
 
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = Math.floor(viewport.width);
         tempCanvas.height = Math.floor(viewport.height);
         const ctx = tempCanvas.getContext('2d');
-        if (!ctx || isCancelled) return;
+        if (!ctx || isCancelled) {
+          tempCanvas.width = 0;
+          tempCanvas.height = 0;
+          return;
+        }
 
-        renderTaskRef.current = page.render({
+        const renderTask = page.render({
           canvasContext: ctx,
           canvas: tempCanvas,
           viewport: viewport
         });
-        await renderTaskRef.current.promise;
+        renderTaskRef.current = renderTask;
+        await renderTask.promise;
+        renderTaskRef.current = null;
         
         // --- Pixel Masking (Redactions) ---
         if (redactions && redactions.length > 0) {
@@ -107,10 +133,10 @@ function PageRendererComponent({
           for (const redaction of redactions) {
             if (redaction.pageIndex === pageNum) {
               const rotRect = convertToRotatedRect(redaction.x, redaction.y, redaction.width, redaction.height, rotation, unW, unH);
-              const vX = rotRect.x * scale * outputScale;
-              const vY = rotRect.y * scale * outputScale;
-              const vW = rotRect.width * scale * outputScale;
-              const vH = rotRect.height * scale * outputScale;
+              const vX = rotRect.x * renderScale;
+              const vY = rotRect.y * renderScale;
+              const vW = rotRect.width * renderScale;
+              const vH = rotRect.height * renderScale;
               
               if (redaction.status === 'applied' || redaction.status === undefined) {
                 ctx.fillStyle = '#000000';
@@ -118,7 +144,7 @@ function PageRendererComponent({
               } else {
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
                 ctx.fillRect(Math.floor(vX), Math.floor(vY), Math.ceil(vW), Math.ceil(vH));
-                ctx.lineWidth = 2 * outputScale;
+                ctx.lineWidth = Math.max(1, 2 * (renderScale / (scale || 1)));
                 ctx.strokeStyle = '#dc2626';
                 ctx.strokeRect(Math.floor(vX), Math.floor(vY), Math.ceil(vW), Math.ceil(vH));
               }
@@ -136,7 +162,7 @@ function PageRendererComponent({
           const opacity = wm.opacity ?? 0.15;
           const mode = wm.mode ?? 'tiled';
           const defaultSize = mode === 'single' ? 48 : 18;
-          const size = (wm.size ?? defaultSize) * scale * outputScale;
+          const size = (wm.size ?? defaultSize) * renderScale;
           const text = wm.text;
           
           ctx.fillStyle = wm.color ?? '#000000';
@@ -153,8 +179,8 @@ function PageRendererComponent({
             ctx.rotate(-Math.PI / 4);
             ctx.fillText(text, 0, 0);
           } else {
-            const stepX = size * text.length * 0.8 + 100 * scale * outputScale;
-            const stepY = 180 * scale * outputScale;
+            const stepX = size * text.length * 0.8 + 100 * renderScale;
+            const stepY = 180 * renderScale;
             const diag = Math.sqrt(canvasW * canvasW + canvasH * canvasH);
             
             ctx.translate(canvasW / 2, canvasH / 2);
@@ -179,33 +205,43 @@ function PageRendererComponent({
           if (destCtx) {
             destCtx.drawImage(tempCanvas, 0, 0);
           }
+          hasRenderedOnceRef.current = true;
           onRenderedRef.current?.(pageNum);
         }
+        // Immediately release offscreen canvas GPU texture memory
+        tempCanvas.width = 0;
+        tempCanvas.height = 0;
       } catch (err: any) {
         if (err?.name !== 'RenderingCancelledException') {
           console.error(`Page ${pageNum} render failed:`, err);
         }
+      } finally {
+        if (pageProxyRef.current) {
+          try { pageProxyRef.current.cleanup?.(); } catch {}
+          pageProxyRef.current = null;
+        }
       }
     };
 
-    // 60ms debounce allows live zoom gestures to scale smoothly at 60 FPS via GPU CSS
+    // 0ms on first render, 150ms debounce on subsequent scale changes to allow
+    // rapid zoom clicks to scale smoothly at 60 FPS via GPU CSS transforms
     // while PDF.js vector rendering fires once the zoom motion settles.
-    timer = setTimeout(renderCanvas, 60);
-
-    const currentRenderTask = renderTaskRef.current;
-    const currentPageProxy = pageProxyRef.current;
+    const delay = hasRenderedOnceRef.current ? 150 : 0;
+    timer = setTimeout(renderCanvas, delay);
 
     return () => {
       isCancelled = true;
       if (timer) clearTimeout(timer);
-      if (currentRenderTask) {
-        try { currentRenderTask.cancel(); } catch {}
+      if (renderTaskRef.current) {
+        try { renderTaskRef.current.cancel(); } catch {}
+        renderTaskRef.current = null;
       }
-      if (currentPageProxy) {
-        try { currentPageProxy.cleanup(); } catch {}
+      if (pageProxyRef.current) {
+        try { pageProxyRef.current.cleanup?.(); } catch {}
+        pageProxyRef.current = null;
       }
     };
-  }, [pageNum, pdfDoc, scale, rotation, scaledWidth, scaledHeight, watermark, watermarkText, redactions]);
+  }, [pageNum, pdfDoc, scale, rotation, basePageWidth, basePageHeight, watermark, watermarkText, redactions]);
 
   // Load TextContent independently
   useEffect(() => {
@@ -669,42 +705,19 @@ function PageRendererComponent({
 }
 
 const PageRenderer = React.memo(PageRendererComponent, (prevProps, nextProps) => {
-  // If scale is <= 4, tiling is disabled. We can completely ignore scrollTop and scrollLeft changes!
-  if (nextProps.scale <= 4 && prevProps.scale <= 4) {
-    // Check all other props for equality
-    return prevProps.pageNum === nextProps.pageNum &&
-           prevProps.scale === nextProps.scale &&
-           prevProps.rotation === nextProps.rotation &&
-           prevProps.basePageWidth === nextProps.basePageWidth &&
-           prevProps.basePageHeight === nextProps.basePageHeight &&
-           prevProps.containerWidth === nextProps.containerWidth &&
-           prevProps.containerHeight === nextProps.containerHeight &&
-           prevProps.activeTab === nextProps.activeTab &&
-           prevProps.activeTool === nextProps.activeTool &&
-           prevProps.selectedAnnotationId === nextProps.selectedAnnotationId &&
-           prevProps.activeSearchResult === nextProps.activeSearchResult &&
-           prevProps.watermarkText === nextProps.watermarkText &&
-           prevProps.redactions === nextProps.redactions &&
-           prevProps.annotations === nextProps.annotations &&
-           prevProps.transientHighlights === nextProps.transientHighlights; // Assume reference equality for annotations is maintained
-  }
-  
-  // If scale > 4, tiling is active, so we MUST re-render if scroll position changes significantly
-  // (We check if it crossed an 800px boundary in the PageRenderer effect anyway, 
-  // but to be safe we'll let React do its normal shallow compare if scale > 4)
   return prevProps.pageNum === nextProps.pageNum &&
+         prevProps.pdfDoc === nextProps.pdfDoc &&
          prevProps.scale === nextProps.scale &&
          prevProps.rotation === nextProps.rotation &&
          prevProps.basePageWidth === nextProps.basePageWidth &&
          prevProps.basePageHeight === nextProps.basePageHeight &&
-         prevProps.containerWidth === nextProps.containerWidth &&
-         prevProps.containerHeight === nextProps.containerHeight &&
-         prevProps.scrollTop === nextProps.scrollTop &&
-         prevProps.scrollLeft === nextProps.scrollLeft &&
+         prevProps.pageTop === nextProps.pageTop &&
+         prevProps.pageLeft === nextProps.pageLeft &&
          prevProps.activeTab === nextProps.activeTab &&
          prevProps.activeTool === nextProps.activeTool &&
          prevProps.selectedAnnotationId === nextProps.selectedAnnotationId &&
          prevProps.activeSearchResult === nextProps.activeSearchResult &&
+         prevProps.watermark === nextProps.watermark &&
          prevProps.watermarkText === nextProps.watermarkText &&
          prevProps.redactions === nextProps.redactions &&
          prevProps.annotations === nextProps.annotations &&

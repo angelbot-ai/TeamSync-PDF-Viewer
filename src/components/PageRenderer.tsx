@@ -91,7 +91,7 @@ function PageRendererComponent({
         }
         pageProxyRef.current = page;
 
-        const outputScale = window.devicePixelRatio || 1;
+        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
         const normalizedRot = normalizeRotation(page.rotate + rotation);
         const unscaledViewport = page.getViewport({ scale: 1.0, rotation: normalizedRot });
 

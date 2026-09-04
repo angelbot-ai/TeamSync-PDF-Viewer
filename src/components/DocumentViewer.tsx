@@ -19,6 +19,7 @@ import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths, Transi
 import { findRegexRedactions } from '../utils/findRegexRedactions';
 import { convertToUnrotated, convertToRotated, normalizeRotation } from '../utils/rotationUtils';
 import { clampScale, calculateScrollCompensation } from '../utils/zoomUtils';
+import { estimatePageDimensions, computeRowLayout, DEFAULT_FALLBACK_DIMS } from '../utils/layoutUtils';
 import { useViewerBus, useBusEvent } from '../hooks/useViewerBus';
 import { assertWorkerConfigured, configurePdfAssets, getDocumentParams } from '../core/pdfAssets';
 import SideBySideViewer from './SideBySideViewer';
@@ -269,7 +270,7 @@ export default function DocumentViewer({
   // Per-page base dimensions (scale 1, UI rotation composed with the page's /Rotate). Index =
   // pageNumber - 1. Populated progressively after load so mixed-size documents lay out correctly.
   const [pageDims, setPageDims] = useState<Array<{ width: number; height: number }>>([]);
-  const fallbackDims = pageDims[0] ?? { width: 800, height: 1100 };
+  const fallbackDims = pageDims[0] ?? DEFAULT_FALLBACK_DIMS;
   const dimsFor = useCallback(
     (p: number) => pageDims[p - 1] ?? fallbackDims,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -302,12 +303,18 @@ export default function DocumentViewer({
 
   // Row geometry in scaled pixels: each row is as tall as its tallest page (+ gap).
   const rowLayout = useMemo(() => {
-    const heights = rows.map(row => Math.max(...row.map(p => dimsFor(p).height)) * scale + GAP);
-    const tops: number[] = [];
-    let acc = 0;
-    for (const h of heights) { tops.push(acc); acc += h; }
-    return { heights, tops, total: acc };
+    return computeRowLayout(rows, dimsFor, scale, GAP);
   }, [rows, scale, dimsFor]);
+
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
+  const rowLayoutRef = useRef(rowLayout);
+  rowLayoutRef.current = rowLayout;
+  const pageTransitionRef = useRef(pageTransition);
+  pageTransitionRef.current = pageTransition;
+  const visibleRowRef = useRef(0);
 
   const rowIndexOfPage = useCallback((p: number) => rows.findIndex(row => row.includes(p)), [rows]);
 
@@ -696,6 +703,14 @@ export default function DocumentViewer({
         // If the effect was cleaned up meanwhile, the loading task (and its worker transport)
         // has already been destroyed by the cleanup function.
         if (cancelled) return;
+        try {
+          const p1 = await doc.getPage(1);
+          if (!cancelled) {
+            const vp1 = p1.getViewport({ scale: 1, rotation: normalizeRotation(p1.rotate + rotation) });
+            setPageDims(estimatePageDimensions(doc.numPages, { width: vp1.width, height: vp1.height }));
+          }
+        } catch {}
+        if (cancelled) return;
         setPdfDoc(doc);
         callbacksRef.current.onDocumentLoaded?.(doc, url);
       } catch (error: any) {
@@ -715,7 +730,7 @@ export default function DocumentViewer({
         loadingTask.destroy().catch(() => {});
       }
     };
-  }, [initialDoc, loadNonce, withCredentials]);
+  }, [initialDoc, loadNonce, withCredentials, rotation]);
 
   const handlePageRendered = useCallback((renderedPage: number) => {
     if (firstPageRenderedRef.current) return;
@@ -744,27 +759,96 @@ export default function DocumentViewer({
     return () => clearTimeout(t);
   }, [pdfDoc, page, initialPage, pageDims.length, scrollToPage]);
 
-  // Compute every page's base dimensions when the document or the UI rotation changes. The first
-  // page is published immediately so layout can start; the rest stream in.
+  // Measure base dimensions up front and reserve estimated space for all pages to avoid layout jumps / shaking on scroll.
   useEffect(() => {
     if (!pdfDoc) return;
     let cancelled = false;
     const doc = pdfDoc;
+
     (async () => {
-      const dims: Array<{ width: number; height: number }> = [];
-      for (let p = 1; p <= doc.numPages; p++) {
-        let page: pdfjsLib.PDFPageProxy;
-        try { page = await doc.getPage(p); } catch { return; }
-        if (cancelled) return;
-        // UI rotation composes on top of the page's intrinsic /Rotate (pdf.js replaces it when an
-        // explicit `rotation` is passed). Dimensions swap for 90/270 so layout stays correct.
-        const vp = page.getViewport({ scale: 1, rotation: normalizeRotation(page.rotate + rotation) });
-        dims.push({ width: vp.width, height: vp.height });
-        if (p === 1 || p % 50 === 0) setPageDims([...dims]);
+      // 1. Measure Page 1 up front to obtain baseline page dimensions
+      let p1: pdfjsLib.PDFPageProxy;
+      try {
+        p1 = await doc.getPage(1);
+      } catch {
+        return;
       }
-      if (!cancelled) setPageDims(dims);
+      if (cancelled) return;
+
+      const vp1 = p1.getViewport({ scale: 1, rotation: normalizeRotation(p1.rotate + rotation) });
+      const p1Dim = { width: vp1.width, height: vp1.height };
+
+      // 2. Reserve estimated space up front for all pages based on Page 1
+      setPageDims((prev) => {
+        if (
+          prev.length === doc.numPages &&
+          Math.abs((prev[0]?.width ?? 0) - p1Dim.width) <= 0.5 &&
+          Math.abs((prev[0]?.height ?? 0) - p1Dim.height) <= 0.5
+        ) {
+          return prev;
+        }
+        return estimatePageDimensions(doc.numPages, p1Dim);
+      });
+
+      if (doc.numPages <= 1) return;
+
+      // 3. Measure remaining page dimensions up front in parallel batches
+      const allDims = estimatePageDimensions(doc.numPages, p1Dim);
+      let mismatch = false;
+      const batchSize = 25;
+
+      for (let start = 2; start <= doc.numPages; start += batchSize) {
+        if (cancelled) return;
+        const end = Math.min(doc.numPages, start + batchSize - 1);
+        const batchPromises: Promise<void>[] = [];
+
+        for (let p = start; p <= end; p++) {
+          const pageNum = p;
+          batchPromises.push((async () => {
+            try {
+              const page = await doc.getPage(pageNum);
+              if (cancelled) return;
+              const vp = page.getViewport({ scale: 1, rotation: normalizeRotation(page.rotate + rotation) });
+              if (Math.abs(vp.width - p1Dim.width) > 0.5 || Math.abs(vp.height - p1Dim.height) > 0.5) {
+                mismatch = true;
+              }
+              allDims[pageNum - 1] = { width: vp.width, height: vp.height };
+            } catch {
+              // Retain estimated p1Dim
+            }
+          })());
+        }
+
+        await Promise.all(batchPromises);
+      }
+
+      if (cancelled) return;
+
+      // 4. Update pageDims only if any page had different dimensions than the page 1 estimate
+      if (mismatch) {
+        const container = containerRef.current;
+        if (container && container.scrollTop > 0 && pageTransitionRef.current === 'continuous') {
+          const cRow = visibleRowRef.current;
+          const newLayout = computeRowLayout(
+            rowsRef.current,
+            (p) => allDims[p - 1] ?? p1Dim,
+            scaleRef.current,
+            GAP
+          );
+          const oldTop = rowLayoutRef.current.tops[cRow] ?? 0;
+          const newTop = newLayout.tops[cRow] ?? 0;
+          const delta = newTop - oldTop;
+          if (delta !== 0) {
+            container.scrollTop += delta;
+          }
+        }
+        setPageDims(allDims);
+      }
     })();
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, [pdfDoc, rotation]);
 
   // Dynamic Fit to Width calculation
@@ -1048,8 +1132,6 @@ export default function DocumentViewer({
       }
     }
   };
-
-  const visibleRowRef = useRef(0);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     setScrollPos({

@@ -52,4 +52,6 @@ export type { SearchResult, SearchBounds } from './hooks/usePdfSearch';
 export type { TransientHighlight } from './core/types';
 export { MIN_SCALE, MAX_SCALE, clampScale, calculateNextZoomIn, calculateNextZoomOut, calculateScrollCompensation } from './utils/zoomUtils';
 export type { ScrollCompensationParams, ScrollPosition } from './utils/zoomUtils';
+export { estimatePageDimensions, computeRowLayout, DEFAULT_FALLBACK_DIMS, hasDimensionMismatch } from './utils/layoutUtils';
+export type { PageDimension, RowLayout } from './utils/layoutUtils';
 export * from './plugins/types';

@@ -55,7 +55,7 @@ const Thumbnail = ({ pdfDoc, pageIndex, isActive, onClick, scale }: ThumbnailPro
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
         
-        const outputScale = window.devicePixelRatio || 1;
+        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
         canvas.width = Math.floor(viewport.width * outputScale);
         canvas.height = Math.floor(viewport.height * outputScale);
         canvas.style.width = `${viewport.width}px`;

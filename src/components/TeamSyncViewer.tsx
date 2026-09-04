@@ -46,6 +46,10 @@ export interface TeamSyncViewerProps extends Omit<WebViewerOptions, 'path'> {
   onAnnotationsChange?: (annotations: Annotation[]) => void;
   /** Fires whenever transient highlights change. */
   onTransientHighlightsChange?: (highlights: TransientHighlight[]) => void;
+  /** Fires whenever the user selects text within the document. */
+  onTextSelected?: (info: { text: string }) => void;
+  /** Fires whenever text is copied from the document. */
+  onTextCopied?: (info: { text: string }) => void;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -61,6 +65,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     canAddAnnotations, canEditAnnotations, canDeleteAnnotations, readOnly = false,
     assets, withCredentials = false, toolbar = true, sidebars = true, leftPanelOpen = true,
     className, style, hideAnnotationsUntilPageRendered = true,
+    enableTextSelection = true, defaultTool = 'select', showSelectionTooltip = true,
   } = props;
 
   // Latest props for callbacks/bindings that must not re-subscribe on every render.
@@ -284,6 +289,14 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
       bus.on<{ tempAnn: Annotation }>('action-commit-digital-signature', (d) =>
         bus.emit('action-commit-digital-signature-local', d)
       ),
+      bus.on<{ text: string }>('action-text-selected', (d) => {
+        bus.emit('textSelected', { text: d.text });
+        latest.current.onTextSelected?.({ text: d.text });
+      }),
+      bus.on<{ text: string }>('action-text-copied', (d) => {
+        bus.emit('textCopied', { text: d.text });
+        latest.current.onTextCopied?.({ text: d.text });
+      }),
     ];
     return () => offs.forEach((off) => off());
   }, [bus, instance, setTransientHighlights]);
@@ -572,6 +585,9 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             transientHighlights={transientHighlights}
             permissions={effectivePermissions}
             hideAnnotationsUntilPageRendered={hideAnnotationsUntilPageRendered}
+            enableTextSelection={enableTextSelection}
+            defaultTool={defaultTool}
+            showSelectionTooltip={showSelectionTooltip}
           />
         </div>
         {isSettingsOpen && (

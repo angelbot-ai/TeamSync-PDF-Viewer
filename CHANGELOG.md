@@ -2,6 +2,23 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.4.0] — 2026-09-04
+
+### Added
+- **Text Selection & Copying Support**: Users can now select and copy text directly from PDF pages in the viewer.
+- **Select & Pan Tool Modes**: Added `'select'` as a first-class `ToolMode`. Defaulted `activeTool` to `'select'` (matching Adobe Acrobat, Chrome, and PDF.js). Added "Select Text" (`MousePointer`) and "Pan Tool" (`Hand`) toggle buttons to the top toolbar. Added `defaultTool?: 'select' | 'pan'` and `enableTextSelection?: boolean` props to `WebViewerOptions` and `<TeamSyncViewer>`.
+- **Triple-Layer Copy Workflows**:
+  - **Keyboard**: `Cmd+C` (macOS) / `Ctrl+C` (Windows/Linux) copies selected text to the clipboard.
+  - **Native Context Menu**: Right-clicking selected text preserves the native browser context menu ("Copy", "Look Up", "Search", "Translate").
+  - **Floating Quick-Copy Tooltip**: Rendered a sleek floating pill above active text selections with a `[Copy]` button and `✓ Copied!` visual feedback.
+- **Public SDK APIs & Events**: Added `instance.getSelectedText(): string` and `instance.copySelectedText(): Promise<boolean>`, Apryse tool aliases in `instance.UI.setToolMode('select' | 'textSelect' | 'pan')`, and `textSelected` and `textCopied` events to `ViewerEventMap`.
+- **Cross-Environment Clipboard Utility**: Exported `copyTextToClipboard` with modern `navigator.clipboard.writeText` and a hidden `document.execCommand('copy')` fallback for non-HTTPS and iframe environments.
+
+### Fixed
+- **Panning Drag Interference**: Drag-panning is now strictly scoped to `activeTool === 'pan'`, ensuring text selection click-and-drag is never hijacked.
+- **SVG Overlay Pointer Events**: Configured SVG overlay to `pointerEvents: 'none'` in select and pan modes so clicks reach the text layer, while preserving `pointerEvents: 'all'` on individual annotation elements.
+- **PDF.js v6 Text Layer CSS Variables**: Declared `--total-scale-factor: 1; --scale-factor: 1; --user-unit: 1; --min-font-size: 1; --scale-round-x: 1px; --scale-round-y: 1px;` on `.textLayer`, resolving collapsed 0px font sizes and heights. Styled `.textLayer span::selection` with transparent text so the underlying canvas raster remains crisp without double glyphs.
+
 ## [1.3.5] — 2026-09-04
 
 ### Fixed

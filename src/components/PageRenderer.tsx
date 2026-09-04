@@ -314,9 +314,12 @@ function PageRendererComponent({
   useEffect(() => {
     const container = textLayerRef.current;
     if (!textContent || !container) return;
+    let isCancelled = false;
+
     const renderText = async () => {
       try {
         const page = await pdfDoc.getPage(pageNum);
+        if (isCancelled) return;
         const viewport = page.getViewport({ scale: 1, rotation: normalizeRotation(page.rotate + rotation) });
 
         let sanitizedTextContent = textContent;
@@ -344,6 +347,7 @@ function PageRendererComponent({
           }
         }
 
+        if (isCancelled) return;
         container.innerHTML = '';
         const textLayer = new pdfjsLib.TextLayer({
           textContentSource: sanitizedTextContent,
@@ -352,10 +356,15 @@ function PageRendererComponent({
         });
         await textLayer.render();
       } catch (e) {
-        console.error("TextLayer render failed:", e);
+        if (!isCancelled) {
+          console.error("TextLayer render failed:", e);
+        }
       }
     };
     renderText();
+    return () => {
+      isCancelled = true;
+    };
   }, [textContent, pdfDoc, pageNum, rotation, redactions]);
   const pageAnnotations = annotations.filter(a => a.pageIndex === pageNum);
   const isOverlayVisible = !hideAnnotationsUntilPageRendered || isCanvasRendered;
@@ -364,7 +373,7 @@ function PageRendererComponent({
     <div 
       id={`pdf-page-${pageNum}`}
       className="pdf-page-container"
-      onClick={() => { if (activeTool === null) onClearSelection(); }}
+      onClick={() => { if (activeTool === null || activeTool === 'select') onClearSelection(); }}
       style={{
         position: 'absolute',
         top: `${pageTop}px`,
@@ -386,11 +395,12 @@ function PageRendererComponent({
           top: 0, left: 0,
           transform: `scale(${scale})`,
           transformOrigin: 'top left',
-          pointerEvents: isOverlayVisible ? 'auto' : 'none',
+          pointerEvents: (isOverlayVisible && activeTool !== 'pan') ? 'auto' : 'none',
           opacity: isOverlayVisible ? 1 : 0,
           visibility: isOverlayVisible ? 'visible' : 'hidden',
           width: `${basePageWidth}px`,
-          height: `${basePageHeight}px`
+          height: `${basePageHeight}px`,
+          zIndex: 2
         }}
       />
 
@@ -501,7 +511,7 @@ function PageRendererComponent({
             style={{ 
               position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', 
               cursor: ['Annotate', 'Shapes'].includes(activeTab) && activeTool ? (activeTool === 'eraser' ? 'cell' : 'crosshair') : 'default', 
-              pointerEvents: (activeTool === null || activeTool === 'pan' || !isOverlayVisible) ? 'none' : 'auto',
+              pointerEvents: (activeTool === null || activeTool === 'pan' || activeTool === 'select' || !isOverlayVisible) ? 'none' : 'auto',
               zIndex: 10,
               visibility: isOverlayVisible ? 'visible' : 'hidden',
               opacity: isOverlayVisible ? 1 : 0

@@ -11,6 +11,7 @@ import { AnnotationManager } from '../annotations/AnnotationManager';
 import { createGeometryResolver } from '../annotations/geometry';
 import type { Redaction, WatermarkOptions, ViewerEventMap, ViewerEventType, TransientHighlight } from './types';
 import { searchPdfText, type SearchResult } from '../hooks/usePdfSearch';
+import { copyTextToClipboard } from '../utils/clipboardUtils';
 
 /** Callbacks the React component installs so the instance can reach live state. */
 export interface ViewerBinding {
@@ -281,6 +282,29 @@ export class WebViewerInstance {
     );
   }
 
+  /**
+   * Returns the currently selected text string from the document viewer, or an empty string if nothing is selected.
+   */
+  getSelectedText(): string {
+    if (typeof window === 'undefined') return '';
+    const selection = window.getSelection();
+    return selection ? selection.toString() : '';
+  }
+
+  /**
+   * Copies the currently selected text to the system clipboard.
+   * Resolves to true if copying succeeded, false otherwise.
+   */
+  async copySelectedText(): Promise<boolean> {
+    const text = this.getSelectedText();
+    if (!text) return false;
+    const success = await copyTextToClipboard(text);
+    if (success) {
+      this.bus.emit('textCopied', { text });
+    }
+    return success;
+  }
+
   // ---- legacy facade ---------------------------------------------------------------------
 
   readonly UI = {
@@ -293,7 +317,17 @@ export class WebViewerInstance {
     enableElements: (elements: string[]) => this.bus.emit('action-open-elements', { elements }),
     disableElements: (elements: string[]) => this.bus.emit('action-close-elements', { elements }),
     setActiveLeftPanel: (panel: string) => this.bus.emit('action-set-active-left-panel', { panel }),
-    setToolMode: (tool: string | null) => this.bus.emit('action-set-tool', { tool }),
+    setToolMode: (tool: string | null) => {
+      let normalizedTool: any = tool;
+      if (tool && (tool.toLowerCase() === 'select' || tool.toLowerCase() === 'textselect')) {
+        normalizedTool = 'select';
+      } else if (tool && tool.toLowerCase() === 'pan') {
+        normalizedTool = 'pan';
+      }
+      this.bus.emit('action-set-tool', { tool: normalizedTool });
+    },
+    getSelectedText: () => this.getSelectedText(),
+    copySelectedText: () => this.copySelectedText(),
     fitWidth: () => this.bus.emit('action-fit-to-width'),
     fitPage: () => this.bus.emit('action-fit-to-page'),
     fitToWidth: () => this.bus.emit('action-fit-to-width'),

@@ -208,4 +208,58 @@ describe('WebViewerInstance', () => {
     bus.emit('pageRendered', { url: '/doc.pdf', pageNumber: 2 });
     expect(onPageRendered).toHaveBeenCalledWith({ url: '/doc.pdf', pageNumber: 2 });
   });
+
+  it('supports getSelectedText and copySelectedText', async () => {
+    const bus = new ViewerBus();
+    const inst = new WebViewerInstance(bus);
+    const onTextCopied = vi.fn();
+    inst.on('textCopied', onTextCopied);
+
+    // When nothing selected
+    vi.spyOn(window, 'getSelection').mockReturnValue(null);
+    expect(inst.getSelectedText()).toBe('');
+    expect(await inst.copySelectedText()).toBe(false);
+
+    // Mock active selection
+    const mockSelection = {
+      toString: () => 'Sample selected text',
+      isCollapsed: false,
+      rangeCount: 1,
+    } as any;
+    vi.spyOn(window, 'getSelection').mockReturnValue(mockSelection);
+
+    expect(inst.getSelectedText()).toBe('Sample selected text');
+    expect(inst.UI.getSelectedText()).toBe('Sample selected text');
+
+    // Mock clipboard
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      configurable: true,
+      writable: true,
+    });
+
+    const copied = await inst.copySelectedText();
+    expect(copied).toBe(true);
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Sample selected text');
+    expect(onTextCopied).toHaveBeenCalledWith({ text: 'Sample selected text' });
+  });
+
+  it('normalizes tool modes in UI.setToolMode', () => {
+    const bus = new ViewerBus();
+    const inst = new WebViewerInstance(bus);
+    const onTool = vi.fn();
+    bus.on('action-set-tool', onTool);
+
+    inst.UI.setToolMode('select');
+    expect(onTool).toHaveBeenLastCalledWith({ tool: 'select' });
+
+    inst.UI.setToolMode('TextSelect');
+    expect(onTool).toHaveBeenLastCalledWith({ tool: 'select' });
+
+    inst.UI.setToolMode('pan');
+    expect(onTool).toHaveBeenLastCalledWith({ tool: 'pan' });
+
+    inst.UI.setToolMode('rectangle');
+    expect(onTool).toHaveBeenLastCalledWith({ tool: 'rectangle' });
+  });
 });

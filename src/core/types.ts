@@ -67,6 +67,25 @@ export interface ViewerUser {
 
 export type InitialScale = number | 'fit-width' | 'fit-page';
 
+export type ToolMode =
+  | 'select'
+  | 'pan'
+  | 'rectangle'
+  | 'ellipse'
+  | 'line'
+  | 'arrow'
+  | 'freehand'
+  | 'highlight'
+  | 'text'
+  | 'eraser'
+  | 'note'
+  | 'callout'
+  | 'signature'
+  | 'digital_signature'
+  | 'link'
+  | 'redaction'
+  | null;
+
 /**
  * Options accepted by `createWebViewer()` (and the deprecated `WebViewer()` alias).
  * Every option is also available as a prop on `<TeamSyncViewer>`.
@@ -119,6 +138,12 @@ export interface WebViewerOptions {
    * Default true.
    */
   hideAnnotationsUntilPageRendered?: boolean;
+  /** Allow selecting text from PDF pages (default true). */
+  enableTextSelection?: boolean;
+  /** Initial tool mode on load. Defaults to 'select'. */
+  defaultTool?: 'select' | 'pan';
+  /** Show floating quick-action copy badge above selected text (default true). */
+  showSelectionTooltip?: boolean;
 }
 
 /** Events available through `instance.on(type, listener)`. */
@@ -133,6 +158,8 @@ export interface ViewerEventMap {
   annotationChanged: AnnotationChangedEvent;
   transientHighlightsChanged: { highlights: TransientHighlight[] };
   toolChanged: { tool: string | null };
+  textSelected: { text: string };
+  textCopied: { text: string };
   destroy: Record<string, never>;
 }
 

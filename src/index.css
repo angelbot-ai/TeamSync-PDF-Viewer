@@ -56,8 +56,22 @@
   background: #a8a8a8;
 }
 
+.tspdf-root .textLayer {
+  --scale-factor: 1;
+  --user-unit: 1;
+  --total-scale-factor: 1;
+  --min-font-size: 1;
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  z-index: 2;
+}
+
+.tspdf-root .textLayer span {
+  cursor: text;
+}
+
 .tspdf-root .textLayer ::selection {
-  background: rgba(0, 100, 255, 0.3);
+  background: rgba(0, 100, 255, 0.3) !important;
 }
 
 .tspdf-root .textLayer,
@@ -70,3 +84,4 @@
   background: rgba(0, 100, 255, 0.3) !important;
   color: transparent !important;
 }
+

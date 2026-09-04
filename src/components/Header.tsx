@@ -4,7 +4,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Menu, PanelLeft,
-  Hand, Search, MessageSquare, 
+  Hand, MousePointer, Search, MessageSquare, 
   FileText, Download, Maximize, Save, Printer, Settings, Info,
   MinusCircle, PlusCircle, Maximize2, MoveHorizontal, ChevronUp, ChevronDown, ScanSearch,
   FileCode2, File, Copy, Expand, RotateCw, RotateCcw, ShieldCheck, Pen, Layers, FolderOpen
@@ -72,7 +72,7 @@ export default function Header({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false);
   const [isViewSettingsOpen, setIsViewSettingsOpen] = useState(false);
-  const [headerTool, setHeaderTool] = useState<string | null>('pan');
+  const [headerTool, setHeaderTool] = useState<string | null>('select');
   const menuRef = useRef<HTMLDivElement>(null);
   const zoomMenuRef = useRef<HTMLDivElement>(null);
   const viewSettingsRef = useRef<HTMLDivElement>(null);
@@ -297,6 +297,7 @@ export default function Header({
             />
           </div>
           <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border-color)', margin: '0 4px' }} />
+          <IconButton icon={<MousePointer size={18} />} title="Select Text" active={headerTool === 'select'} onClick={() => bus.emit('action-set-tool', { tool: 'select' })} />
           <IconButton icon={<Hand size={18} />} title="Pan Tool" active={headerTool === 'pan'} onClick={() => bus.emit('action-set-tool', { tool: 'pan' })} />
         </div>
 

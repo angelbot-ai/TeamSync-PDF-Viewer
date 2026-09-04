@@ -15,7 +15,8 @@ import PageRenderer from './PageRenderer';
 import type { Annotation } from '../annotations/types';
 import { newAnnotationId } from '../annotations/ids';
 import type { AnnotationManager } from '../annotations/AnnotationManager';
-import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths, TransientHighlight } from '../core/types';
+import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths, TransientHighlight, ToolMode } from '../core/types';
+import TextSelectionTooltip from './TextSelectionTooltip';
 import { findRegexRedactions } from '../utils/findRegexRedactions';
 import { convertToUnrotated, convertToRotated, normalizeRotation } from '../utils/rotationUtils';
 import { clampScale, calculateScrollCompensation } from '../utils/zoomUtils';
@@ -79,6 +80,9 @@ interface DocumentViewerProps {
   permissions?: SDKPermissions;
   /** Whether to hide annotations and transient highlights until the page canvas has finished rendering. Default: true. */
   hideAnnotationsUntilPageRendered?: boolean;
+  enableTextSelection?: boolean;
+  defaultTool?: 'select' | 'pan';
+  showSelectionTooltip?: boolean;
 }
 
 export default function DocumentViewer({
@@ -86,7 +90,10 @@ export default function DocumentViewer({
   redactions, regexRedactions, scale, setScale, sidebarTab, setSidebarTab, onAnnotationsChange, onRedactionsChange,
   onDocumentLoaded, onLoadError, onFirstPageRendered, onPageRendered, onPageChange,
   pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations: _enableAnnotations, initialPage, page, transientHighlights, permissions,
-  hideAnnotationsUntilPageRendered = true
+  hideAnnotationsUntilPageRendered = true,
+  enableTextSelection = true,
+  defaultTool = 'select',
+  showSelectionTooltip = true
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bus = useViewerBus();
@@ -402,7 +409,7 @@ export default function DocumentViewer({
 
   // The annotation list lives in the AnnotationManager (undo/redo, permissions, events, XFDF).
   const annotations = useSyncExternalStore(annotationManager.subscribe, annotationManager.getSnapshot, annotationManager.getSnapshot);
-  const [activeTool, setActiveTool] = useState<'rectangle' | 'ellipse' | 'line' | 'arrow' | 'freehand' | 'highlight' | 'text' | 'eraser' | 'note' | 'callout' | 'signature' | 'digital_signature' | 'pan' | 'link' | 'redaction' | null>('pan');
+  const [activeTool, setActiveTool] = useState<ToolMode>(defaultTool);
   
   // Set default tools when switching tabs
   useEffect(() => {
@@ -418,9 +425,9 @@ export default function DocumentViewer({
     } else if (activeTab === 'Fill and Sign') {
       setActiveTool('signature');
     } else if (activeTab === 'View') {
-      setActiveTool('pan');
+      setActiveTool(defaultTool);
     }
-  }, [activeTab]);
+  }, [activeTab, defaultTool]);
 
   useEffect(() => {
     bus.emit('action-tool-changed', { tool: activeTool });
@@ -451,7 +458,16 @@ export default function DocumentViewer({
   const clipboardAnnotationRef = useRef<Annotation | null>(null);
 
 
-  useBusEvent<{ tool: typeof activeTool }>('action-set-tool', (d) => setActiveTool(d?.tool ?? null));
+  useBusEvent<{ tool: ToolMode }>('action-set-tool', (d) => setActiveTool(d?.tool ?? null));
+
+  useEffect(() => {
+    const handleSelection = () => {
+      const text = typeof window !== 'undefined' ? window.getSelection()?.toString() ?? '' : '';
+      bus.emit('action-text-selected', { text });
+    };
+    document.addEventListener('selectionchange', handleSelection);
+    return () => document.removeEventListener('selectionchange', handleSelection);
+  }, [bus]);
 
   const zoomFocusRef = useRef<{vx: number | null, vy: number | null}>({ vx: null, vy: null });
   const prevScaleRef = useRef(scale);
@@ -585,13 +601,20 @@ export default function DocumentViewer({
 
     // Annotation clipboard & manipulation (only when not typing in text fields)
     if (!isInput && !activeTextEditor) {
-      if (matchShortcut(e, getCommand('COPY')) && selectedAnnotationId) {
-        const annToCopy = annotations.find(a => a.id === selectedAnnotationId);
-        if (annToCopy) {
-          e.preventDefault();
-          clipboardAnnotationRef.current = annToCopy;
+      if (matchShortcut(e, getCommand('COPY'))) {
+        const selectedText = typeof window !== 'undefined' ? window.getSelection()?.toString() : '';
+        if (selectedText && selectedText.length > 0) {
+          bus.emit('action-text-copied', { text: selectedText });
+          return;
         }
-        return;
+        if (selectedAnnotationId) {
+          const annToCopy = annotations.find(a => a.id === selectedAnnotationId);
+          if (annToCopy) {
+            e.preventDefault();
+            clipboardAnnotationRef.current = annToCopy;
+          }
+          return;
+        }
       }
       if (matchShortcut(e, getCommand('PASTE')) && clipboardAnnotationRef.current) {
         e.preventDefault();
@@ -1455,7 +1478,7 @@ export default function DocumentViewer({
                 overflow: 'hidden', 
                 position: 'relative', 
                 backgroundColor: 'var(--bg-color)', 
-                cursor: isPanning ? 'grabbing' : (activeTool === 'pan' || activeTool === null ? 'grab' : (activeTool === 'eraser' ? 'cell' : 'crosshair')) 
+                cursor: isPanning ? 'grabbing' : (activeTool === 'pan' ? 'grab' : (activeTool === 'eraser' ? 'cell' : (activeTool === 'select' || activeTool === null ? 'default' : 'crosshair'))) 
               }}
           onMouseMove={(e) => {
             if (isPanning && panStartRef.current && containerRef.current) {
@@ -1476,7 +1499,7 @@ export default function DocumentViewer({
             ref={containerRef}
             onScroll={handleScroll}
             onMouseDown={(e) => {
-              if (activeTool === 'pan' || activeTool === null) {
+              if (activeTool === 'pan') {
                 if (e.button === 0) {
                   setIsPanning(true);
                   panStartRef.current = {
@@ -1495,7 +1518,12 @@ export default function DocumentViewer({
               }
             }}
             onContextMenu={(e) => {
-              // Prevent default browser context menu
+              const hasTextSelection = Boolean(typeof window !== 'undefined' && window.getSelection()?.toString().trim());
+              if (hasTextSelection) {
+                // Allow native browser context menu on selected text (Copy, Search, etc.)
+                return;
+              }
+              // Prevent default browser context menu on canvas
               e.preventDefault();
               e.stopPropagation();
             }}
@@ -1905,6 +1933,12 @@ export default function DocumentViewer({
                 positionPercent={compareState.curtainPosition}
                 onChangePosition={(pos) => setCompareState(prev => ({ ...prev, curtainPosition: pos }))}
                 containerRef={containerRef}
+              />
+            )}
+            {enableTextSelection !== false && showSelectionTooltip !== false && (
+              <TextSelectionTooltip
+                containerRef={containerRef}
+                onCopy={(text) => bus.emit('action-text-copied', { text })}
               />
             )}
           </div>

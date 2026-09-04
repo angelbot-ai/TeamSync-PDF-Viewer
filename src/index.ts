@@ -26,7 +26,10 @@ export type {
   InitialScale,
   ViewerEventMap,
   ViewerEventType,
+  ToolMode,
 } from './core/types';
+export { copyTextToClipboard } from './utils/clipboardUtils';
+export { TextSelectionTooltip } from './components/TextSelectionTooltip';
 export type { Annotation, AnnotationType, AnnotationPoint, AnnotationInput } from './annotations/types';
 export { AnnotationManager } from './annotations/AnnotationManager';
 export type { AnnotationAction, AnnotationChangedEvent, CommitOptions, ViewerUserInfo } from './annotations/AnnotationManager';

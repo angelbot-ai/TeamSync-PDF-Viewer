@@ -2,6 +2,15 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.5.0] — 2026-09-05
+
+### Added
+- **Undo & Redo Annotation Actions**: Added dedicated Undo and Redo buttons to the Annotate toolbar with live state reflection bound to history, alongside existing keyboard shortcuts (`Cmd+Z`/`Ctrl+Z` and `Cmd+Shift+Z`/`Ctrl+Y`).
+- **Underline, Strikeout & Squiggly Tools**: Added first-class text markup annotations with toolbar tools, stroke width and color controls, drag creation, selection tooltip quick actions, SVG rendering (straight lines and sinusoidal waves), full XFDF export/import roundtrip, and PDF export baking via `pdf-lib`.
+- **Text Annotation Automatic Word-Wrapping**: Text annotations now automatically wrap multi-line text cleanly inside SVG `<foreignObject>` containers (`word-break: break-word`, `overflow-wrap: break-word`, `white-space: pre-wrap`) and in baked PDF exports via dynamic text wrapping.
+- **Interactive 8-Handle Text Resizing**: Text annotations now feature an interactive selection bounding box with 8 resize handles (`nw`, `n`, `ne`, `e`, `se`, `s`, `sw`, `w`) with directional cursors, real-time live text reflow during drag, and single-step undo history.
+- **Quick-Markup Selection Tooltip**: Extended the floating selection tooltip with `[Highlight]`, `[Underline]`, `[Strikeout]`, and `[Squiggly]` quick actions.
+
 ## [1.4.0] — 2026-09-04
 
 ### Added

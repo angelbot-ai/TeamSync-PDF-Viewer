@@ -204,11 +204,16 @@ export async function annotationToXfdfFragment(a: Annotation, resolve: GeometryR
       const bbox = all.length ? rectToPdf(g, boundsOf(all, a.strokeWidth)) : undefined;
       return `<ink${common(bbox)}${strokeAttrs} subject="Free Hand"><inklist>${gestures}</inklist>${tail()}</ink>`;
     }
-    case 'highlight': {
+    case 'highlight':
+    case 'underline':
+    case 'strikeout':
+    case 'squiggly': {
       const rects = a.rects && a.rects.length > 0 ? a.rects : [{ x: a.x, y: a.y, width: a.width, height: a.height }];
       const coords = rects.flatMap((r) => rectToQuadPoints(g, r)).map(fmt).join(',');
       const bbox = rectToPdf(g, unionRects(rects));
-      return `<highlight${common(bbox)}${attr('color', color)} coords="${coords}" subject="Highlight">${tail()}</highlight>`;
+      const tag = a.type;
+      const subject = a.type === 'highlight' ? 'Highlight' : a.type === 'underline' ? 'Underline' : a.type === 'strikeout' ? 'StrikeOut' : 'Squiggly';
+      return `<${tag}${common(bbox)}${attr('color', color)} coords="${coords}" subject="${subject}">${tail()}</${tag}>`;
     }
     case 'text':
       return `<freetext${common()}${attr('color', color)} subject="Free Text">${contentsElement(a.text)}${defaultStyle(a, 16)}${tail()}</freetext>`;
@@ -364,11 +369,22 @@ function elementToAnnotation(el: Element, g: PageGeometry): Annotation | null {
       const all = strokes.flat();
       return { ...base, ...boundsOf(all), type: 'freehand', points: strokes[0], strokes };
     }
-    case 'highlight': {
+    case 'highlight':
+    case 'underline':
+    case 'strikeout':
+    case 'squiggly': {
       const quads = parseNumbers(el.getAttribute('coords'));
       const rects = quads.length >= 8 ? quadPointsToRects(g, quads) : [{ x: base.x, y: base.y, width: base.width, height: base.height }];
       const bbox = unionRects(rects);
-      return { ...base, ...bbox, type: 'highlight', rects: rects.length > 1 ? rects : undefined, opacity: base.opacity === 1 ? 0.5 : base.opacity };
+      const type = kind as 'highlight' | 'underline' | 'strikeout' | 'squiggly';
+      const defaultOpacity = type === 'highlight' ? 0.5 : 1;
+      return {
+        ...base,
+        ...bbox,
+        type,
+        rects: rects.length > 1 ? rects : undefined,
+        opacity: base.opacity === 1 && type === 'highlight' ? 0.5 : (base.opacity ?? defaultOpacity)
+      };
     }
     case 'freetext': {
       const text = childText(el, 'contents') ?? '';

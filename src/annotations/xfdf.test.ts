@@ -15,6 +15,9 @@ const samples: Annotation[] = [
   { ...base, id: 'arrow-1', type: 'arrow', x: 0, y: 0, width: 0, height: 0, points: [{ x: 10, y: 10 }, { x: 110, y: 60 }] },
   { ...base, id: 'ink-1', type: 'freehand', x: 0, y: 0, width: 0, height: 0, points: [{ x: 1, y: 2 }, { x: 3, y: 4 }, { x: 5, y: 9 }] },
   { ...base, id: 'hl-1', type: 'highlight', x: 100, y: 50, width: 200, height: 18, opacity: 0.5, color: '#fbc02d' },
+  { ...base, id: 'ul-1', type: 'underline', x: 100, y: 80, width: 150, height: 18, opacity: 1, color: '#d32f2f' },
+  { ...base, id: 'so-1', type: 'strikeout', x: 100, y: 110, width: 180, height: 18, opacity: 1, color: '#1976d2' },
+  { ...base, id: 'sq-1', type: 'squiggly', x: 100, y: 140, width: 160, height: 18, opacity: 1, color: '#388e3c' },
   { ...base, id: 'txt-1', type: 'text', x: 30, y: 40, width: 120, height: 30, text: 'Hello <world> & "friends"' },
   { ...base, id: 'note-1', type: 'note', x: 30, y: 40, width: 24, height: 24, text: 'Sticky' },
   { ...base, id: 'co-1', type: 'callout', x: 200, y: 300, width: 100, height: 30, text: 'Look here', points: [{ x: 50, y: 60 }, { x: 200, y: 300 }] },
@@ -60,7 +63,7 @@ describe('xfdf', () => {
       expect(parsed.author).toBe('Jane');
       expect(parsed.authorId).toBe('u-1');
       expect(parsed.createdAt).toBe(base.createdAt);
-      if (original.type === 'rectangle' || original.type === 'ellipse' || original.type === 'signature' || original.type === 'digital_signature_placeholder' || original.type === 'highlight') {
+      if (original.type === 'rectangle' || original.type === 'ellipse' || original.type === 'signature' || original.type === 'digital_signature_placeholder' || original.type === 'highlight' || original.type === 'underline' || original.type === 'strikeout' || original.type === 'squiggly') {
         expect(parsed.x).toBeCloseTo(original.x, 2);
         expect(parsed.y).toBeCloseTo(original.y, 2);
         expect(parsed.width).toBeCloseTo(original.width, 2);
@@ -104,14 +107,14 @@ describe('xfdf', () => {
   });
 
   it('keeps unsupported elements as opaque annotations and re-exports them verbatim', async () => {
-    const frag = `<underline page="0" rect="10,20,110,40" color="#0000FF" name="ul-1" coords="10,40,110,40,10,20,110,20"/>`;
+    const frag = `<polygon page="0" rect="10,20,110,40" color="#0000FF" name="poly-1" points="10,20,50,40,110,30"/>`;
     const [a] = await parseXfdf(frag, resolve);
     expect(a.type).toBe('opaque');
-    expect(a.opaqueKind).toBe('underline');
+    expect(a.opaqueKind).toBe('polygon');
     expect(a.width).toBeCloseTo(100, 3);
     const out = await annotationToXfdfFragment(a, resolve);
-    expect(out).toContain('<underline');
-    expect(out).toContain('name="ul-1"');
+    expect(out).toContain('<polygon');
+    expect(out).toContain('name="poly-1"');
   });
 
   it('rejects malformed XML', async () => {

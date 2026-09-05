@@ -3,15 +3,16 @@
  * Floating quick-action copy pill rendered directly above active text selections.
  */
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Highlighter, Underline, Strikethrough } from 'lucide-react';
 import { copyTextToClipboard } from '../utils/clipboardUtils';
 
 interface TextSelectionTooltipProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   onCopy?: (text: string) => void;
+  onAnnotateSelection?: (type: 'highlight' | 'underline' | 'strikeout' | 'squiggly') => void;
 }
 
-export const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({ containerRef, onCopy }) => {
+export const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({ containerRef, onCopy, onAnnotateSelection }) => {
   const [selectedText, setSelectedText] = useState<string>('');
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
@@ -170,6 +171,66 @@ export const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({ cont
         {copied ? <Check size={13} color="#4ade80" /> : <Copy size={13} color="#f8fafc" />}
         <span>{copied ? 'Copied!' : 'Copy'}</span>
       </button>
+
+      {onAnnotateSelection && (
+        <>
+          <div style={{ width: '1px', height: '16px', backgroundColor: 'rgba(255, 255, 255, 0.2)', margin: '0 4px' }} />
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAnnotateSelection('highlight'); }}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '24px', height: '24px', background: 'transparent', border: 'none',
+              borderRadius: '4px', cursor: 'pointer', padding: 0
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.12)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+            title="Highlight selected text"
+          >
+            <Highlighter size={13} color="#fbc02d" />
+          </button>
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAnnotateSelection('underline'); }}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '24px', height: '24px', background: 'transparent', border: 'none',
+              borderRadius: '4px', cursor: 'pointer', padding: 0
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.12)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+            title="Underline selected text"
+          >
+            <Underline size={13} color="#f8fafc" />
+          </button>
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAnnotateSelection('strikeout'); }}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '24px', height: '24px', background: 'transparent', border: 'none',
+              borderRadius: '4px', cursor: 'pointer', padding: 0
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.12)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+            title="Strikeout selected text"
+          >
+            <Strikethrough size={13} color="#f8fafc" />
+          </button>
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAnnotateSelection('squiggly'); }}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '24px', height: '24px', background: 'transparent', border: 'none',
+              borderRadius: '4px', cursor: 'pointer', padding: 0
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.12)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+            title="Squiggly underline selected text"
+          >
+            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 18c1.5-2 2.5-2 4 0s2.5 2 4 0 2.5-2 4 0 2.5 2 4 0" />
+            </svg>
+          </button>
+        </>
+      )}
     </div>
   );
 };

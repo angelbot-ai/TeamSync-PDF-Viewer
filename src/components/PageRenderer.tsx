@@ -38,6 +38,9 @@ interface PageRendererProps {
   onMouseMove: (e: React.MouseEvent<Element>, pageNum: number) => void;
   onMouseUp: (e: React.MouseEvent<Element>, pageNum: number) => void;
   onAnnotationClick: (id: string, e: React.MouseEvent) => void;
+  onAnnotationDoubleClick?: (id: string, e: React.MouseEvent) => void;
+  onStartResize?: (id: string, handle: string, e: React.MouseEvent, pageNum: number) => void;
+  onStartMove?: (id: string, e: React.MouseEvent, pageNum: number) => void;
   onAnnotationMouseEnter: (id: string) => void;
   onClearSelection: () => void;
   watermark?: WatermarkOptions;
@@ -54,12 +57,15 @@ function PageRendererComponent({
   pageNum, pdfDoc, scale, rotation, containerWidth: _containerWidth, containerHeight: _containerHeight,
   scrollTop: _scrollTop, scrollLeft: _scrollLeft, pageTop, pageLeft = 0, basePageWidth, basePageHeight,
   activeTab, activeTool, annotations, selectedAnnotationId, activeSearchResult, transientHighlights,
-  onMouseDown, onMouseMove, onMouseUp, onAnnotationClick, onAnnotationMouseEnter, onClearSelection,
+  onMouseDown, onMouseMove, onMouseUp, onAnnotationClick, onAnnotationDoubleClick, onStartResize, onStartMove,
+  onAnnotationMouseEnter, onClearSelection,
   watermark, watermarkText, redactions, onDiscardRedaction, onRendered,
   hideAnnotationsUntilPageRendered = true
 }: PageRendererProps) {
   const onRenderedRef = useRef(onRendered);
-  onRenderedRef.current = onRendered;
+  useEffect(() => {
+    onRenderedRef.current = onRendered;
+  }, [onRendered]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
   const renderTaskRef = useRef<any>(null);
@@ -535,9 +541,18 @@ function PageRendererComponent({
             onClick: (e: React.MouseEvent) => {
               onAnnotationClick(ann.id, e);
             },
+            onDoubleClick: (e: React.MouseEvent) => {
+              onAnnotationDoubleClick?.(ann.id, e);
+            },
+            onMouseDown: (e: React.MouseEvent) => {
+              if (isSelected && onStartMove) {
+                e.stopPropagation();
+                onStartMove(ann.id, e, pageNum);
+              }
+            },
             style: { 
               pointerEvents: 'all' as any,
-              cursor: activeTool === 'eraser' ? 'pointer' : 'pointer'
+              cursor: activeTool === 'eraser' ? 'pointer' : (isSelected ? 'move' : 'pointer')
             }
           };
 
@@ -546,7 +561,33 @@ function PageRendererComponent({
           if (ann.type === 'rectangle') {
             shape = <rect x={ann.x} y={ann.y} width={ann.width} height={ann.height} fill={fillColor} stroke={strokeColor} strokeWidth={ann.strokeWidth} style={{ mixBlendMode: blendMode }} />;
           } else if (ann.type === 'text' && ann.text) {
-            shape = <text x={ann.x} y={ann.y + 16} fill={strokeColor} fontSize="16px" fontFamily="sans-serif">{ann.text}</text>;
+            const boxW = ann.width && ann.width > 0 ? ann.width : 180;
+            const boxH = ann.height && ann.height > 0 ? ann.height : 40;
+            shape = (
+              <g>
+                <rect x={ann.x} y={ann.y} width={boxW} height={boxH} fill="transparent" style={{ pointerEvents: 'all' }} />
+                <foreignObject x={ann.x} y={ann.y} width={boxW} height={boxH} style={{ overflow: 'visible', pointerEvents: 'none' }}>
+                  <div
+                    style={{
+                      width: `${boxW}px`,
+                      minHeight: `${boxH}px`,
+                      wordBreak: 'break-word',
+                      overflowWrap: 'break-word',
+                      whiteSpace: 'pre-wrap',
+                      color: strokeColor,
+                      fontSize: '16px',
+                      fontFamily: 'sans-serif',
+                      lineHeight: '1.25',
+                      userSelect: 'none',
+                      boxSizing: 'border-box',
+                      padding: '2px 4px'
+                    }}
+                  >
+                    {ann.text}
+                  </div>
+                </foreignObject>
+              </g>
+            );
           } else if (ann.type === 'ellipse') {
             shape = <ellipse cx={ann.x + ann.width/2} cy={ann.y + ann.height/2} rx={ann.width/2} ry={ann.height/2} fill={fillColor} stroke={strokeColor} strokeWidth={ann.strokeWidth} style={{ mixBlendMode: blendMode }} />;
           } else if (ann.type === 'line' && ann.points) {
@@ -575,6 +616,81 @@ function PageRendererComponent({
               <g style={{ mixBlendMode: 'multiply' }}>
                 {hlRects.map((r, i) => (
                   <rect key={i} x={r.x} y={r.y} width={r.width} height={r.height} fill={strokeColor} opacity={ann.opacity} />
+                ))}
+              </g>
+            );
+          } else if (ann.type === 'underline') {
+            const ulRects = ann.rects && ann.rects.length > 0 ? ann.rects : [{ x: ann.x, y: ann.y, width: ann.width, height: ann.height }];
+            const th = ann.strokeWidth || 2;
+            shape = (
+              <g>
+                {ulRects.map((r, i) => (
+                  <React.Fragment key={i}>
+                    <rect x={r.x} y={r.y} width={r.width} height={r.height} fill="transparent" />
+                    <line
+                      x1={r.x}
+                      y1={r.y + r.height - th / 2}
+                      x2={r.x + r.width}
+                      y2={r.y + r.height - th / 2}
+                      stroke={strokeColor}
+                      strokeWidth={th}
+                      strokeLinecap="round"
+                    />
+                  </React.Fragment>
+                ))}
+              </g>
+            );
+          } else if (ann.type === 'strikeout') {
+            const soRects = ann.rects && ann.rects.length > 0 ? ann.rects : [{ x: ann.x, y: ann.y, width: ann.width, height: ann.height }];
+            const th = ann.strokeWidth || 2;
+            shape = (
+              <g>
+                {soRects.map((r, i) => (
+                  <React.Fragment key={i}>
+                    <rect x={r.x} y={r.y} width={r.width} height={r.height} fill="transparent" />
+                    <line
+                      x1={r.x}
+                      y1={r.y + r.height / 2}
+                      x2={r.x + r.width}
+                      y2={r.y + r.height / 2}
+                      stroke={strokeColor}
+                      strokeWidth={th}
+                      strokeLinecap="round"
+                    />
+                  </React.Fragment>
+                ))}
+              </g>
+            );
+          } else if (ann.type === 'squiggly') {
+            const sqRects = ann.rects && ann.rects.length > 0 ? ann.rects : [{ x: ann.x, y: ann.y, width: ann.width, height: ann.height }];
+            const th = ann.strokeWidth || 1.5;
+            const generateSquigglyD = (x: number, y: number, width: number) => {
+              let d = `M ${x} ${y}`;
+              const step = 4;
+              let up = true;
+              for (let cx = x; cx < x + width; cx += step) {
+                const nextX = Math.min(cx + step, x + width);
+                const midX = cx + (nextX - cx) / 2;
+                const dy = up ? -2.5 : 2.5;
+                d += ` Q ${midX} ${y + dy}, ${nextX} ${y}`;
+                up = !up;
+              }
+              return d;
+            };
+            shape = (
+              <g>
+                {sqRects.map((r, i) => (
+                  <React.Fragment key={i}>
+                    <rect x={r.x} y={r.y} width={r.width} height={r.height} fill="transparent" />
+                    <path
+                      d={generateSquigglyD(r.x, r.y + r.height - 2, r.width)}
+                      fill="none"
+                      stroke={strokeColor}
+                      strokeWidth={th}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </React.Fragment>
                 ))}
               </g>
             );
@@ -686,14 +802,51 @@ function PageRendererComponent({
           return (
             <g key={ann.id} {...interactionProps}>
               {shape}
-              {isSelected && (
-                <rect 
-                  x={ann.x - 4} y={ann.y - 4} 
-                  width={ann.width ? ann.width + 8 : 32} 
-                  height={ann.height ? ann.height + 8 : 32} 
-                  fill="none" stroke="var(--primary)" strokeWidth="2" strokeDasharray="4" 
-                />
-              )}
+              {isSelected && (() => {
+                const w = ann.width && ann.width > 0 ? ann.width : 32;
+                const h = ann.height && ann.height > 0 ? ann.height : 32;
+                const isResizable = ['text', 'rectangle', 'ellipse', 'highlight', 'underline', 'strikeout', 'squiggly'].includes(ann.type);
+                const handleCoords: Record<string, { x: number; y: number; cursor: string }> = {
+                  nw: { x: ann.x, y: ann.y, cursor: 'nwse-resize' },
+                  n: { x: ann.x + w / 2, y: ann.y, cursor: 'ns-resize' },
+                  ne: { x: ann.x + w, y: ann.y, cursor: 'nesw-resize' },
+                  e: { x: ann.x + w, y: ann.y + h / 2, cursor: 'ew-resize' },
+                  se: { x: ann.x + w, y: ann.y + h, cursor: 'nwse-resize' },
+                  s: { x: ann.x + w / 2, y: ann.y + h, cursor: 'ns-resize' },
+                  sw: { x: ann.x, y: ann.y + h, cursor: 'nesw-resize' },
+                  w: { x: ann.x, y: ann.y + h / 2, cursor: 'ew-resize' },
+                };
+
+                return (
+                  <g className="tspdf-annotation-selection">
+                    <rect 
+                      x={ann.x - 4} y={ann.y - 4} 
+                      width={w + 8} 
+                      height={h + 8} 
+                      fill="none" stroke="var(--primary)" strokeWidth="1.5" strokeDasharray="4" 
+                      style={{ pointerEvents: 'none' }}
+                    />
+                    {!ann.readOnly && isResizable && onStartResize && Object.entries(handleCoords).map(([handleKey, hInfo]) => (
+                      <rect
+                        key={handleKey}
+                        x={hInfo.x - 4}
+                        y={hInfo.y - 4}
+                        width={8}
+                        height={8}
+                        fill="#ffffff"
+                        stroke="var(--primary)"
+                        strokeWidth="1.5"
+                        rx={1}
+                        style={{ cursor: hInfo.cursor, pointerEvents: 'all' }}
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          onStartResize(ann.id, handleKey, e, pageNum);
+                        }}
+                      />
+                    ))}
+                  </g>
+                );
+              })()}
             </g>
           );
         })}

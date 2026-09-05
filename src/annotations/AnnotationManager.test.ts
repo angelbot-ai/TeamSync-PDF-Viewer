@@ -123,4 +123,63 @@ describe('AnnotationManager', () => {
     expect(err).toHaveBeenCalled();
     err.mockRestore();
   });
+
+  it('tracks canUndo and canRedo for text resizing and markup annotations', () => {
+    expect(m.canUndo).toBe(false);
+    expect(m.canRedo).toBe(false);
+
+    // Add text annotation
+    const textAnn: Annotation = {
+      id: 'txt-1',
+      type: 'text',
+      pageIndex: 1,
+      x: 50,
+      y: 50,
+      width: 180,
+      height: 40,
+      text: 'Long sample text that wraps neatly across lines',
+      color: '#000000',
+      strokeWidth: 1,
+      opacity: 1
+    };
+    m.commit([textAnn]);
+    expect(m.canUndo).toBe(true);
+    expect(m.canRedo).toBe(false);
+
+    // Resize the text annotation box
+    const resizedTextAnn: Annotation = {
+      ...textAnn,
+      width: 260,
+      height: 60
+    };
+    m.commit([resizedTextAnn]);
+    expect(m.getAnnotationById('txt-1')!.width).toBe(260);
+    expect(m.getAnnotationById('txt-1')!.height).toBe(60);
+
+    // Add markup annotations: underline, strikeout, squiggly
+    const ulAnn: Annotation = { id: 'ul-1', type: 'underline', pageIndex: 1, x: 50, y: 100, width: 120, height: 18, color: '#d32f2f', strokeWidth: 2, opacity: 1 };
+    const soAnn: Annotation = { id: 'so-1', type: 'strikeout', pageIndex: 1, x: 50, y: 130, width: 120, height: 18, color: '#1976d2', strokeWidth: 2, opacity: 1 };
+    const sqAnn: Annotation = { id: 'sq-1', type: 'squiggly', pageIndex: 1, x: 50, y: 160, width: 120, height: 18, color: '#388e3c', strokeWidth: 1.5, opacity: 1 };
+    m.commit([resizedTextAnn, ulAnn, soAnn, sqAnn]);
+    expect(m.getAnnotationsList().length).toBe(4);
+
+    // Undo markup addition
+    expect(m.undo()).toBe(true);
+    expect(m.getAnnotationsList().length).toBe(1);
+    expect(m.canRedo).toBe(true);
+
+    // Undo text resize
+    expect(m.undo()).toBe(true);
+    expect(m.getAnnotationById('txt-1')!.width).toBe(180);
+    expect(m.getAnnotationById('txt-1')!.height).toBe(40);
+
+    // Redo text resize
+    expect(m.redo()).toBe(true);
+    expect(m.getAnnotationById('txt-1')!.width).toBe(260);
+
+    // Redo markup addition
+    expect(m.redo()).toBe(true);
+    expect(m.getAnnotationsList().length).toBe(4);
+    expect(m.canRedo).toBe(false);
+  });
 });

@@ -48,6 +48,37 @@ const hexToRgb = (hex: string | undefined) => {
   return rgb(r, g, b);
 };
 
+function wrapText(text: string, maxWidth: number, fontSize: number): string[] {
+  const approxCharWidth = fontSize * 0.55;
+  const maxCharsPerLine = Math.max(1, Math.floor(maxWidth / approxCharWidth));
+  const paragraphs = text.split('\n');
+  const lines: string[] = [];
+
+  for (const p of paragraphs) {
+    if (!p) {
+      lines.push('');
+      continue;
+    }
+    const words = p.split(/\s+/);
+    let currentLine = '';
+
+    for (const word of words) {
+      if (!currentLine) {
+        currentLine = word;
+      } else if ((currentLine + ' ' + word).length <= maxCharsPerLine) {
+        currentLine += ' ' + word;
+      } else {
+        lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+  }
+  return lines;
+}
+
 async function bakeAnnotation(pdfDoc: PDFDocument, page: PDFPage, g: PageGeometry, ann: Annotation, signerName?: string): Promise<void> {
   const color = hexToRgb(ann.color);
   const opacity = ann.opacity ?? 1;
@@ -73,6 +104,47 @@ async function bakeAnnotation(pdfDoc: PDFDocument, page: PDFPage, g: PageGeometr
       for (const r of rects) {
         const [x0, y0, x1, y1] = rectToPdf(g, r);
         page.drawRectangle({ x: x0, y: y0, width: x1 - x0, height: y1 - y0, color, opacity: opacity < 1 ? opacity : 0.5, blendMode: BlendMode.Multiply });
+      }
+      return;
+    }
+    case 'underline': {
+      const rects = ann.rects && ann.rects.length > 0 ? ann.rects : [{ x: ann.x, y: ann.y, width: ann.width, height: ann.height }];
+      for (const r of rects) {
+        const [s, e] = pathToPdf(g, [
+          { x: r.x, y: r.y + r.height - 1.5 },
+          { x: r.x + r.width, y: r.y + r.height - 1.5 }
+        ]);
+        page.drawLine({ start: s, end: e, color, opacity, thickness: strokeWidth || 1.5 });
+      }
+      return;
+    }
+    case 'strikeout': {
+      const rects = ann.rects && ann.rects.length > 0 ? ann.rects : [{ x: ann.x, y: ann.y, width: ann.width, height: ann.height }];
+      for (const r of rects) {
+        const [s, e] = pathToPdf(g, [
+          { x: r.x, y: r.y + r.height / 2 },
+          { x: r.x + r.width, y: r.y + r.height / 2 }
+        ]);
+        page.drawLine({ start: s, end: e, color, opacity, thickness: strokeWidth || 1.5 });
+      }
+      return;
+    }
+    case 'squiggly': {
+      const rects = ann.rects && ann.rects.length > 0 ? ann.rects : [{ x: ann.x, y: ann.y, width: ann.width, height: ann.height }];
+      for (const r of rects) {
+        const squigglyPts = [];
+        const step = 3;
+        let up = true;
+        for (let curX = r.x; curX <= r.x + r.width; curX += step) {
+          squigglyPts.push({ x: curX, y: r.y + r.height - (up ? 3 : 1) });
+          up = !up;
+        }
+        if (squigglyPts.length >= 2) {
+          const pdfPts = pathToPdf(g, squigglyPts);
+          for (let i = 1; i < pdfPts.length; i++) {
+            page.drawLine({ start: pdfPts[i - 1], end: pdfPts[i], color, opacity, thickness: strokeWidth || 1.5 });
+          }
+        }
       }
       return;
     }
@@ -106,8 +178,14 @@ async function bakeAnnotation(pdfDoc: PDFDocument, page: PDFPage, g: PageGeometr
     }
     case 'text': {
       if (!ann.text) return;
-      const b = topLeftBaseline(ann.x, ann.y, 16);
-      page.drawText(ann.text, { x: b.x, y: b.y, size: 16, color, opacity, rotate: textRotate });
+      const boxWidth = ann.width && ann.width > 0 ? ann.width : 200;
+      const lines = wrapText(ann.text, boxWidth, 16);
+      const lineHeight = 20;
+      for (let i = 0; i < lines.length; i++) {
+        if (!lines[i]) continue;
+        const b = topLeftBaseline(ann.x, ann.y + i * lineHeight, 16);
+        page.drawText(lines[i], { x: b.x, y: b.y, size: 16, color, opacity, rotate: textRotate });
+      }
       return;
     }
     case 'note': {

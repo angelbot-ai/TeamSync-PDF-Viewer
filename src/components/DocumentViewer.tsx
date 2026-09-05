@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo, useSyncExternalStore } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
-import { Pen, Type, Minus, Eraser, Square, Circle as CircleIcon, Highlighter, ChevronLeft, ChevronRight, Brush, MessageSquareQuote, ArrowUpRight, ShieldCheck, Link as LinkIcon, EyeOff, Trash2 } from 'lucide-react';
+import { Pen, Type, Minus, Eraser, Square, Circle as CircleIcon, Highlighter, ChevronLeft, ChevronRight, Brush, MessageSquareQuote, ArrowUpRight, ShieldCheck, Link as LinkIcon, EyeOff, Trash2, Undo2, Redo2, Underline, Strikethrough } from 'lucide-react';
 import AnnotationContextMenu from './AnnotationContextMenu';
 import InsertLinkModal from './InsertLinkModal';
 import { matchShortcut, useShortcuts } from '../hooks/useShortcuts';
@@ -563,6 +563,240 @@ export default function DocumentViewer({
   const handleUndo = useCallback(() => { annotationManager.undo(); }, [annotationManager]);
   const handleRedo = useCallback(() => { annotationManager.redo(); }, [annotationManager]);
 
+  // Live resizing & moving state for annotations
+  const [liveResizingAnn, setLiveResizingAnn] = useState<Annotation | null>(null);
+  const [liveMovingAnn, setLiveMovingAnn] = useState<Annotation | null>(null);
+  const resizingRef = useRef<{
+    annId: string;
+    handle: string;
+    startX: number;
+    startY: number;
+    initialAnn: Annotation;
+    pageIndex: number;
+  } | null>(null);
+  const movingRef = useRef<{
+    annId: string;
+    startX: number;
+    startY: number;
+    initialAnn: Annotation;
+    pageIndex: number;
+  } | null>(null);
+
+  const latestResizingAnnRef = useRef<Annotation | null>(null);
+  latestResizingAnnRef.current = liveResizingAnn;
+  const latestMovingAnnRef = useRef<Annotation | null>(null);
+  latestMovingAnnRef.current = liveMovingAnn;
+
+  const handleStartResize = useCallback((id: string, handle: string, e: React.MouseEvent, pageNum: number) => {
+    const ann = annotations.find(a => a.id === id);
+    if (!ann || permissions?.canEditAnnotations === false || !annotationManager.canEdit(ann)) return;
+    const initialAnn = {
+      ...ann,
+      width: ann.width && ann.width > 0 ? ann.width : 180,
+      height: ann.height && ann.height > 0 ? ann.height : 40
+    };
+    resizingRef.current = {
+      annId: id,
+      handle,
+      startX: e.clientX,
+      startY: e.clientY,
+      initialAnn,
+      pageIndex: pageNum
+    };
+    setLiveResizingAnn(initialAnn);
+  }, [annotations, annotationManager, permissions]);
+
+  const handleStartMove = useCallback((id: string, e: React.MouseEvent, pageNum: number) => {
+    const ann = annotations.find(a => a.id === id);
+    if (!ann || permissions?.canEditAnnotations === false || !annotationManager.canEdit(ann)) return;
+    movingRef.current = {
+      annId: id,
+      startX: e.clientX,
+      startY: e.clientY,
+      initialAnn: { ...ann },
+      pageIndex: pageNum
+    };
+    setLiveMovingAnn({ ...ann });
+  }, [annotations, annotationManager, permissions]);
+
+  const handleAnnotationDoubleClick = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const ann = annotations.find(a => a.id === id);
+    if (ann && (ann.type === 'text' || ann.type === 'note' || ann.type === 'callout')) {
+      if (permissions?.canEditAnnotations === false || !annotationManager.canEdit(ann)) {
+        setSelectedAnnotationId(id);
+        return;
+      }
+      setActiveTextEditor({
+        x: ann.x,
+        y: ann.y,
+        type: ann.type as any,
+        annId: ann.id,
+        points: ann.points,
+        pageIndex: ann.pageIndex
+      });
+      setCurrentText(ann.text || '');
+      if (ann.color) setCurrentColor(ann.color);
+      setSelectedAnnotationId(id);
+    }
+  }, [annotations, annotationManager, permissions]);
+
+  useEffect(() => {
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (resizingRef.current) {
+        const { handle, startX, startY, initialAnn } = resizingRef.current;
+        let dx = (e.clientX - startX) / scale;
+        let dy = (e.clientY - startY) / scale;
+        if (rotation === 90) {
+          const tmp = dx; dx = dy; dy = -tmp;
+        } else if (rotation === 180) {
+          dx = -dx; dy = -dy;
+        } else if (rotation === 270) {
+          const tmp = dx; dx = -dy; dy = tmp;
+        }
+
+        let newW = initialAnn.width;
+        let newH = initialAnn.height;
+        let newX = initialAnn.x;
+        let newY = initialAnn.y;
+
+        if (handle.includes('e')) {
+          newW = Math.max(30, initialAnn.width + dx);
+        }
+        if (handle.includes('s')) {
+          newH = Math.max(16, initialAnn.height + dy);
+        }
+        if (handle.includes('w')) {
+          newW = Math.max(30, initialAnn.width - dx);
+          newX = initialAnn.x + (initialAnn.width - newW);
+        }
+        if (handle.includes('n')) {
+          newH = Math.max(16, initialAnn.height - dy);
+          newY = initialAnn.y + (initialAnn.height - newH);
+        }
+
+        setLiveResizingAnn({
+          ...initialAnn,
+          x: newX,
+          y: newY,
+          width: newW,
+          height: newH
+        });
+      } else if (movingRef.current) {
+        const { startX, startY, initialAnn } = movingRef.current;
+        let dx = (e.clientX - startX) / scale;
+        let dy = (e.clientY - startY) / scale;
+        if (rotation === 90) {
+          const tmp = dx; dx = dy; dy = -tmp;
+        } else if (rotation === 180) {
+          dx = -dx; dy = -dy;
+        } else if (rotation === 270) {
+          const tmp = dx; dx = -dy; dy = tmp;
+        }
+
+        setLiveMovingAnn({
+          ...initialAnn,
+          x: Math.max(0, initialAnn.x + dx),
+          y: Math.max(0, initialAnn.y + dy)
+        });
+      }
+    };
+
+    const handleWindowMouseUp = () => {
+      if (resizingRef.current) {
+        if (latestResizingAnnRef.current) {
+          const finalAnn = latestResizingAnnRef.current;
+          commitAnnotations(annotations.map(a => a.id === finalAnn.id ? finalAnn : a));
+        }
+        resizingRef.current = null;
+        setLiveResizingAnn(null);
+      }
+      if (movingRef.current) {
+        if (latestMovingAnnRef.current) {
+          const finalAnn = latestMovingAnnRef.current;
+          commitAnnotations(annotations.map(a => a.id === finalAnn.id ? finalAnn : a));
+        }
+        movingRef.current = null;
+        setLiveMovingAnn(null);
+      }
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [scale, rotation, annotations, commitAnnotations]);
+
+  const handleAnnotateSelection = useCallback((type: 'highlight' | 'underline' | 'strikeout' | 'squiggly') => {
+    if (permissions?.canAddAnnotations === false) return;
+    if (typeof window === 'undefined') return;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const clientRects = Array.from(range.getClientRects());
+    if (clientRects.length === 0) return;
+
+    let node: Node | null = range.commonAncestorContainer;
+    while (node && !(node instanceof HTMLElement && node.classList.contains('pdf-page-container'))) {
+      node = node.parentNode;
+    }
+    if (!node || !(node instanceof HTMLElement)) return;
+
+    const pageNumAttr = node.getAttribute('data-page-number') || node.id.replace('pdf-page-', '');
+    const targetPage = parseInt(pageNumAttr, 10);
+    if (!targetPage) return;
+
+    const pageRect = node.getBoundingClientRect();
+    const dims = dimsFor(targetPage);
+    const unW = rotation % 180 === 0 ? dims.width : dims.height;
+    const unH = rotation % 180 === 0 ? dims.height : dims.width;
+
+    const rects = clientRects.map(r => {
+      const rawX = (r.left - pageRect.left) / scale;
+      const rawY = (r.top - pageRect.top) / scale;
+      const rawW = r.width / scale;
+      const rawH = r.height / scale;
+      const p1 = convertToUnrotated(rawX, rawY, rotation, unW, unH);
+      const p2 = convertToUnrotated(rawX + rawW, rawY + rawH, rotation, unW, unH);
+      return {
+        x: Math.min(p1.x, p2.x),
+        y: Math.min(p1.y, p2.y),
+        width: Math.abs(p2.x - p1.x),
+        height: Math.abs(p2.y - p1.y)
+      };
+    }).filter(r => r.width > 2 && r.height > 2);
+
+    if (rects.length === 0) return;
+
+    const minX = Math.min(...rects.map(r => r.x));
+    const minY = Math.min(...rects.map(r => r.y));
+    const maxX = Math.max(...rects.map(r => r.x + r.width));
+    const maxY = Math.max(...rects.map(r => r.y + r.height));
+
+    const color = type === 'highlight' ? '#fbc02d' : type === 'squiggly' ? '#388e3c' : currentColor || '#d32f2f';
+    const opacity = type === 'highlight' ? 0.5 : 1;
+    const strokeWidth = type === 'squiggly' ? 1.5 : 2;
+
+    const annId = newAnnotationId();
+    commitAnnotations([...annotations, {
+      id: annId,
+      type,
+      pageIndex: targetPage,
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+      rects: rects.length > 1 ? rects : undefined,
+      color,
+      strokeWidth,
+      opacity
+    }]);
+
+    sel.removeAllRanges();
+  }, [annotations, commitAnnotations, currentColor, dimsFor, permissions, rotation, scale]);
+
   // Keyboard shortcuts are delivered by <TeamSyncViewer> from its root element, so they only apply
   // to the viewer instance that currently has focus (several viewers can share a page).
   useBusEvent<KeyboardEvent>('viewer-keydown', (e) => {
@@ -641,6 +875,23 @@ export default function DocumentViewer({
         commitAnnotations(annotations.filter(a => a.id !== selectedAnnotationId));
         setSelectedAnnotationId(null);
         return;
+      }
+      if (e.key === 'Enter' && selectedAnnotationId && !activeTextEditor) {
+        const ann = annotations.find(a => a.id === selectedAnnotationId);
+        if (ann && (ann.type === 'text' || ann.type === 'note' || ann.type === 'callout')) {
+          e.preventDefault();
+          setActiveTextEditor({
+            x: ann.x,
+            y: ann.y,
+            type: ann.type as any,
+            annId: ann.id,
+            points: ann.points,
+            pageIndex: ann.pageIndex
+          });
+          setCurrentText(ann.text || '');
+          if (ann.color) setCurrentColor(ann.color);
+          return;
+        }
       }
     }
   });
@@ -949,7 +1200,7 @@ export default function DocumentViewer({
       setIsDrawing(true);
       setFreehandPoints([{ x, y }]);
       setActiveDrawingPageNum(targetPageNum);
-    } else if (['rectangle', 'ellipse', 'line', 'arrow', 'highlight', 'redaction'].includes(activeTool)) {
+    } else if (['rectangle', 'ellipse', 'line', 'arrow', 'highlight', 'underline', 'strikeout', 'squiggly', 'redaction'].includes(activeTool)) {
       setIsDrawing(true);
       setActiveDrawingPageNum(targetPageNum);
     } else if (['callout', 'link'].includes(activeTool)) {
@@ -966,14 +1217,17 @@ export default function DocumentViewer({
         ));
       } else {
         const annId = newAnnotationId();
+        const defaultWidth = Math.max(160, Math.min(320, currentText.length * 9 + 20));
+        const lineCount = currentText.split('\n').length;
+        const defaultHeight = Math.max(36, lineCount * 22);
         commitAnnotations([...annotations, {
           id: annId,
           type: activeTextEditor.type,
           pageIndex: activeTextEditor.pageIndex,
           x: activeTextEditor.x,
           y: activeTextEditor.y,
-          width: Math.max(100, currentText.length * 8 + 20),
-          height: 30,
+          width: defaultWidth,
+          height: defaultHeight,
           text: currentText,
           points: activeTextEditor.points,
           color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity
@@ -989,8 +1243,10 @@ export default function DocumentViewer({
 
   const handleMouseMove = (e: React.MouseEvent<Element>, targetPageNum: number) => {
     if (!isDrawing) return;
+    
     const { x, y } = getUnrotatedPoint(e, targetPageNum);
     setCurrentPos({ x, y });
+
     if (activeTool === 'freehand') {
       setFreehandPoints(prev => [...prev, { x, y }]);
     }
@@ -998,34 +1254,35 @@ export default function DocumentViewer({
 
   const handleMouseUp = (e: React.MouseEvent<Element>, targetPageNum: number) => {
     if (activeTool === 'text' || activeTool === 'note' || activeTool === 'digital_signature' || activeTool === 'link') {
-      const { x, y } = getUnrotatedPoint(e, targetPageNum);
-      
       if (activeTool === 'link') {
-        let width = Math.abs(currentPos.x - startPos.x);
-        let height = Math.abs(currentPos.y - startPos.y);
-        let linkX = Math.min(startPos.x, currentPos.x);
-        let linkY = Math.min(startPos.y, currentPos.y);
-
-        if (width < 5 || height < 5) {
-          linkX = x;
-          linkY = y;
-          width = 120;
-          height = 35;
-        }
-
-        const annId = newAnnotationId();
-        commitAnnotations([...annotations, { 
-          id: annId, type: 'link', pageIndex: targetPageNum, x: linkX, y: linkY, width, height, points: [],
-          color: 'transparent', strokeWidth: 0, opacity: 1, text: ''
-        }]);
-        setIsDrawing(false);
-        setActiveDrawingPageNum(null);
-        justCreatedLinkRef.current = true;
-        setSelectedAnnotationId(annId);
+        const { x, y } = getUnrotatedPoint(e, targetPageNum);
+        if (permissions?.canAddAnnotations === false) return;
+        
+        // Auto create a link box at click location
+        const linkId = newAnnotationId();
+        const newLinkAnn: any = {
+          id: linkId,
+          type: 'link',
+          pageIndex: targetPageNum,
+          x,
+          y,
+          width: 120,
+          height: 35,
+          text: 'Open Link',
+          linkUrl: 'https://',
+          color: 'transparent',
+          strokeWidth: 0,
+          opacity: 1,
+          points: []
+        };
+        commitAnnotations([...annotations, newLinkAnn]);
+        setSelectedAnnotationId(linkId);
         setIsLinkModalOpen(true);
         setActiveTool(null);
         return;
       } else if (activeTool === 'text' || activeTool === 'note') {
+        const { x, y } = getUnrotatedPoint(e, targetPageNum);
+        if (permissions?.canAddAnnotations === false) return;
         if (activeTextEditor) {
           commitTextAnnotation();
         }
@@ -1067,7 +1324,7 @@ export default function DocumentViewer({
         let y = Math.min(startPos.y, currentPos.y);
         const points = (activeTool === 'line' || activeTool === 'arrow' || activeTool === 'callout') ? [startPos, currentPos] : undefined;
         
-        if ((activeTool === 'highlight' || activeTool === 'redaction') && height < 18) {
+        if (['highlight', 'underline', 'strikeout', 'squiggly', 'redaction'].includes(activeTool) && height < 18) {
           height = Math.max(18, height);
           y = startPos.y - 9; // Center the highlight or redaction on the mouse path
         }
@@ -1118,7 +1375,7 @@ export default function DocumentViewer({
         setSelectedAnnotationId(null);
         setContextMenuPos(null);
       }
-    } else if (activeTool === null || activeTool === 'pan') {
+    } else if (activeTool === null || activeTool === 'pan' || activeTool === 'select') {
       const ann = annotations.find(a => a.id === id);
       if (ann && ann.linkUrl && activeTab === 'View') {
         if (ann.linkUrl.startsWith('#page=')) {
@@ -1133,15 +1390,17 @@ export default function DocumentViewer({
           if (win) win.opener = null;
         }
         return;
-      } else if (ann && (ann.type === 'note' || ann.type === 'callout' || ann.type === 'text')) {
+      } else if (ann && (ann.type === 'note' || ann.type === 'callout')) {
         if (permissions?.canEditAnnotations === false || !annotationManager.canEdit(ann)) {
           setSelectedAnnotationId(id);
           return;
         }
-        // Open edit mode for text-based annotations
+        // Open edit mode for note / callout
         setActiveTextEditor({ x: ann.x, y: ann.y, type: ann.type as any, annId: ann.id, points: ann.points, pageIndex: ann.pageIndex });
         setCurrentText(ann.text || '');
         if (ann.color) setCurrentColor(ann.color);
+      } else if (ann && ann.type === 'text') {
+        setSelectedAnnotationId(id);
       } else if (ann && ann.type === 'link') {
         if (permissions?.canEditAnnotations === false || !annotationManager.canEdit(ann)) {
           setSelectedAnnotationId(id);
@@ -1219,7 +1478,14 @@ export default function DocumentViewer({
       {/* Sub-toolbar */}
       {activeTab === 'Annotate' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', backgroundColor: '#fff', borderBottom: '1px solid var(--border-color)', height: '40px' }}>
+          <ToolButton icon={<Undo2 size={16} />} disabled={!annotationManager.canUndo} onClick={handleUndo} label="Undo" />
+          <ToolButton icon={<Redo2 size={16} />} disabled={!annotationManager.canRedo} onClick={handleRedo} label="Redo" />
+          <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border-color)', margin: '0 4px' }} />
+
           <ToolButton icon={<Highlighter size={16} />} active={activeTool === 'highlight'} onClick={() => { setActiveTool('highlight'); setCurrentColor('#fbc02d'); setCurrentOpacity(0.5); setCurrentStrokeWidth(16); }} label="Text Highlight" />
+          <ToolButton icon={<Underline size={16} />} active={activeTool === 'underline'} onClick={() => { setActiveTool('underline'); setCurrentColor('#d32f2f'); setCurrentOpacity(1); setCurrentStrokeWidth(2); }} label="Underline" />
+          <ToolButton icon={<Strikethrough size={16} />} active={activeTool === 'strikeout'} onClick={() => { setActiveTool('strikeout'); setCurrentColor('#d32f2f'); setCurrentOpacity(1); setCurrentStrokeWidth(2); }} label="Strikeout" />
+          <ToolButton icon={<SquigglyIcon size={16} />} active={activeTool === 'squiggly'} onClick={() => { setActiveTool('squiggly'); setCurrentColor('#388e3c'); setCurrentOpacity(1); setCurrentStrokeWidth(1.5); }} label="Squiggly" />
           <ToolButton icon={<Brush size={16} />} active={activeTool === 'freehand'} onClick={() => { setActiveTool('freehand'); setCurrentColor('#000000'); setCurrentOpacity(1); setCurrentStrokeWidth(2); }} label="Marker" />
           <ToolButton icon={<Type size={16} />} active={activeTool === 'text'} onClick={() => { setActiveTool('text'); setCurrentColor('#000000'); setCurrentOpacity(1); }} label="Text" />
           {permissions?.canRedact !== false && (
@@ -1252,7 +1518,7 @@ export default function DocumentViewer({
           <div style={{ flex: 1 }} />
           
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {['line', 'arrow', 'rectangle', 'ellipse', 'freehand', 'highlight'].includes(activeTool || '') && (
+            {['line', 'arrow', 'rectangle', 'ellipse', 'freehand', 'highlight', 'underline', 'strikeout', 'squiggly'].includes(activeTool || '') && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderRight: '1px solid var(--border-color)', paddingRight: '12px' }}>
                 <span style={{ fontSize: '12px', color: '#666', minWidth: '85px' }}>Thickness: <strong>{currentStrokeWidth}px</strong></span>
                 <input 
@@ -1557,7 +1823,7 @@ export default function DocumentViewer({
                       x: 0, y: 0, width: 0, height: 0, points: freehandPoints,
                       color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity
                     };
-                  } else if (activeTool === 'highlight') {
+                  } else if (['highlight', 'underline', 'strikeout', 'squiggly'].includes(activeTool)) {
                     let width = Math.abs(currentPos.x - startPos.x);
                     let height = Math.abs(currentPos.y - startPos.y);
                     let x = Math.min(startPos.x, currentPos.x);
@@ -1567,9 +1833,9 @@ export default function DocumentViewer({
                       y = startPos.y - 9;
                     }
                     return {
-                      id: 'temp-live-drawing', type: 'highlight' as const, pageIndex: activeDrawingPageNum,
+                      id: 'temp-live-drawing', type: activeTool as any, pageIndex: activeDrawingPageNum,
                       x, y, width, height,
-                      color: currentColor, strokeWidth: currentStrokeWidth, opacity: currentOpacity
+                      color: currentColor, strokeWidth: currentStrokeWidth, opacity: activeTool === 'highlight' ? currentOpacity : 1
                     };
                   } else if (activeTool === 'redaction') {
                     let width = Math.abs(currentPos.x - startPos.x);
@@ -1612,7 +1878,8 @@ export default function DocumentViewer({
                     pLeft = Math.max(0, cW / 2 - thisWidth / 2);
                   }
                   
-                  const pageAnnotations = (liveAnn && liveAnn.pageIndex === p) ? [...annotations, liveAnn] : annotations;
+                  const displayAnns = annotations.map(a => (liveResizingAnn && a.id === liveResizingAnn.id ? liveResizingAnn : (liveMovingAnn && a.id === liveMovingAnn.id ? liveMovingAnn : a)));
+                  const pageAnnotations = (liveAnn && liveAnn.pageIndex === p) ? [...displayAnns, liveAnn] : displayAnns;
 
                   return (
                     <React.Fragment key={p}>
@@ -1639,6 +1906,9 @@ export default function DocumentViewer({
                         onMouseMove={handleMouseMove}
                         onMouseUp={handleMouseUp}
                         onAnnotationClick={handleEraserClick}
+                        onAnnotationDoubleClick={handleAnnotationDoubleClick}
+                        onStartResize={handleStartResize}
+                        onStartMove={handleStartMove}
                         onAnnotationMouseEnter={handleEraserMove}
                         onClearSelection={() => {
                           if (justCreatedLinkRef.current || isLinkModalOpen) {
@@ -1939,6 +2209,7 @@ export default function DocumentViewer({
               <TextSelectionTooltip
                 containerRef={containerRef}
                 onCopy={(text) => bus.emit('action-text-copied', { text })}
+                onAnnotateSelection={handleAnnotateSelection}
               />
             )}
           </div>
@@ -2006,23 +2277,35 @@ export default function DocumentViewer({
   );
 }
 
-function ToolButton({ icon, active, onClick, label }: { icon: React.ReactNode, active: boolean, onClick: () => void, label: string }) {
+function ToolButton({ icon, active, onClick, label, disabled }: { icon: React.ReactNode, active?: boolean, onClick: () => void, label: string, disabled?: boolean }) {
   return (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
       title={label}
+      disabled={disabled}
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         width: '28px', height: '28px', border: 'none', borderRadius: '4px',
         backgroundColor: active ? '#e6f0fa' : 'transparent',
         color: active ? 'var(--primary)' : 'var(--text-color)',
-        cursor: 'pointer'
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.38 : 1,
+        pointerEvents: disabled ? 'none' : 'auto'
       }}
-      onMouseEnter={e => { if (!active) e.currentTarget.style.backgroundColor = '#f3f4f6' }}
-      onMouseLeave={e => { if (!active) e.currentTarget.style.backgroundColor = 'transparent' }}
+      onMouseEnter={e => { if (!active && !disabled) e.currentTarget.style.backgroundColor = '#f3f4f6'; }}
+      onMouseLeave={e => { if (!active && !disabled) e.currentTarget.style.backgroundColor = 'transparent'; }}
     >
       {icon}
     </button>
+  );
+}
+
+function SquigglyIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 8v5a4 4 0 0 0 8 0V8" />
+      <path d="M4 19c1.5-1.5 2.5-1.5 4 0s2.5 1.5 4 0 2.5-1.5 4 0 2.5 1.5 4 0" />
+    </svg>
   );
 }
 

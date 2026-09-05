@@ -18,6 +18,9 @@ export type AnnotationType =
   | 'callout'
   | 'signature'
   | 'highlight'
+  | 'underline'
+  | 'strikeout'
+  | 'squiggly'
   | 'digital_signature_placeholder'
   | 'link'
   /**

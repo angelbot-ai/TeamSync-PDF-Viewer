@@ -2,6 +2,14 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.5.1] — 2026-09-06
+
+### Added
+- **`redactionsApplied` & `redactionsChanged` Events**: Added typed `redactionsApplied: { redactions: Redaction[] }` and `redactionsChanged: { redactions: Redaction[] }` events to `ViewerEventMap` available via `instance.on()`.
+- **Public Redaction Callbacks**: Added `onRedactionsApplied?: (redactions: Redaction[]) => void` and `onRedactionsChange?: (redactions: Redaction[]) => void` props to `<TeamSyncViewer>` and `WebViewerOptions`.
+- **Apply Confirmation Hook**: Threaded `onRedactionsApplied` through `DocumentViewerProps`, firing once per user click of Apply in the confirmation modal with the full combined list of applied redactions.
+- **Public `getRedactions()` API**: Added `instance.getRedactions(): Redaction[]` to `WebViewerInstance` mirroring `getAnnotations()`, returning the live combined redaction list.
+
 ## [1.5.0] — 2026-09-05
 
 ### Added

@@ -4,7 +4,7 @@
 
 ![TeamSync PDF Viewer UI](https://raw.githubusercontent.com/angelbot-ai/TeamSync-PDF-Viewer/main/docs/images/viewer_ui.png)
 
-### **100% Open Source. 100% Client-Side. Enterprise PDF Engine.**
+### **100% Open Source. 100% Client-Side. Enterprise SDK.**
 
 [![License: CPAL-1.0](https://img.shields.io/badge/License-CPAL--1.0-blue.svg)](LICENSE)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-pdfviewer.teamsync.com-000000.svg)](https://pdfviewer.teamsync.com/)

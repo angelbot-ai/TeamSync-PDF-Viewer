@@ -44,6 +44,10 @@ export interface TeamSyncViewerProps extends Omit<WebViewerOptions, 'path'> {
   onPasswordRequired?: (info: { url: string }) => void;
   onPageChange?: (pageNumber: number, numPages: number) => void;
   onAnnotationsChange?: (annotations: Annotation[]) => void;
+  /** Fires whenever pending or applied redactions change in the viewer. */
+  onRedactionsChange?: (redactions: Redaction[]) => void;
+  /** Fires once per user click of Apply in the confirmation modal with all applied redactions. */
+  onRedactionsApplied?: (redactions: Redaction[]) => void;
   /** Fires whenever transient highlights change. */
   onTransientHighlightsChange?: (highlights: TransientHighlight[]) => void;
   /** Fires whenever the user selects text within the document. */
@@ -366,9 +370,22 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     [bus]
   );
 
-  const handleRedactionsChange = useCallback((reds: Redaction[]) => {
-    redactionsRef.current = reds;
-  }, []);
+  const handleRedactionsChange = useCallback(
+    (reds: Redaction[]) => {
+      redactionsRef.current = reds;
+      bus.emit('redactionsChanged', { redactions: reds });
+      latest.current.onRedactionsChange?.(reds);
+    },
+    [bus]
+  );
+
+  const handleRedactionsApplied = useCallback(
+    (reds: Redaction[]) => {
+      bus.emit('redactionsApplied', { redactions: reds });
+      latest.current.onRedactionsApplied?.(reds);
+    },
+    [bus]
+  );
 
   const { getCommand } = useShortcuts();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -568,6 +585,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             setScale={setScale}
             onAnnotationsChange={handleAnnotationsChange}
             onRedactionsChange={handleRedactionsChange}
+            onRedactionsApplied={handleRedactionsApplied}
             onDocumentLoaded={handleDocumentLoaded}
             onLoadError={handleLoadError}
             onFirstPageRendered={handleFirstPageRendered}

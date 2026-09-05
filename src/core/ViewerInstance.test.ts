@@ -262,4 +262,63 @@ describe('WebViewerInstance', () => {
     inst.UI.setToolMode('rectangle');
     expect(onTool).toHaveBeenLastCalledWith({ tool: 'rectangle' });
   });
+
+  it('getRedactions() returns empty array when unmounted and live redactions when mounted', () => {
+    const bus = new ViewerBus();
+    const inst = new WebViewerInstance(bus);
+    expect(inst.getRedactions()).toEqual([]);
+
+    const sampleRedactions = [
+      { id: 'r1', pageIndex: 1, x: 10, y: 10, width: 100, height: 20, status: 'pending' as const },
+      { id: 'r2', pageIndex: 1, x: 10, y: 50, width: 100, height: 20, status: 'applied' as const },
+    ];
+
+    inst._bind(
+      {
+        getAnnotations: () => [],
+        getRedactions: () => sampleRedactions,
+        getWatermark: () => undefined,
+        getPdfDocument: () => null,
+        getDocumentUrl: () => undefined,
+        getFileName: () => undefined,
+        getCurrentUserName: () => undefined,
+        getCurrentPage: () => 1,
+        getPageCount: () => 1,
+        loadDocument: vi.fn(),
+        goToPage: vi.fn(),
+        getTransientHighlights: () => [],
+        setTransientHighlights: vi.fn(),
+      },
+      null
+    );
+
+    expect(inst.getRedactions()).toEqual(sampleRedactions);
+  });
+
+  it('subscribes to redactionsChanged and redactionsApplied events', () => {
+    const bus = new ViewerBus();
+    const inst = new WebViewerInstance(bus);
+    const onRedactionsChanged = vi.fn();
+    const onRedactionsApplied = vi.fn();
+
+    const offChanged = inst.on('redactionsChanged', onRedactionsChanged);
+    const offApplied = inst.on('redactionsApplied', onRedactionsApplied);
+
+    const pending = [{ pageIndex: 1, x: 10, y: 10, width: 50, height: 20, status: 'pending' as const }];
+    const applied = [{ pageIndex: 1, x: 10, y: 10, width: 50, height: 20, status: 'applied' as const }];
+
+    bus.emit('redactionsChanged', { redactions: pending });
+    expect(onRedactionsChanged).toHaveBeenCalledWith({ redactions: pending });
+
+    bus.emit('redactionsApplied', { redactions: applied });
+    expect(onRedactionsApplied).toHaveBeenCalledWith({ redactions: applied });
+
+    offChanged();
+    offApplied();
+
+    bus.emit('redactionsChanged', { redactions: [] });
+    bus.emit('redactionsApplied', { redactions: [] });
+    expect(onRedactionsChanged).toHaveBeenCalledTimes(1);
+    expect(onRedactionsApplied).toHaveBeenCalledTimes(1);
+  });
 });

@@ -60,6 +60,8 @@ interface DocumentViewerProps {
   onAnnotationsChange?: (annotations: Annotation[]) => void;
   /** Reports the combined (prop + regex + manual) redaction list whenever it changes. */
   onRedactionsChange?: (redactions: Redaction[]) => void;
+  /** Fires once per user click of Apply in the confirmation modal with all applied redactions. */
+  onRedactionsApplied?: (redactions: Redaction[]) => void;
   onDocumentLoaded?: (doc: pdfjsLib.PDFDocumentProxy, url: string) => void;
   onLoadError?: (error: Error, info: DocumentLoadErrorInfo) => void;
   /** Fires once per loaded document, after the first page canvas has been painted. */
@@ -87,7 +89,7 @@ interface DocumentViewerProps {
 
 export default function DocumentViewer({
   leftSidebarOpen, rightSidebarOpen, activeTab, annotationManager, initialDoc, loadNonce = 0, withCredentials = false, assets, sidebars = true,
-  redactions, regexRedactions, scale, setScale, sidebarTab, setSidebarTab, onAnnotationsChange, onRedactionsChange,
+  redactions, regexRedactions, scale, setScale, sidebarTab, setSidebarTab, onAnnotationsChange, onRedactionsChange, onRedactionsApplied,
   onDocumentLoaded, onLoadError, onFirstPageRendered, onPageRendered, onPageChange,
   pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations: _enableAnnotations, initialPage, page, transientHighlights, permissions,
   hideAnnotationsUntilPageRendered = true,
@@ -122,8 +124,8 @@ export default function DocumentViewer({
   const [isDiffSidebarOpen, setIsDiffSidebarOpen] = useState(false);
 
   // Latest-callback refs: parents may pass inline functions without re-triggering effects.
-  const callbacksRef = useRef({ onRedactionsChange, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageRendered, onPageChange });
-  callbacksRef.current = { onRedactionsChange, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageRendered, onPageChange };
+  const callbacksRef = useRef({ onRedactionsChange, onRedactionsApplied, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageRendered, onPageChange });
+  callbacksRef.current = { onRedactionsChange, onRedactionsApplied, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageRendered, onPageChange };
   const assetsRef = useRef(assets);
   assetsRef.current = assets;
 
@@ -1675,9 +1677,14 @@ export default function DocumentViewer({
               </button>
               <button
                 onClick={() => {
-                  setManualRedactions(prev => prev.map(r => ({ ...r, status: 'applied' })));
-                  setAutoRedactions(prev => prev.map(r => ({ ...r, status: 'applied' })));
+                  const nextManual: Redaction[] = manualRedactions.map(r => ({ ...r, status: 'applied' }));
+                  const nextAuto: Redaction[] = autoRedactions.map(r => ({ ...r, status: 'applied' }));
+                  const nextProp: Redaction[] = (redactions || []).map(r => ({ ...r, status: 'applied' }));
+                  const appliedList: Redaction[] = [...nextProp, ...nextAuto, ...nextManual].filter(r => r.status === 'applied');
+                  setManualRedactions(nextManual);
+                  setAutoRedactions(nextAuto);
                   setIsCommitModalOpen(false);
+                  callbacksRef.current.onRedactionsApplied?.(appliedList);
                 }}
                 style={{
                   padding: '8px 14px',

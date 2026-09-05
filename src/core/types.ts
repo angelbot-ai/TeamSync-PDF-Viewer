@@ -147,6 +147,10 @@ export interface WebViewerOptions {
   defaultTool?: 'select' | 'pan';
   /** Show floating quick-action copy badge above selected text (default true). */
   showSelectionTooltip?: boolean;
+  /** Fires whenever pending or applied redactions change in the viewer. */
+  onRedactionsChange?: (redactions: Redaction[]) => void;
+  /** Fires once per user click of Apply in the confirmation modal with all applied redactions. */
+  onRedactionsApplied?: (redactions: Redaction[]) => void;
 }
 
 /** Events available through `instance.on(type, listener)`. */
@@ -159,6 +163,8 @@ export interface ViewerEventMap {
   annotationsChanged: { annotations: Annotation[] };
   /** Granular add / modify / delete (with the `imported` flag) from the AnnotationManager. */
   annotationChanged: AnnotationChangedEvent;
+  redactionsChanged: { redactions: Redaction[] };
+  redactionsApplied: { redactions: Redaction[] };
   transientHighlightsChanged: { highlights: TransientHighlight[] };
   toolChanged: { tool: string | null };
   textSelected: { text: string };

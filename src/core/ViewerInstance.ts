@@ -247,6 +247,11 @@ export class WebViewerInstance {
     return this.annotationManager.getAnnotationsList();
   }
 
+  /** Get the current list of redactions (pending and applied). */
+  getRedactions(): Redaction[] {
+    return this.binding?.getRedactions() ?? [];
+  }
+
   /** Print the exported document (annotations, redactions and watermark baked in). */
   print(): void {
     this.bus.emit('action-print');

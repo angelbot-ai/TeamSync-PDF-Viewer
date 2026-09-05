@@ -25,7 +25,7 @@ Try the **[Interactive Live Demo](https://pdfviewer.teamsync.com/)** or integrat
 Traditional commercial PDF viewers force developers into expensive per-domain licenses, opaque sales calls, and heavy server-side processing dependencies. **TeamSync PDF Viewer** is built from the ground up to solve these pain points.
 
 - 💰 **Zero-Cost, Transparent Licensing**: Uncapped usage, no per-server fees, and no commercial paywalls. 100% free and open-source under CPAL 1.0.
-- ⚡ **100% Client-Side WebAssembly**: Documents never leave the browser sandbox. Process, redact, and render PDFs entirely on the client—guaranteeing instant **HIPAA**, **GDPR**, and **FINRA** compliance.
+- ⚡ **100% Client-Side WebAssembly**: Documents never leave the browser sandbox. Process, redact, and render PDFs entirely on the client. 
 - 🔌 **Universal WebViewer API**: Clean, intuitive `WebViewer({...})` API interface that makes integrating into your web applications effortless.
 - 🎨 **Headless & Customizable**: Built for modern React 19 SPA lifecycles. No bloated iFrames to fight—customize toolbars, sidebars, context menus, and controls natively.
 
@@ -84,10 +84,10 @@ Everything you need to build collaborative, secure document workflows.
 - **Notes & Callouts**: Sticky notes, callout text boxes with directional arrows, and text annotations.
 - **Interactive Hyperlinks**: Create internal page-jump links (`#page=N`) or external web URL links directly on document selections.
 
-### 🛡️ Military-Grade Secure Redaction
+### 🛡️ Secure Redaction
 - **Binary-Level Data Obliteration**: We don't just place black boxes over text—redactions are permanently rasterized and burned into the underlying PDF vector structure.
 - **Text Layer Sanitization**: Redacted text is automatically stripped from the DOM `textLayer` and PDF content streams, preventing copy/paste extraction and search indexing.
-- **Automatic Regex Redactions**: Programmatically locate and redact sensitive PII (Aadhaar numbers, SSNs, credit cards, dates of birth) in a single click.
+- **Automatic Regex Redactions**: Programmatically locate and redact sensitive PII in a single click.
 - **Discard Unapplied Redactions**: Easily discard individual pending redactions or bulk-discard all unapplied redaction marks before committing.
 
 ### 📐 Dynamic Layout & Viewport Controls

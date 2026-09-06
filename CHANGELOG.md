@@ -2,6 +2,18 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.6.0] — 2026-09-06
+
+### Added
+- **Whitespace-Tolerant Text Search**: Search queries now match across line breaks, multiple whitespace runs, tabs, NBSP (`\u00A0`), and other unicode whitespace variants seamlessly. Matches in normalized space while accurately reporting raw source coordinates and bounds.
+- **Shared `pageText` Builder & Bounding Box Interpolator**: Unified raw text extraction and character coordinate mapping between PDF search and regex redactions via internal `buildPageText` and `boundsForRawRange` helpers.
+- **Page-Scoped Search & Highlighting**:
+  - Added additive 5th parameter `pages?: number[]` to `searchPdfText(doc, query, redactions, onProgress, pages)`.
+  - Added `options.pages?: number[]` to `instance.searchText(query, options)`.
+  - Added `scope?: 'document' | 'page'` to `instance.highlightSnippet(query, options)` allowing strict page restriction when navigating to snippet citations.
+- **Sidebar Highlighting Precision**: Result `matchLength` now reflects the exact consumed raw glyph span, ensuring sidebar bold highlights match rendered page text identically.
+- **Stable Search Results Sorting**: Corrected search result sorting to maintain page index ascending order while preserving intra-page ascending match order.
+
 ## [1.5.1] — 2026-09-06
 
 ### Added

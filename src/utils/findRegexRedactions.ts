@@ -3,6 +3,7 @@
  */
 import * as pdfjsLib from 'pdfjs-dist';
 import type { Redaction } from '../core/types';
+import { buildPageText } from './pageText';
 
 export async function findRegexRedactions(
   pdfDoc: pdfjsLib.PDFDocumentProxy,
@@ -18,34 +19,11 @@ export async function findRegexRedactions(
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
     try {
       const page = await pdfDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1 });
       const textContent = await page.getTextContent();
       const items = textContent.items as any[];
       
-      let fullText = '';
-      // Flat arrays to eliminate object allocation per character
-      const itemIndices: number[] = [];
-      const charIndices: number[] = [];
-      
-      // Reconstruct text and build source map
-      items.forEach((item, index) => {
-        const str = item.str;
-        for (let i = 0; i < str.length; i++) {
-          itemIndices.push(index);
-          charIndices.push(i);
-        }
-        fullText += str;
-        
-        if (item.hasEOL) {
-          fullText += '\n';
-          itemIndices.push(-1);
-          charIndices.push(-1);
-        } else {
-          // Add a space to simulate visual gap, unless it's the very end
-          fullText += ' ';
-          itemIndices.push(-1);
-          charIndices.push(-1);
-        }
-      });
+      const { fullText, itemIndices, charIndices } = buildPageText(items);
 
       // Find matches for each pre-compiled regex
       for (const globalRegex of globalRegexes) {
@@ -77,23 +55,22 @@ export async function findRegexRedactions(
           // Calculate bounding boxes for each involved item
           itemMatches.forEach((matchInfo, itemIndex) => {
             const item = items[itemIndex];
+            if (!item || !item.transform) return;
             
             // TextItem transforms: [scaleX, skewY, skewX, scaleY, tx, ty]
             // PDF origin is bottom-left
             const tx = item.transform[4];
             const ty = item.transform[5];
-            const scaleY = item.transform[3];
+            const scaleY = Math.abs(item.transform[3]);
             
-            // Approximate width per character (assuming monospaced or average width)
-            // A more robust solution uses font width metrics, but this works well for standard texts
-            const charWidth = item.width / item.str.length;
+            const strLen = (item.str ?? '').length;
+            const charWidth = strLen > 0 ? item.width / strLen : item.width;
             
             const startX = tx + (matchInfo.min * charWidth);
             const matchWidth = ((matchInfo.max - matchInfo.min) + 1) * charWidth;
-            const matchHeight = item.height || scaleY; // Use item.height or scaleY fallback
+            const matchHeight = item.height || scaleY;
             
             const padding = 2;
-            const viewport = page.getViewport({ scale: 1 });
             const topY = viewport.height - ty - matchHeight;
             
             redactions.push({

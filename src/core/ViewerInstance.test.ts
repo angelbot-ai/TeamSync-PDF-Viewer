@@ -199,6 +199,161 @@ describe('WebViewerInstance', () => {
     expect(results[0].bounds).toBeDefined();
   });
 
+  it('searchText supports options.pages to restrict search', async () => {
+    const bus = new ViewerBus();
+    const inst = new WebViewerInstance(bus);
+
+    const page1 = {
+      getTextContent: vi.fn().mockResolvedValue({
+        items: [{ str: 'Alpha page 1', transform: [10, 0, 0, 10, 50, 100], width: 80, height: 12, hasEOL: true }],
+      }),
+      getViewport: vi.fn().mockReturnValue({ width: 612, height: 792 }),
+      cleanup: vi.fn(),
+    };
+    const page2 = {
+      getTextContent: vi.fn().mockResolvedValue({
+        items: [{ str: 'Beta page 2', transform: [10, 0, 0, 10, 50, 100], width: 80, height: 12, hasEOL: true }],
+      }),
+      getViewport: vi.fn().mockReturnValue({ width: 612, height: 792 }),
+      cleanup: vi.fn(),
+    };
+    const mockPdfDoc = {
+      numPages: 2,
+      getPage: vi.fn((n: number) => Promise.resolve(n === 1 ? page1 : page2)),
+    };
+
+    inst._bind(
+      {
+        getAnnotations: () => [],
+        getRedactions: () => [],
+        getWatermark: () => undefined,
+        getPdfDocument: () => mockPdfDoc as any,
+        getDocumentUrl: () => undefined,
+        getFileName: () => undefined,
+        getCurrentUserName: () => undefined,
+        getCurrentPage: () => 1,
+        getPageCount: () => 2,
+        loadDocument: vi.fn(),
+        goToPage: vi.fn(),
+      },
+      null
+    );
+
+    const results = await inst.searchText('Beta', { pages: [2] });
+    expect(results).toHaveLength(1);
+    expect(results[0].pageIndex).toBe(2);
+    expect(mockPdfDoc.getPage).toHaveBeenCalledWith(2);
+    expect(mockPdfDoc.getPage).not.toHaveBeenCalledWith(1);
+  });
+
+  it('highlightSnippet locates text across line breaks and applies transient highlight', async () => {
+    const bus = new ViewerBus();
+    const inst = new WebViewerInstance(bus);
+    const goToPageMock = vi.fn();
+    let currentHighlights: any[] = [];
+
+    const page1 = {
+      getTextContent: vi.fn().mockResolvedValue({
+        items: [{ str: 'Introduction text', transform: [10, 0, 0, 10, 50, 500], width: 100, height: 12, hasEOL: true }],
+      }),
+      getViewport: vi.fn().mockReturnValue({ width: 612, height: 792 }),
+      cleanup: vi.fn(),
+    };
+    const page2 = {
+      getTextContent: vi.fn().mockResolvedValue({
+        items: [
+          { str: 'First line text', transform: [10, 0, 0, 10, 50, 200], width: 150, height: 12, hasEOL: true },
+          { str: 'second line text', transform: [10, 0, 0, 10, 50, 180], width: 160, height: 12, hasEOL: false },
+        ],
+      }),
+      getViewport: vi.fn().mockReturnValue({ width: 612, height: 792 }),
+      cleanup: vi.fn(),
+    };
+    const mockPdfDoc = {
+      numPages: 2,
+      getPage: vi.fn((n: number) => Promise.resolve(n === 1 ? page1 : page2)),
+    };
+
+    inst._bind(
+      {
+        getAnnotations: () => [],
+        getRedactions: () => [],
+        getWatermark: () => undefined,
+        getPdfDocument: () => mockPdfDoc as any,
+        getDocumentUrl: () => undefined,
+        getFileName: () => undefined,
+        getCurrentUserName: () => undefined,
+        getCurrentPage: () => 1,
+        getPageCount: () => 2,
+        loadDocument: vi.fn(),
+        goToPage: goToPageMock,
+        getTransientHighlights: () => currentHighlights,
+        setTransientHighlights: (hl: any[]) => {
+          currentHighlights = hl;
+        },
+      },
+      null
+    );
+
+    // Search query spanning the line break with scope: 'page'
+    const match = await inst.highlightSnippet('text second', { pageIndex: 2, scope: 'page' });
+    expect(match).not.toBeNull();
+    expect(match?.pageIndex).toBe(2);
+    expect(match?.bounds).toHaveLength(2);
+    expect(goToPageMock).toHaveBeenCalledWith(2, { smooth: true });
+    expect(currentHighlights).toHaveLength(1);
+    expect(currentHighlights[0].id).toBe(match?.id);
+    expect(currentHighlights[0].pageIndex).toBe(2);
+
+    // scope: 'page' strictly scoped getPage to page 2
+    expect(mockPdfDoc.getPage).toHaveBeenCalledWith(2);
+    expect(mockPdfDoc.getPage).not.toHaveBeenCalledWith(1);
+  });
+
+  it('highlightSnippet with scope: page without pageIndex gracefully degrades to document search', async () => {
+    const bus = new ViewerBus();
+    const inst = new WebViewerInstance(bus);
+    let currentHighlights: any[] = [];
+
+    const page1 = {
+      getTextContent: vi.fn().mockResolvedValue({
+        items: [{ str: 'Only found on page one', transform: [10, 0, 0, 10, 50, 500], width: 150, height: 12, hasEOL: false }],
+      }),
+      getViewport: vi.fn().mockReturnValue({ width: 612, height: 792 }),
+      cleanup: vi.fn(),
+    };
+    const mockPdfDoc = {
+      numPages: 1,
+      getPage: vi.fn().mockResolvedValue(page1),
+    };
+
+    inst._bind(
+      {
+        getAnnotations: () => [],
+        getRedactions: () => [],
+        getWatermark: () => undefined,
+        getPdfDocument: () => mockPdfDoc as any,
+        getDocumentUrl: () => undefined,
+        getFileName: () => undefined,
+        getCurrentUserName: () => undefined,
+        getCurrentPage: () => 1,
+        getPageCount: () => 1,
+        loadDocument: vi.fn(),
+        goToPage: vi.fn(),
+        getTransientHighlights: () => currentHighlights,
+        setTransientHighlights: (hl: any[]) => {
+          currentHighlights = hl;
+        },
+      },
+      null
+    );
+
+    const match = await inst.highlightSnippet('found on page', { scope: 'page' });
+    expect(match).not.toBeNull();
+    expect(match?.pageIndex).toBe(1);
+    expect(currentHighlights).toHaveLength(1);
+  });
+
   it('supports pageRendered event subscription and emission', () => {
     const bus = new ViewerBus();
     const inst = new WebViewerInstance(bus);

@@ -165,13 +165,17 @@ export class WebViewerInstance {
 
   /**
    * Search the document for text matches, returning snippets and page bounding boxes.
+   *
+   * @param query - Search term.
+   * @param options - Search options:
+   *   - `pages`: Specific 1-based page numbers to search. Defaults to all pages.
    */
-  async searchText(query: string): Promise<SearchResult[]> {
+  async searchText(query: string, options: { pages?: number[] } = {}): Promise<SearchResult[]> {
     const pdf = this.getPdfDocument();
     if (!pdf) return [];
     const b = this.binding;
     const redactions = b ? b.getRedactions() : [];
-    return searchPdfText(pdf, query, redactions);
+    return searchPdfText(pdf, query, redactions, undefined, options.pages);
   }
 
   // ---- transient highlights (citations, search matches) -----------------------------------
@@ -210,12 +214,34 @@ export class WebViewerInstance {
   /**
    * Search for a snippet or citation query, scroll to its page, and highlight it temporarily.
    * Returns the matched SearchResult or null if not found.
+   *
+   * @param query - The text snippet to locate and highlight.
+   * @param options - Navigation and display options:
+   *   - `pageIndex`: Preferred page (1-based). When `scope: 'page'`, restricts search to this page.
+   *   - `scope`: Search scope. `'document'` (default) searches all pages, keeping `pageIndex` as a preference.
+   *     `'page'` restricts the search strictly to `pageIndex` (avoids full-document walk).
+   *     If `scope: 'page'` is provided without `pageIndex`, it gracefully degrades to `'document'`.
+   *   - `pulse`: Animate focus ring (default true).
+   *   - `scrollTo`: Scroll page into view (default true).
+   *   - `color`: Background highlight color.
+   *   - `tooltip`: Tooltip text above the highlight (defaults to matched snippet).
    */
   async highlightSnippet(
     query: string,
-    options: { pageIndex?: number; pulse?: boolean; scrollTo?: boolean; color?: string; tooltip?: string } = {}
+    options: {
+      pageIndex?: number;
+      scope?: 'document' | 'page';
+      pulse?: boolean;
+      scrollTo?: boolean;
+      color?: string;
+      tooltip?: string;
+    } = {}
   ): Promise<SearchResult | null> {
-    const results = await this.searchText(query);
+    const searchOptions: { pages?: number[] } = {};
+    if (options.scope === 'page' && options.pageIndex) {
+      searchOptions.pages = [options.pageIndex];
+    }
+    const results = await this.searchText(query, searchOptions);
     let match = results[0];
     if (options.pageIndex) {
       match = results.find(r => r.pageIndex === options.pageIndex) || match;

@@ -5,6 +5,8 @@ import { useState, useCallback } from 'react';
 import type * as pdfjsLib from 'pdfjs-dist';
 import type { Redaction, SearchBounds } from '../core/types';
 
+import { buildPageText, collapseWhitespace, boundsForRawRange } from '../utils/pageText';
+
 export type { SearchBounds };
 
 export interface SearchResult {
@@ -17,160 +19,116 @@ export interface SearchResult {
 }
 
 /**
- * Standalone asynchronous text search across all pages of a PDFDocumentProxy.
+ * Standalone asynchronous text search across all pages (or specified pages) of a PDFDocumentProxy.
  * Sanitizes redacted regions and returns matching snippets and bounding boxes.
  */
 export async function searchPdfText(
   pdfDoc: pdfjsLib.PDFDocumentProxy,
   query: string,
   redactions: Redaction[] = [],
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  pages?: number[]
 ): Promise<SearchResult[]> {
   if (!pdfDoc || !query.trim()) return [];
 
   const results: SearchResult[] = [];
-  const lowerQuery = query.toLowerCase();
+  const qn = collapseWhitespace(query).toLowerCase();
+  if (!qn) return [];
+
   const numPages = pdfDoc.numPages;
+  let targetPages: number[];
+  if (pages !== undefined) {
+    const deduped = Array.from(new Set(pages));
+    targetPages = deduped
+      .filter(p => Number.isInteger(p) && p >= 1 && p <= numPages)
+      .sort((a, b) => a - b);
+    if (targetPages.length === 0) {
+      onProgress?.(100);
+      return [];
+    }
+  } else {
+    targetPages = Array.from({ length: numPages }, (_, i) => i + 1);
+  }
+
   const batchSize = 10;
 
-  for (let batchStart = 1; batchStart <= numPages; batchStart += batchSize) {
-    const batchPromises = [];
-    const batchEnd = Math.min(batchStart + batchSize - 1, numPages);
+  for (let batchStart = 0; batchStart < targetPages.length; batchStart += batchSize) {
+    const batchPages = targetPages.slice(batchStart, batchStart + batchSize);
+    const batchPromises = batchPages.map(pageNum =>
+      (async () => {
+        const page = await pdfDoc.getPage(pageNum);
+        const textContent = await page.getTextContent();
 
-    for (let pageNum = batchStart; pageNum <= batchEnd; pageNum++) {
-      batchPromises.push(
-        (async () => {
-          const page = await pdfDoc.getPage(pageNum);
-          const textContent = await page.getTextContent();
+        // --- Text Layer Sanitization ---
+        let items = textContent.items as any[];
+        if (redactions && redactions.length > 0) {
+          const pageRedactions = redactions.filter(r => r.pageIndex === pageNum);
+          if (pageRedactions.length > 0) {
+            const vp = page.getViewport({ scale: 1 });
+            items = items.filter((item: any) => {
+              if (!item.str || item.str.trim() === '') return true;
 
-          // --- Text Layer Sanitization ---
-          let items = textContent.items as any[];
-          if (redactions && redactions.length > 0) {
-            const pageRedactions = redactions.filter(r => r.pageIndex === pageNum);
-            if (pageRedactions.length > 0) {
-              const vp = page.getViewport({ scale: 1 });
-              items = items.filter((item: any) => {
-                if (!item.str || item.str.trim() === '') return true;
+              const itemX = item.transform[4];
+              const itemY = item.transform[5];
+              const itemW = item.width;
+              const itemH = item.height || Math.abs(item.transform[3]);
+              const itemTopY = vp.height - itemY - itemH;
 
-                const itemX = item.transform[4];
-                const itemY = item.transform[5];
-                const itemW = item.width;
-                const itemH = item.height || Math.abs(item.transform[3]);
-                const itemTopY = vp.height - itemY - itemH;
+              for (const red of pageRedactions) {
+                const intersectX = Math.max(itemX, red.x) < Math.min(itemX + itemW, red.x + red.width);
+                const intersectY = Math.max(itemTopY, red.y) < Math.min(itemTopY + itemH, red.y + red.height);
 
-                for (const red of pageRedactions) {
-                  const intersectX = Math.max(itemX, red.x) < Math.min(itemX + itemW, red.x + red.width);
-                  const intersectY = Math.max(itemTopY, red.y) < Math.min(itemTopY + itemH, red.y + red.height);
-
-                  if (intersectX && intersectY) {
-                    return false; // Intersects redacted region, exclude from search results!
-                  }
+                if (intersectX && intersectY) {
+                  return false; // Intersects redacted region, exclude from search results!
                 }
-                return true;
-              });
-            }
+              }
+              return true;
+            });
           }
+        }
 
-          let fullText = '';
-          const itemIndices: number[] = [];
-          const charIndices: number[] = [];
+        const pageText = buildPageText(items);
+        const { fullText, normText, normToRaw } = pageText;
+        const lowerNormText = normText.toLowerCase();
+        let n = 0;
+        const pageResults: SearchResult[] = [];
 
-          items.forEach((item, index) => {
-            const str = item.str;
-            for (let i = 0; i < str.length; i++) {
-              itemIndices.push(index);
-              charIndices.push(i);
-            }
-            fullText += str;
+        while ((n = lowerNormText.indexOf(qn, n)) !== -1) {
+          const rawStart = normToRaw[n];
+          const rawEndExcl = normToRaw[n + qn.length - 1] + 1;
+          const snippetStart = Math.max(0, rawStart - 30);
+          const snippetEnd = Math.min(fullText.length, rawEndExcl + 30);
+          const snippet = fullText.substring(snippetStart, snippetEnd).replace(/\n/g, ' ');
 
-            if (item.hasEOL) {
-              fullText += '\n';
-              itemIndices.push(-1);
-              charIndices.push(-1);
-            } else {
-              fullText += ' ';
-              itemIndices.push(-1);
-              charIndices.push(-1);
-            }
+          const bounds = boundsForRawRange(items, pageText, rawStart, rawEndExcl);
+
+          pageResults.push({
+            id: `p${pageNum}-idx${rawStart}`,
+            pageIndex: pageNum,
+            snippet,
+            matchStartIndex: rawStart - snippetStart,
+            matchLength: rawEndExcl - rawStart,
+            bounds,
           });
 
-          const lowerFullText = fullText.toLowerCase();
-          let startIndex = 0;
-          const pageResults: SearchResult[] = [];
+          n += qn.length;
+        }
 
-          while ((startIndex = lowerFullText.indexOf(lowerQuery, startIndex)) !== -1) {
-            // Extract snippet
-            const snippetStart = Math.max(0, startIndex - 30);
-            const snippetEnd = Math.min(fullText.length, startIndex + query.length + 30);
-            let snippet = fullText.substring(snippetStart, snippetEnd);
-            snippet = snippet.replace(/\n/g, ' ');
-
-            // Find involved TextItems and track exact character match range per item
-            const itemMatches = new Map<number, { min: number; max: number }>();
-            for (let i = startIndex; i < startIndex + query.length; i++) {
-              const itemIdx = itemIndices[i];
-              const charIdx = charIndices[i];
-              if (itemIdx !== undefined && itemIdx !== -1) {
-                const existing = itemMatches.get(itemIdx);
-                if (existing) {
-                  existing.min = Math.min(existing.min, charIdx);
-                  existing.max = Math.max(existing.max, charIdx);
-                } else {
-                  itemMatches.set(itemIdx, { min: charIdx, max: charIdx });
-                }
-              }
-            }
-
-            const bounds: SearchBounds[] = [];
-
-            itemMatches.forEach((match, itemIndex) => {
-              const item = items[itemIndex];
-              if (!item || !item.transform) return;
-
-              const x = item.transform[4];
-              const y = item.transform[5];
-              const width = item.width;
-              const height = item.height || Math.abs(item.transform[3]);
-              const strLen = item.str.length;
-
-              if (strLen > 0) {
-                // Approximate accurate bounding box by interpolating string character positions
-                const charWidth = width / strLen;
-                const startX = x + match.min * charWidth;
-                const matchWidth = (match.max - match.min + 1) * charWidth;
-                bounds.push({ x: startX, y, width: matchWidth, height });
-              } else {
-                bounds.push({ x, y, width, height });
-              }
-            });
-
-            pageResults.push({
-              id: `p${pageNum}-idx${startIndex}`,
-              pageIndex: pageNum,
-              snippet,
-              matchStartIndex: startIndex - snippetStart,
-              matchLength: query.length,
-              bounds
-            });
-
-            startIndex += query.length;
-          }
-          page.cleanup?.();
-          return pageResults;
-        })()
-      );
-    }
+        page.cleanup?.();
+        return pageResults;
+      })()
+    );
 
     const batchResultsArray = await Promise.all(batchPromises);
     batchResultsArray.forEach(pageResults => results.push(...pageResults));
 
-    // Sort results to maintain sequential page order since Promise.all resolves concurrently
-    results.sort((a, b) => (a.pageIndex !== b.pageIndex ? a.pageIndex - b.pageIndex : a.matchStartIndex - b.matchStartIndex));
-
-    onProgress?.(Math.round((batchEnd / numPages) * 100));
+    onProgress?.(Math.round(((batchStart + batchPages.length) / targetPages.length) * 100));
     // Yield to main thread to allow UI to render progress bar
     await new Promise(resolve => setTimeout(resolve, 10));
   }
+
+  // Stable sort by pageIndex maintains sequential page order and ascending intra-page order
+  results.sort((a, b) => a.pageIndex - b.pageIndex);
 
   return results;
 }

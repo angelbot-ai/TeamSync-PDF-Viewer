@@ -32,6 +32,13 @@ const EXTENSION_MAP: Record<string, OfficeFileType> = {
  */
 function extractExtension(pathOrUrl: string): string | null {
   try {
+    const clean = pathOrUrl.split('#')[0].split('?')[0];
+
+    // If the path itself is an API conversion endpoint, it serves PDF output directly
+    if (clean.endsWith('/api/convert') || clean.endsWith('/convert')) {
+      return null;
+    }
+
     // 1. Check for filename param in hash or query (e.g., #filename=report.docx or ?filename=report.docx)
     const urlMatch = pathOrUrl.match(/[?&#](?:filename|file|name)=([^&#]+)/i);
     if (urlMatch && urlMatch[1]) {
@@ -41,7 +48,6 @@ function extractExtension(pathOrUrl: string): string | null {
     }
 
     // 2. Check path portion without query or hash
-    const clean = pathOrUrl.split('#')[0].split('?')[0];
     return extractExtensionFromSimpleName(clean);
   } catch {
     return null;

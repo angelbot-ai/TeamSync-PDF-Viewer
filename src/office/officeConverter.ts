@@ -214,10 +214,17 @@ export async function convertOfficeDocument(
       }
       uploadBlob = await sourceResp.blob();
       if (!fileName) {
-        const clean = fileOrUrl.split('#')[0].split('?')[0];
-        const lastSlash = Math.max(clean.lastIndexOf('/'), clean.lastIndexOf('\\'));
-        if (lastSlash >= 0) {
-          uploadFileName = clean.slice(lastSlash + 1);
+        const match = fileOrUrl.match(/[?&#](?:filename|file|name)=([^&#]+)/i);
+        if (match && match[1]) {
+          const decoded = decodeURIComponent(match[1]);
+          const lastSlash = Math.max(decoded.lastIndexOf('/'), decoded.lastIndexOf('\\'));
+          uploadFileName = lastSlash >= 0 ? decoded.slice(lastSlash + 1) : decoded;
+        } else {
+          const clean = fileOrUrl.split('#')[0].split('?')[0];
+          const lastSlash = Math.max(clean.lastIndexOf('/'), clean.lastIndexOf('\\'));
+          if (lastSlash >= 0) {
+            uploadFileName = clean.slice(lastSlash + 1);
+          }
         }
       }
     } else if (typeof (globalThis as any).File !== 'undefined' && fileOrUrl instanceof File) {
@@ -229,6 +236,11 @@ export async function convertOfficeDocument(
       uploadBlob = new Blob([fileOrUrl], { type: getOfficeMimeType(fileType) });
     } else {
       throw new Error('Unsupported Office document input source.');
+    }
+
+    // Ensure uploadFileName always has a valid Office extension so Gotenberg identifies the engine
+    if (!uploadFileName.includes('.') || uploadFileName.endsWith('.')) {
+      uploadFileName = `${uploadFileName.replace(/\.$/, '')}.${fileType}`;
     }
 
     // Construct FormData for Gotenberg / LibreOffice microservice.

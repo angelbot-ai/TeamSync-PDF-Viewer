@@ -148,7 +148,18 @@ export default async function handler(request: Request): Promise<Response> {
       for (const [key, value] of incomingFormData.entries()) {
         if (value instanceof Blob) {
           if (!fileFound) {
-            const fileName = (value as File).name || 'document.docx';
+            let fileName = (value as File).name || 'document.docx';
+            if (!fileName.includes('.') || fileName === 'blob' || fileName === 'convert') {
+              const mime = value.type;
+              const base = fileName.replace(/\.[^/.]+$/, '');
+              if (mime.includes('sheet') || mime.includes('excel') || mime.includes('xlsx')) {
+                fileName = `${base}.xlsx`;
+              } else if (mime.includes('presentation') || mime.includes('powerpoint') || mime.includes('pptx')) {
+                fileName = `${base}.pptx`;
+              } else {
+                fileName = `${base}.docx`;
+              }
+            }
             outFormData.append('files', value, fileName);
             fileFound = true;
           }

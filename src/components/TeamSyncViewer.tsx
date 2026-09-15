@@ -24,6 +24,13 @@ import { useShortcuts, matchShortcut } from '../hooks/useShortcuts';
 import type { WebViewerOptions, SDKPermissions, Redaction, TransientHighlight, LinkClickEvent } from '../core/types';
 import type { Annotation } from '../annotations/types';
 import { calculateNextZoomIn, calculateNextZoomOut, clampScale, MIN_SCALE, MAX_SCALE } from '../utils/zoomUtils';
+import {
+  getOfficeDocumentInfo,
+  convertOfficeDocument,
+  OfficeLoadingOverlay,
+  type OfficeConverterConfig,
+  type OfficeFileType,
+} from '../office';
 
 export interface TeamSyncViewerProps extends Omit<WebViewerOptions, 'path'> {
   /** URL of the PDF to display. Alias of `initialDoc`; `fileUrl` wins when both are set. */
@@ -79,6 +86,16 @@ export interface TeamSyncViewerProps extends Omit<WebViewerOptions, 'path'> {
    * Call `event.preventDefault()` to suppress default behavior.
    */
   onLinkClick?: (event: LinkClickEvent) => boolean | void | Promise<void>;
+  /**
+   * Configuration for viewing Microsoft Office documents (.docx, .doc, .pptx, .ppt, .xlsx, .xls).
+   */
+  officeConverter?: OfficeConverterConfig;
+  /** Fires when an Office document starts converting to PDF. */
+  onOfficeConverting?: (info: { fileType: OfficeFileType; url?: string; fileName?: string }) => void;
+  /** Fires when an Office document has successfully converted to PDF. */
+  onOfficeConverted?: (info: { fileType: OfficeFileType; url?: string; fromCache: boolean }) => void;
+  /** Fires when an Office document conversion encounters an error. */
+  onOfficeConversionError?: (info: { fileType: OfficeFileType; error: Error; url?: string }) => void;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -96,6 +113,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     className, style, hideAnnotationsUntilPageRendered = true,
     enableTextSelection = true, defaultTool = 'select', showSelectionTooltip = true,
     id, targetViewer, resolveLinkUrl, onLinkClick,
+    officeConverter, onOfficeConverting, onOfficeConverted, onOfficeConversionError,
   } = props;
 
   // Latest props for callbacks/bindings that must not re-subscribe on every render.
@@ -137,6 +155,107 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     setDocUrl(url);
     setLoadNonce((n) => n + 1);
   }, []);
+
+  // ---- Office document conversion handling ---------------------------------------------------
+  const officeInfo = useMemo(() => getOfficeDocumentInfo(docUrl), [docUrl]);
+  const [resolvedPdfUrl, setResolvedPdfUrl] = useState<string | undefined>(
+    officeInfo ? undefined : requestedUrl
+  );
+  const [officeConversionState, setOfficeConversionState] = useState<
+    'idle' | 'converting' | 'converted' | 'error'
+  >(officeInfo ? 'converting' : 'idle');
+  const [officeConversionError, setOfficeConversionError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (!docUrl) {
+      setResolvedPdfUrl(undefined);
+      setOfficeConversionState('idle');
+      setOfficeConversionError(null);
+      return;
+    }
+
+    if (!officeInfo) {
+      // Standard PDF document: pass directly to DocumentViewer
+      setResolvedPdfUrl(docUrl);
+      setOfficeConversionState('idle');
+      setOfficeConversionError(null);
+      return;
+    }
+
+    // Office document detected
+    if (!officeConverter) {
+      const err = new Error(
+        `Document "${officeInfo.fileName || 'document'}" is a Microsoft ${officeInfo.category} document (${officeInfo.fileType.toUpperCase()}). To view Office files, configure the 'officeConverter' prop on <TeamSyncViewer> or in WebViewer options.`
+      );
+      setResolvedPdfUrl(undefined);
+      setOfficeConversionState('error');
+      setOfficeConversionError(err);
+      bus.emit('officeConversionError', { fileType: officeInfo.fileType, error: err, url: docUrl });
+      latest.current.onOfficeConversionError?.({ fileType: officeInfo.fileType, error: err, url: docUrl });
+      return;
+    }
+
+    let cancelled = false;
+    let convertedObjectUrl: string | null = null;
+
+    setOfficeConversionState('converting');
+    setOfficeConversionError(null);
+    bus.emit('officeConverting', {
+      fileType: officeInfo.fileType,
+      url: docUrl,
+      fileName: officeInfo.fileName,
+    });
+    latest.current.onOfficeConverting?.({
+      fileType: officeInfo.fileType,
+      url: docUrl,
+      fileName: officeInfo.fileName,
+    });
+
+    convertOfficeDocument(docUrl, officeConverter, officeInfo.fileName)
+      .then((res) => {
+        if (cancelled) {
+          URL.revokeObjectURL(res.objectUrl);
+          return;
+        }
+        convertedObjectUrl = res.objectUrl;
+        setResolvedPdfUrl(res.objectUrl);
+        setOfficeConversionState('converted');
+        bus.emit('officeConverted', {
+          fileType: officeInfo.fileType,
+          url: docUrl,
+          fromCache: res.fromCache,
+        });
+        latest.current.onOfficeConverted?.({
+          fileType: officeInfo.fileType,
+          url: docUrl,
+          fromCache: res.fromCache,
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const error = err instanceof Error ? err : new Error(String(err));
+        setResolvedPdfUrl(undefined);
+        setOfficeConversionState('error');
+        setOfficeConversionError(error);
+        bus.emit('officeConversionError', {
+          fileType: officeInfo.fileType,
+          error,
+          url: docUrl,
+        });
+        latest.current.onOfficeConversionError?.({
+          fileType: officeInfo.fileType,
+          error,
+          url: docUrl,
+        });
+      });
+
+    return () => {
+      cancelled = true;
+      if (convertedObjectUrl) {
+        URL.revokeObjectURL(convertedObjectUrl);
+      }
+    };
+  }, [docUrl, loadNonce, officeInfo, officeConverter, bus]);
 
   // ---- UI state (formerly the demo App shell) --------------------------------------------------
   const [activeTab, setActiveTab] = useState('View');
@@ -354,8 +473,9 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
       annotationManager.setDocument(doc);
       pageRef.current = { current: 1, count: doc.numPages };
       initialFitAppliedRef.current = false;
-      bus.emit('documentLoaded', { url, numPages: doc.numPages });
-      latest.current.onDocumentLoaded?.({ url, numPages: doc.numPages });
+      const reportedUrl = docUrlRef.current ?? url;
+      bus.emit('documentLoaded', { url: reportedUrl, numPages: doc.numPages });
+      latest.current.onDocumentLoaded?.({ url: reportedUrl, numPages: doc.numPages });
     },
     [bus, annotationManager]
   );
@@ -605,19 +725,33 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
         <input
           ref={fileInputRef}
           type="file"
-          accept="application/pdf"
+          accept=".pdf,application/pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
           style={{ display: 'none' }}
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) {
               const url = URL.createObjectURL(file);
-              loadDocument(url);
+              loadDocument(`${url}#filename=${encodeURIComponent(file.name)}`);
             }
             e.target.value = '';
           }}
           aria-hidden="true"
         />
-        <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
+          {officeInfo && officeConversionState === 'converting' && (
+            <OfficeLoadingOverlay
+              fileType={officeInfo.fileType}
+              fileName={officeInfo.fileName}
+            />
+          )}
+          {officeInfo && officeConversionState === 'error' && (
+            <OfficeLoadingOverlay
+              fileType={officeInfo.fileType}
+              fileName={officeInfo.fileName}
+              error={officeConversionError}
+              onRetry={() => setLoadNonce((n) => n + 1)}
+            />
+          )}
           <DocumentViewer
             leftSidebarOpen={sidebars && leftSidebarOpen}
             rightSidebarOpen={sidebars && rightSidebarOpen}
@@ -626,7 +760,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             sidebars={sidebars}
             activeTab={activeTab}
             annotationManager={annotationManager}
-            initialDoc={docUrl}
+            initialDoc={resolvedPdfUrl}
             loadNonce={loadNonce}
             withCredentials={withCredentials}
             assets={assets}

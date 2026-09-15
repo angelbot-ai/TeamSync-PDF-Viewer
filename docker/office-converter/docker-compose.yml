@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  office-converter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: teamsync-office-converter
+    ports:
+      - "3001:3000"
+    environment:
+      - LOG_LEVEL=info
+      - LIBREOFFICE_RESTART_AFTER=10
+      - API_TIMEOUT=30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1024M
+        reservations:
+          cpus: '0.5'
+          memory: 256M

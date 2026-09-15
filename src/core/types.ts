@@ -8,8 +8,9 @@ import type { Annotation } from '../annotations/types';
 import type { AnnotationChangedEvent } from '../annotations/AnnotationManager';
 import type { PdfAssetPaths } from './pdfAssets';
 import type { WebViewerInstance } from './ViewerInstance';
+import type { OfficeConverterConfig, OfficeFileType } from '../office/types';
 
-export type { PdfAssetPaths, WebViewerInstance };
+export type { PdfAssetPaths, WebViewerInstance, OfficeConverterConfig, OfficeFileType };
 
 export interface SearchBounds {
   x: number;
@@ -165,7 +166,14 @@ export interface WebViewerOptions {
   onRedactionsChange?: (redactions: Redaction[]) => void;
   /** Fires once per user click of Apply in the confirmation modal with all applied redactions. */
   onRedactionsApplied?: (redactions: Redaction[]) => void;
-  /** Unique identifier for this viewer instance, allowing other viewers to target it by name. */
+  /**
+   * Configuration for viewing Microsoft Office documents (.docx, .doc, .pptx, .ppt, .xlsx, .xls).
+   * Supports headless backend conversion (Gotenberg / LibreOffice daemon) or custom conversion hooks.
+   */
+  officeConverter?: OfficeConverterConfig;
+  /**
+   * Unique identifier for this viewer instance, allowing other viewers to target it by name.
+   */
   id?: string;
   /**
    * Target viewer instance, ref, getter, or instance ID to open cross-document links in.
@@ -229,6 +237,12 @@ export interface ViewerEventMap {
   textSelected: { text: string };
   textCopied: { text: string };
   linkClicked: LinkClickEvent;
+  /** Fires when an Office document begins conversion. */
+  officeConverting: { fileType: OfficeFileType; url?: string; fileName?: string };
+  /** Fires when an Office document finishes conversion successfully. */
+  officeConverted: { fileType: OfficeFileType; url?: string; fromCache: boolean };
+  /** Fires when an Office document conversion fails. */
+  officeConversionError: { fileType: OfficeFileType; error: Error; url?: string };
   destroy: Record<string, never>;
 }
 

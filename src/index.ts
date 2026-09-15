@@ -61,3 +61,5 @@ export type { ScrollCompensationParams, ScrollPosition } from './utils/zoomUtils
 export { estimatePageDimensions, computeRowLayout, DEFAULT_FALLBACK_DIMS, hasDimensionMismatch } from './utils/layoutUtils';
 export type { PageDimension, RowLayout } from './utils/layoutUtils';
 export * from './plugins/types';
+export * from './office';
+

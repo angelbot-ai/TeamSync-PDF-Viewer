@@ -72,6 +72,20 @@ async function mount(options: WebViewerOptions, el: HTMLElement): Promise<WebVie
   return instance;
 }
 
+// Live self-hosted conversion service credentials
+const RENDER_CONVERTER_ENDPOINT =
+  'https://teamsync-office-converter-1.onrender.com/forms/libreoffice/convert';
+const RENDER_BASIC_AUTH =
+  'Basic ' + btoa('admin:ASDF!@!@#!@RDSDFF#$#@$SDFSD#@#@#SDFGDF$%^%$^DFG#$%#G#$%ERER%$%');
+
+const defaultOfficeConverter = {
+  endpoint: RENDER_CONVERTER_ENDPOINT,
+  headers: {
+    Authorization: RENDER_BASIC_AUTH,
+  },
+  cache: 'memory' as const,
+};
+
 const rootElement = document.getElementById('root');
 if (rootElement) {
   if (window !== window.parent) {
@@ -86,7 +100,7 @@ if (rootElement) {
         return new RegExp(rStr);
       });
 
-      mount({ ...options, regexRedactions }, rootElement).then((instance) => {
+      mount({ officeConverter: defaultOfficeConverter, ...options, regexRedactions }, rootElement).then((instance) => {
         window.parent.postMessage('VIEWER_INITIALIZED', '*');
 
         window.addEventListener('message', async (cmdEvent) => {
@@ -104,13 +118,19 @@ if (rootElement) {
 
     window.parent.postMessage('VIEWER_READY', '*');
   } else {
-    // Standalone dev / demo mode
+    // Standalone dev / demo mode (supports ?file= or ?doc= query param)
+    const searchParams = new URLSearchParams(window.location.search);
+    const customDoc = searchParams.get('file') || searchParams.get('doc');
+    const initialDoc = customDoc || '/TeamSync.pdf?v=2';
+    const cleanFileName = initialDoc.split('#')[0].split('?')[0].split('/').pop() || 'TeamSync.pdf';
+
     mount(
       {
-        initialDoc: '/TeamSync.pdf?v=2',
-        fileName: 'TeamSync.pdf',
+        initialDoc,
+        fileName: cleanFileName,
         initialScale: 'fit-width',
         currentUser: { id: 'demo', name: 'Demo User' },
+        officeConverter: defaultOfficeConverter,
         watermark: {
           text: 'CONFIDENTIAL',
           opacity: 0.1,

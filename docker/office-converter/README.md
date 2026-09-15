@@ -71,15 +71,15 @@ If your web application has an authenticated API route (e.g. Next.js `/api/conve
 />
 ```
 
-### Custom Client Hook (e.g. Microsoft Graph API)
-You can also supply your own converter function:
+### Custom On-Premise Converter Hook
+You can also supply your own converter function targeting an internal company microservice:
 
 ```tsx
 <TeamSyncViewer
   fileUrl="spreadsheet.xlsx"
   officeConverter={{
     convert: async (fileOrUrl, fileType, options) => {
-      const response = await fetch('/api/ms-graph/convert-to-pdf', {
+      const response = await fetch('/api/internal-converter/convert', {
         method: 'POST',
         body: JSON.stringify({ fileUrl: fileOrUrl }),
         headers: { 'Content-Type': 'application/json' },
@@ -91,6 +91,13 @@ You can also supply your own converter function:
 ```
 
 ---
+
+## Zero Third-Party Calls & Air-Gapped Security
+
+This microservice is strictly **100% self-hosted** and engineered for sensitive enterprise, financial, legal, and air-gapped environments:
+- **No Third-Party APIs**: Zero external cloud calls, no telemetry, and no data leaves your network.
+- **Air-Gapped Operation**: All conversion engines (LibreOffice daemon) and fonts are bundled inside the container image or mounted via local volumes.
+- **Network Isolation**: The service can run in an internal Docker network (`internal: true`) with outbound internet connectivity completely severed. Documents are processed 100% locally on CPU in memory.
 
 ## Production Deployment
 

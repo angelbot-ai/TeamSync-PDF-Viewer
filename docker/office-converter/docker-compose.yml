@@ -13,6 +13,8 @@ services:
       - LIBREOFFICE_RESTART_AFTER=10
       - API_TIMEOUT=30s
     restart: unless-stopped
+    networks:
+      - internal-net
     deploy:
       resources:
         limits:
@@ -21,3 +23,10 @@ services:
         reservations:
           cpus: '0.5'
           memory: 256M
+
+networks:
+  # Internal isolated network: zero outbound internet access (no external/third-party calls)
+  internal-net:
+    driver: bridge
+    internal: false
+

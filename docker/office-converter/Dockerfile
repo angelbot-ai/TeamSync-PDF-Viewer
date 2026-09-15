@@ -33,6 +33,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Refresh font cache
 RUN fc-cache -f -v
 
+# Support for air-gapped offline environments: optional directory for mounting local TrueType fonts
+RUN mkdir -p /usr/share/fonts/truetype/custom
+VOLUME ["/usr/share/fonts/truetype/custom"]
+
 # Switch back to the unprivileged gotenberg user for security
 USER gotenberg
 

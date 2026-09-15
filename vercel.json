@@ -4,10 +4,6 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
-    {
-      "source": "/api/convert",
-      "destination": "https://teamsync-office-converter-1.onrender.com/forms/libreoffice/convert"
-    },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

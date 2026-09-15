@@ -128,27 +128,31 @@ if (rootElement) {
         badge: 'PDF',
         color: '#e11d48',
         url: '/TeamSync.pdf?v=2',
+        fileName: 'TeamSync.pdf',
       },
       {
         id: 'word',
         name: 'Word Document',
         badge: 'DOCX',
         color: '#185abd',
-        url: '/sample_document.docx',
+        url: '/api/convert?file=/sample_document.docx',
+        fileName: 'sample_document.docx',
       },
       {
         id: 'excel',
         name: 'Excel Spreadsheet',
         badge: 'XLSX',
         color: '#107c41',
-        url: '/sample_spreadsheet.xlsx',
+        url: '/api/convert?file=/sample_spreadsheet.xlsx',
+        fileName: 'sample_spreadsheet.xlsx',
       },
       {
         id: 'ppt',
         name: 'PowerPoint Deck',
         badge: 'PPTX',
         color: '#d24726',
-        url: '/sample_presentation.pptx',
+        url: '/api/convert?file=/sample_presentation.pptx',
+        fileName: 'sample_presentation.pptx',
       },
     ];
 
@@ -169,6 +173,7 @@ if (rootElement) {
     brand.innerHTML = `
       <span>TeamSync PDF Viewer</span>
       <span class="teamsync-demo-badge-live">LIVE DEMO</span>
+      <span class="teamsync-demo-badge-hybrid" title="Hybrid Architecture: Edge CDN Pre-Conversion for system documents + on-the-fly client fallback for local files">⚡ HYBRID ENGINE</span>
     `;
     bar.appendChild(brand);
 

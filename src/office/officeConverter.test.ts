@@ -106,6 +106,39 @@ describe('officeConverter', () => {
       expect(new Uint8Array(result.pdfBuffer)).toEqual(mockPdfData);
     });
 
+    it('attaches Authorization header when authToken is provided', async () => {
+      const mockPdfData = new Uint8Array([37, 80, 68, 70]).buffer;
+      const fileBlob = new Blob(['data'], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+
+      let capturedHeaders: any = null;
+      globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+        capturedHeaders = init?.headers;
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => mockPdfData,
+        } as Response;
+      });
+
+      await convertOfficeDocument(fileBlob, {
+        endpoint: 'https://convert.example.com/convert',
+        authToken: 'my-secret-key-123',
+      });
+
+      expect(capturedHeaders).toBeDefined();
+      expect(capturedHeaders['Authorization']).toBe('Bearer my-secret-key-123');
+
+      // Also verify async function token
+      await convertOfficeDocument(new Blob(['other-data'], { type: 'application/vnd.ms-excel' }), {
+        endpoint: 'https://convert.example.com/convert',
+        authToken: async () => 'Bearer custom-jwt-token',
+        cache: 'none',
+      });
+      expect(capturedHeaders['Authorization']).toBe('Bearer custom-jwt-token');
+    });
+
     it('throws descriptive error if endpoint returns non-200 status', async () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: false,

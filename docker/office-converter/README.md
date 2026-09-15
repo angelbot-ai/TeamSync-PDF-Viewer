@@ -15,26 +15,41 @@ By converting Office documents into standardized PDF/A streams via headless Libr
 
 ---
 
-## Quick Start (Docker Compose)
+## Quick Start (Docker Compose with Auth Gateway)
 
-Run the conversion service locally on port `3001`:
+1. Set your secure authorization token in your environment or `.env`:
+```bash
+export AUTH_TOKEN="your-secure-secret-token-here"
+```
 
+2. Start the services (internal conversion engine + auth gateway):
 ```bash
 cd docker/office-converter
 docker compose up -d
 ```
 
-Verify the service is running:
-
+3. Verify the public health endpoint (returns 200 without auth):
 ```bash
-curl -I http://localhost:3001/health
+curl http://localhost:3001/health
+```
+
+4. Test conversion with your authorization token:
+```bash
+# Returns 401 Unauthorized without token:
+curl -I -X POST http://localhost:3001/convert
+
+# Successfully converts document with Bearer token:
+curl -X POST http://localhost:3001/convert \
+  -H "Authorization: Bearer your-secure-secret-token-here" \
+  -F "files=@sample.docx" \
+  --output sample.pdf
 ```
 
 ---
 
-## Configuring TeamSync PDF Viewer
+## Configuring TeamSync PDF Viewer with Authorization Token
 
-Pass the `officeConverter` prop to `<TeamSyncViewer>` or into `createWebViewer()`:
+Pass `authToken` directly to `officeConverter`:
 
 ### React Component Usage
 ```tsx
@@ -47,13 +62,27 @@ export function DocumentPage() {
       <TeamSyncViewer
         fileUrl="https://example.com/documents/quarterly-review.pptx"
         officeConverter={{
-          endpoint: 'http://localhost:3001/forms/libreoffice/convert',
+          endpoint: 'http://localhost:3001/convert',
+          authToken: 'your-secure-secret-token-here', // 👈 Automatically sent as 'Authorization: Bearer ...'
           cache: 'memory', // Sub-50ms repeat loads
         }}
       />
     </div>
   );
 }
+```
+
+### Dynamic / Async Auth Token (e.g. Session JWT)
+If your authorization token changes or expires (e.g. Supabase, Auth0, Clerk, NextAuth):
+
+```tsx
+<TeamSyncViewer
+  fileUrl="/contracts/agreement.docx"
+  officeConverter={{
+    endpoint: 'https://converter.company.local/convert',
+    authToken: async () => await getFreshUserToken(),
+  }}
+/>
 ```
 
 ### Custom Proxy or Serverless Function

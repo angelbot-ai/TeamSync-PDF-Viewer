@@ -189,7 +189,14 @@ export async function convertOfficeDocument(
     // Prepare headers
     let customHeaders: Record<string, string> = {};
     if (config.headers) {
-      customHeaders = typeof config.headers === 'function' ? await config.headers() : config.headers;
+      customHeaders = typeof config.headers === 'function' ? await config.headers() : { ...config.headers };
+    }
+
+    if (config.authToken) {
+      const token = typeof config.authToken === 'function' ? await config.authToken() : config.authToken;
+      if (token) {
+        customHeaders['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+      }
     }
 
     // Resolve file content to Blob/File

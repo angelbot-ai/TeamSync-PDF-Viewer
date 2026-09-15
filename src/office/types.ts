@@ -21,9 +21,16 @@ export interface OfficeConverterConfig {
   endpoint?: string;
 
   /**
-   * Custom HTTP headers to include with the conversion request (e.g. Authorization token).
+   * Custom HTTP headers to include with the conversion request.
    */
   headers?: Record<string, string> | (() => Record<string, string> | Promise<Record<string, string>>);
+
+  /**
+   * Authorization token (Bearer token, API key, or JWT) sent with conversion requests.
+   * Can be a static string or a function/promise returning the current token.
+   * Automatically injected as 'Authorization: Bearer <token>' header.
+   */
+  authToken?: string | (() => string | Promise<string>);
 
   /**
    * Caching strategy:

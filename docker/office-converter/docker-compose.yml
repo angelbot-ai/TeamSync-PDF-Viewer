@@ -1,13 +1,12 @@
 version: '3.8'
 
 services:
-  office-converter:
+  # Internal LibreOffice Conversion Engine (Zero Public Ports)
+  engine:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: teamsync-office-converter
-    ports:
-      - "3001:3000"
+    container_name: teamsync-conversion-engine
     environment:
       - LOG_LEVEL=info
       - LIBREOFFICE_RESTART_AFTER=10
@@ -22,6 +21,30 @@ services:
           memory: 1024M
         reservations:
           cpus: '0.5'
+          memory: 256M
+
+  # Secure Auth Gateway (Enforces Authorization Bearer Token or X-API-Key)
+  auth-gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: teamsync-auth-gateway
+    ports:
+      - "3001:3001"
+    environment:
+      - AUTH_TOKEN=${AUTH_TOKEN:-secret-office-token}
+      - GOTENBERG_HOST=engine
+      - GOTENBERG_PORT=3000
+      - PORT=3001
+    depends_on:
+      - engine
+    restart: unless-stopped
+    networks:
+      - internal-net
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
           memory: 256M
 
 networks:

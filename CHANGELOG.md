@@ -2,6 +2,20 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.7.0] — 2026-09-15
+
+### Added
+- **Cross-Instance Document Linking**: Links referring to other documents or specific pages can now automatically load and navigate the destination document in a designated target `TeamSyncViewer` instance.
+- **`targetViewer` Prop & Option**: Added `targetViewer` to `<TeamSyncViewer>` and `WebViewerOptions`, accepting another `WebViewerInstance`, a React ref (`useRef<WebViewerInstance>`), a getter function `() => WebViewerInstance | null`, or an instance ID string.
+- **Static Viewer Instance Registry**: Added `WebViewerInstance.getInstance(id)`, `WebViewerInstance.registerInstance(id, inst)`, `WebViewerInstance.unregisterInstance(id)`, and automatic unregistration when the viewer is unmounted/destroyed.
+- **`loadOrNavigate` & `openLink` APIs**: Added `instance.loadOrNavigate(documentUrl, page?)` (smoothly navigates to the page if the document is already loaded, or reloads at that page if not) and `instance.openLink(url, options?)`.
+- **Dual Link Support (TeamSync Annotations & Embedded PDF Links)**:
+  - Native embedded PDF `/Link` annotations are now extracted from PDF.js (`page.getAnnotations({ intent: 'display' })`) and rendered with interactive SVG hitboxes and tooltip preview.
+  - Link annotations and sidebar comment links seamlessly route through the link handler.
+- **"Other Doc" Tab in Insert Link Modal**: Added a dedicated 3rd tab to `InsertLinkModal` for configuring cross-document links with document URL and target page number.
+- **`linkClicked` Event & Custom Handlers**: Added `linkClicked` event to `ViewerEventMap` with a cancellable `LinkClickEvent` supporting `event.preventDefault()`, plus `onLinkClick` and `resolveLinkUrl` props for URL mapping and event interception.
+- **Public Utilities Export**: Exported `parseLinkTarget`, `isDocumentUrl`, `ParsedLinkTarget`, and `LinkClickEvent` from the library root.
+
 ## [1.6.1] — 2026-09-15
 
 ### Added

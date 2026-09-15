@@ -121,12 +121,100 @@ if (rootElement) {
     // Standalone dev / demo mode (supports ?file= or ?doc= query param)
     const searchParams = new URLSearchParams(window.location.search);
     const customDoc = searchParams.get('file') || searchParams.get('doc');
-    const initialDoc = customDoc || '/TeamSync.pdf?v=2';
-    const cleanFileName = initialDoc.split('#')[0].split('?')[0].split('/').pop() || 'TeamSync.pdf';
+
+    const SAMPLES = [
+      {
+        id: 'pdf',
+        name: 'TeamSync Manual',
+        badge: 'PDF',
+        color: '#e11d48',
+        url: '/TeamSync.pdf?v=2',
+      },
+      {
+        id: 'word',
+        name: 'Word Document',
+        badge: 'DOCX',
+        color: '#185abd',
+        url: '/sample_document.docx',
+      },
+      {
+        id: 'excel',
+        name: 'Excel Spreadsheet',
+        badge: 'XLSX',
+        color: '#107c41',
+        url: '/sample_spreadsheet.xlsx',
+      },
+      {
+        id: 'ppt',
+        name: 'PowerPoint Deck',
+        badge: 'PPTX',
+        color: '#d24726',
+        url: '/sample_presentation.pptx',
+      },
+    ];
+
+    let currentDocUrl = customDoc || SAMPLES[0].url;
+    let viewerInstance: WebViewerInstance | null = null;
+
+    // Create layout wrapper
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText =
+      'display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden;';
+
+    // Top switcher bar
+    const bar = document.createElement('div');
+    bar.className = 'teamsync-demo-bar';
+
+    const brand = document.createElement('div');
+    brand.className = 'teamsync-demo-brand';
+    brand.innerHTML = `
+      <span>TeamSync PDF Viewer</span>
+      <span class="teamsync-demo-badge-live">LIVE DEMO</span>
+    `;
+    bar.appendChild(brand);
+
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.className = 'teamsync-demo-buttons';
+
+    const buttons: HTMLButtonElement[] = [];
+
+    SAMPLES.forEach((sample) => {
+      const btn = document.createElement('button');
+      const isInitial = sample.url === currentDocUrl || (customDoc && customDoc.includes(sample.id));
+      btn.className = `teamsync-demo-btn ${isInitial ? 'active' : ''}`;
+      btn.innerHTML = `<span class="teamsync-doc-badge" style="background: ${sample.color}">${sample.badge}</span> <span>${sample.name}</span>`;
+
+      btn.onclick = () => {
+        buttons.forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentDocUrl = sample.url;
+        if (viewerInstance) {
+          viewerInstance.loadDocument(sample.url);
+        }
+        const u = new URL(window.location.href);
+        u.searchParams.set('file', sample.url);
+        window.history.replaceState(null, '', u.toString());
+      };
+
+      buttons.push(btn);
+      buttonsContainer.appendChild(btn);
+    });
+
+    bar.appendChild(buttonsContainer);
+
+    const viewerEl = document.createElement('div');
+    viewerEl.style.cssText = 'flex: 1; min-height: 0; width: 100%; position: relative;';
+
+    wrapper.appendChild(bar);
+    wrapper.appendChild(viewerEl);
+    rootElement.appendChild(wrapper);
+
+    const cleanFileName =
+      currentDocUrl.split('#')[0].split('?')[0].split('/').pop() || 'document.pdf';
 
     mount(
       {
-        initialDoc,
+        initialDoc: currentDocUrl,
         fileName: cleanFileName,
         initialScale: 'fit-width',
         currentUser: { id: 'demo', name: 'Demo User' },
@@ -139,7 +227,9 @@ if (rootElement) {
           color: '#dc2626',
         },
       },
-      rootElement
-    );
+      viewerEl
+    ).then((instance) => {
+      viewerInstance = instance;
+    });
   }
 }

@@ -27,11 +27,13 @@ Passed into `createWebViewer(options, containerElement)`; every option is also a
 | `regexRedactions` | `RegExp[]` | `[]` | Automated PII scanning patterns. |
 | `toolbar` / `sidebars` / `leftPanelOpen` | `boolean` | `true` | Chrome toggles. |
 | `autoFocus` | `boolean` | `false` | Focus the viewer on mount so keyboard shortcuts apply immediately. |
+| `officeConverter` | `OfficeConverterConfig` | `undefined` | Backend conversion configuration for viewing Word, PowerPoint, and Excel files. |
 
 `<TeamSyncViewer>` additionally accepts `className`, `style` and the callbacks `onReady(instance)`,
 `onDocumentLoaded({ url, numPages })`, `onDocumentLoadError(error, retry, { url, passwordRequired })`,
-`onFirstPageRendered({ url, pageNumber })`, `onPasswordRequired({ url })`, `onPageChange(page, numPages)`
-and `onAnnotationsChange(annotations)`.
+`onFirstPageRendered({ url, pageNumber })`, `onPasswordRequired({ url })`, `onPageChange(page, numPages)`,
+`onAnnotationsChange(annotations)`, `onOfficeConverting({ fileType, fileName, url })`,
+`onOfficeConverted({ fileType, fromCache, url })`, and `onOfficeConversionError({ fileType, error, url })`.
 
 ---
 

@@ -6,4 +6,5 @@
 * [Annotations & Markup Guide](Annotations-&-Markup-Guide)
 * [Redactions & PII Sanitization](Redactions-&-PII-Sanitization)
 * [Forensic Watermarking](Forensic-Watermarking)
+* [Viewing Office Documents](Viewing-Office-Documents)
 * [Plugin Architecture](Plugin-Architecture)

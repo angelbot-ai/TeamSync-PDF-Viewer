@@ -15,6 +15,7 @@
 | 🎨 [Annotations & Markup Guide](Annotations-&-Markup-Guide) | Freehand drawing, highlighters, geometric vector shapes, notes & hyperlinks |
 | 🛡️ [Redactions & PII Sanitization](Redactions-&-PII-Sanitization) | Binary vector redactions, text layer sanitization, regex PII scanning & discard options |
 | 💧 [Forensic Watermarking](Forensic-Watermarking) | Single centered or full-page tiled dynamic watermarking |
+| 📄 [Viewing Office Documents](Viewing-Office-Documents) | Word (.docx), PowerPoint (.pptx), Excel (.xlsx) high-fidelity viewing & conversion |
 | 🔌 [Plugin Architecture](Plugin-Architecture) | Creating custom extension modules with `ViewerPlugin` & `PluginContext` |
 
 ---

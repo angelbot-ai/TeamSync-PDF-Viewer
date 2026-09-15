@@ -72,6 +72,15 @@ function scopeEmittedCss() {
 export default defineConfig({
   // The demo assets under public/ belong to the application build only.
   publicDir: false,
+  server: {
+    proxy: {
+      '/api/convert': {
+        target: 'https://teamsync-office-converter-1.onrender.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/convert/, '/forms/libreoffice/convert'),
+      },
+    },
+  },
   plugins: [
     react(),
     scopeEmittedCss(),

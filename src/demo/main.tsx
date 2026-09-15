@@ -72,16 +72,15 @@ async function mount(options: WebViewerOptions, el: HTMLElement): Promise<WebVie
   return instance;
 }
 
-// Live self-hosted conversion service credentials
-const RENDER_CONVERTER_ENDPOINT =
-  'https://teamsync-office-converter-1.onrender.com/forms/libreoffice/convert';
-const RENDER_BASIC_AUTH =
+// Conversion service endpoint: uses same-origin proxy (/api/convert) to eliminate browser CORS preflight issues
+const CONVERTER_ENDPOINT = '/api/convert';
+const CONVERTER_BASIC_AUTH =
   'Basic ' + btoa('admin:ASDF!@!@#!@RDSDFF#$#@$SDFSD#@#@#SDFGDF$%^%$^DFG#$%#G#$%ERER%$%');
 
 const defaultOfficeConverter = {
-  endpoint: RENDER_CONVERTER_ENDPOINT,
+  endpoint: CONVERTER_ENDPOINT,
   headers: {
-    Authorization: RENDER_BASIC_AUTH,
+    Authorization: CONVERTER_BASIC_AUTH,
   },
   cache: 'memory' as const,
 };

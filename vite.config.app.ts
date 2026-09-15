@@ -8,6 +8,15 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    proxy: {
+      '/api/convert': {
+        target: 'https://teamsync-office-converter-1.onrender.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/convert/, '/forms/libreoffice/convert'),
+      },
+    },
+  },
   build: {
     outDir: 'dist',
     chunkSizeWarningLimit: 1600,

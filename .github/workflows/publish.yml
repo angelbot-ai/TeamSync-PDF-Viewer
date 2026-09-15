@@ -65,6 +65,10 @@ jobs:
           if npm view "teamsync-pdf-viewer@$VERSION" version >/dev/null 2>&1; then
             echo "::error::teamsync-pdf-viewer@$VERSION is already on the registry"; exit 1
           fi
+      - name: Check npm authentication
+        run: npm whoami
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
         run: npm publish --access public --provenance

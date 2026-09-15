@@ -65,7 +65,7 @@ export interface ViewerUser {
   name: string;
 }
 
-export type InitialScale = number | 'fit-width' | 'fit-page';
+export type InitialScale = number | 'fit-width' | 'fit-page' | { type: 'fit-width'; ratio?: number };
 
 export type ToolMode =
   | 'select'
@@ -101,6 +101,18 @@ export interface WebViewerOptions {
   /** Display name used for downloads. */
   fileName?: string;
   initialScale?: InitialScale;
+  /**
+   * Initial page width target as a ratio of the available viewing container width (e.g. `0.7` for 70%).
+   * When provided, the viewer scales the document to occupy this fraction of available width on initial render.
+   */
+  initialWidthRatio?: number;
+  /** Alias of `initialWidthRatio`. */
+  widthRatio?: number;
+  /**
+   * Automatically re-calculate scale when the viewer container or window resizes while in a fit or width-ratio mode.
+   * Default: true.
+   */
+  responsive?: boolean;
   /** 1-based page to scroll to after load. */
   initialPage?: number;
   /** Current 1-based page to display. Changes navigate to the given page. */

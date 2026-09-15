@@ -15,11 +15,11 @@ import PageRenderer from './PageRenderer';
 import type { Annotation } from '../annotations/types';
 import { newAnnotationId } from '../annotations/ids';
 import type { AnnotationManager } from '../annotations/AnnotationManager';
-import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths, TransientHighlight, ToolMode } from '../core/types';
+import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths, TransientHighlight, ToolMode, InitialScale } from '../core/types';
 import TextSelectionTooltip from './TextSelectionTooltip';
 import { findRegexRedactions } from '../utils/findRegexRedactions';
 import { convertToUnrotated, convertToRotated, normalizeRotation } from '../utils/rotationUtils';
-import { clampScale, calculateScrollCompensation } from '../utils/zoomUtils';
+import { clampScale, calculateFitWidthScale, calculateScrollCompensation } from '../utils/zoomUtils';
 import { estimatePageDimensions, computeRowLayout, DEFAULT_FALLBACK_DIMS } from '../utils/layoutUtils';
 import { useViewerBus, useBusEvent } from '../hooks/useViewerBus';
 import { assertWorkerConfigured, configurePdfAssets, getDocumentParams } from '../core/pdfAssets';
@@ -85,6 +85,9 @@ interface DocumentViewerProps {
   enableTextSelection?: boolean;
   defaultTool?: 'select' | 'pan';
   showSelectionTooltip?: boolean;
+  initialScale?: InitialScale;
+  initialWidthRatio?: number;
+  responsive?: boolean;
 }
 
 export default function DocumentViewer({
@@ -95,7 +98,10 @@ export default function DocumentViewer({
   hideAnnotationsUntilPageRendered = true,
   enableTextSelection = true,
   defaultTool = 'select',
-  showSelectionTooltip = true
+  showSelectionTooltip = true,
+  initialScale,
+  initialWidthRatio,
+  responsive = true,
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bus = useViewerBus();
@@ -476,6 +482,24 @@ export default function DocumentViewer({
   const isProgrammaticScaleRef = useRef(false);
   const initialFitDoneRef = useRef(false);
 
+  type ActiveFitMode = { type: 'fit-width'; ratio: number } | { type: 'fit-page' } | null;
+
+  const initialWidthRatioValue = typeof initialWidthRatio === 'number' && Number.isFinite(initialWidthRatio) && initialWidthRatio > 0
+    ? initialWidthRatio
+    : (typeof initialScale === 'object' && initialScale !== null && initialScale.type === 'fit-width' && typeof initialScale.ratio === 'number' && initialScale.ratio > 0
+      ? initialScale.ratio
+      : undefined);
+
+  const activeFitModeRef = useRef<ActiveFitMode>(
+    typeof initialWidthRatioValue === 'number'
+      ? { type: 'fit-width', ratio: initialWidthRatioValue }
+      : initialScale === 'fit-width'
+      ? { type: 'fit-width', ratio: 1.0 }
+      : initialScale === 'fit-page'
+      ? { type: 'fit-page' }
+      : null
+  );
+
   useEffect(() => {
     initialFitDoneRef.current = false;
   }, [pdfDoc]);
@@ -491,6 +515,10 @@ export default function DocumentViewer({
       if (!container) return;
 
       const isProgrammatic = isProgrammaticScaleRef.current || !initialFitDoneRef.current || initialScrollDoneRef.current !== pdfDoc;
+      if (!isProgrammatic) {
+        // User manually altered zoom (toolbar buttons, wheel, shortcuts) -> clear auto-fit
+        activeFitModeRef.current = null;
+      }
       initialFitDoneRef.current = true;
       isProgrammaticScaleRef.current = false;
 
@@ -1134,23 +1162,35 @@ export default function DocumentViewer({
   }, [pdfDoc, rotation]);
 
   // Dynamic Fit to Width calculation
-  const handleFitToWidth = useCallback(() => {
-    const dims = dimsFor(pageNum);
-    if (!containerRef.current || !dims.width) return;
-    const availableWidth = containerRef.current.clientWidth - 48;
-    if (availableWidth > 0 && dims.width > 0) {
-      const newScale = clampScale(availableWidth / dims.width);
-      isProgrammaticScaleRef.current = true;
-      if (containerRef.current && (pageNum === 1 || containerRef.current.scrollTop <= 1)) {
-        containerRef.current.scrollTop = 0;
-        containerRef.current.scrollLeft = 0;
+  const handleFitToWidth = useCallback(
+    (detail?: { ratio?: number } | number) => {
+      const dims = dimsFor(pageNum);
+      if (!containerRef.current || !dims.width) return;
+      const availableWidth = containerRef.current.clientWidth - 48;
+      const rawRatio = typeof detail === 'number' ? detail : detail?.ratio;
+      const effectiveRatio =
+        typeof rawRatio === 'number' && Number.isFinite(rawRatio) && rawRatio > 0
+          ? rawRatio
+          : (typeof initialWidthRatioValue === 'number' && !detail ? initialWidthRatioValue : 1.0);
+
+      activeFitModeRef.current = { type: 'fit-width', ratio: effectiveRatio };
+
+      if (availableWidth > 0 && dims.width > 0) {
+        const newScale = calculateFitWidthScale(availableWidth, dims.width, effectiveRatio);
+        isProgrammaticScaleRef.current = true;
+        if (containerRef.current && (pageNum === 1 || containerRef.current.scrollTop <= 1)) {
+          containerRef.current.scrollTop = 0;
+          containerRef.current.scrollLeft = 0;
+        }
+        setScale(newScale);
       }
-      setScale(newScale);
-    }
-  }, [dimsFor, pageNum, setScale]);
+    },
+    [dimsFor, pageNum, setScale, initialWidthRatioValue]
+  );
 
   // Dynamic Fit to Page calculation
   const handleFitToPage = useCallback(() => {
+    activeFitModeRef.current = { type: 'fit-page' };
     const dims = dimsFor(pageNum);
     if (!containerRef.current || !dims.width || !dims.height) return;
     const availableWidth = containerRef.current.clientWidth - 48;
@@ -1168,8 +1208,49 @@ export default function DocumentViewer({
     }
   }, [dimsFor, pageNum, setScale]);
 
-  useBusEvent('action-fit-to-width', () => handleFitToWidth());
+  useBusEvent('action-fit-to-width', (detail) => handleFitToWidth(detail as { ratio?: number } | number | undefined));
   useBusEvent('action-fit-to-page', () => handleFitToPage());
+
+  // Responsive container resize observer: automatically refits scale if in a fit or width-ratio mode
+  useEffect(() => {
+    if (responsive === false) return;
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+
+    let rafId: number | null = null;
+    let prevWidth = container.clientWidth;
+    let prevHeight = container.clientHeight;
+
+    const observer = new ResizeObserver(() => {
+      const currentWidth = container.clientWidth;
+      const currentHeight = container.clientHeight;
+
+      if (currentWidth <= 0 || currentHeight <= 0) return;
+      if (Math.abs(currentWidth - prevWidth) < 1 && Math.abs(currentHeight - prevHeight) < 1) return;
+
+      prevWidth = currentWidth;
+      prevHeight = currentHeight;
+
+      if (!activeFitModeRef.current) return;
+
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const mode = activeFitModeRef.current;
+        if (mode?.type === 'fit-width') {
+          handleFitToWidth({ ratio: mode.ratio });
+        } else if (mode?.type === 'fit-page') {
+          handleFitToPage();
+        }
+      });
+    });
+
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [responsive, handleFitToWidth, handleFitToPage]);
 
   const getUnrotatedPoint = (e: React.MouseEvent<Element>, pageNumber: number) => {
     const rect = e.currentTarget.getBoundingClientRect();

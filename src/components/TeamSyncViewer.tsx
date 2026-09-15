@@ -63,7 +63,7 @@ const newId = (): string =>
 
 export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewerProps>(function TeamSyncViewer(props, ref) {
   const {
-    fileUrl, initialDoc, initialScale, initialPage, page, transientHighlights: propTransientHighlights,
+    fileUrl, initialDoc, initialScale, initialWidthRatio, widthRatio, responsive = true, initialPage, page, transientHighlights: propTransientHighlights,
     plugins, redactions, regexRedactions,
     enableAnnotations, enableSign = false, watermark, permissions, enableRedactions,
     canAddAnnotations, canEditAnnotations, canDeleteAnnotations, readOnly = false,
@@ -335,8 +335,17 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
       if (!initialFitAppliedRef.current) {
         initialFitAppliedRef.current = true;
         const fit = latest.current.initialScale;
-        if (fit === 'fit-width') setTimeout(() => bus.emit('action-fit-to-width'), 0);
-        else if (fit === 'fit-page') setTimeout(() => bus.emit('action-fit-to-page'), 0);
+        const widthRatio =
+          latest.current.initialWidthRatio ??
+          latest.current.widthRatio ??
+          (typeof fit === 'object' && fit !== null && fit.type === 'fit-width' ? fit.ratio : undefined);
+        if (typeof widthRatio === 'number' && Number.isFinite(widthRatio) && widthRatio > 0) {
+          setTimeout(() => bus.emit('action-fit-to-width', { ratio: widthRatio }), 0);
+        } else if (fit === 'fit-width') {
+          setTimeout(() => bus.emit('action-fit-to-width'), 0);
+        } else if (fit === 'fit-page') {
+          setTimeout(() => bus.emit('action-fit-to-page'), 0);
+        }
       }
       bus.emit('firstPageRendered', { url, pageNumber });
       latest.current.onFirstPageRendered?.({ url, pageNumber });
@@ -606,6 +615,9 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             enableTextSelection={enableTextSelection}
             defaultTool={defaultTool}
             showSelectionTooltip={showSelectionTooltip}
+            initialScale={initialScale}
+            initialWidthRatio={initialWidthRatio ?? widthRatio}
+            responsive={responsive}
           />
         </div>
         {isSettingsOpen && (

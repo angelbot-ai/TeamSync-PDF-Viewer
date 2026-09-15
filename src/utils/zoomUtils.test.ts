@@ -3,6 +3,7 @@ import {
   calculateNextZoomIn,
   calculateNextZoomOut,
   clampScale,
+  calculateFitWidthScale,
   calculateSafeRenderScale,
   calculateScrollCompensation,
   MAX_SCALE,
@@ -65,6 +66,38 @@ describe('zoomUtils', () => {
       expect(clampScale(0.05)).toBe(MIN_SCALE);
       expect(clampScale(15.0)).toBe(MAX_SCALE);
       expect(clampScale(2.3456)).toBe(2.35);
+    });
+  });
+
+  describe('calculateFitWidthScale', () => {
+    it('calculates full-width scale when ratio defaults to 1.0', () => {
+      // 1000px available, 500pt page -> scale = 2.0 (page renders at 1000px)
+      expect(calculateFitWidthScale(1000, 500)).toBe(2.0);
+      // 800px available, 800pt page -> scale = 1.0
+      expect(calculateFitWidthScale(800, 800)).toBe(1.0);
+    });
+
+    it('calculates 70% width-ratio scale when ratio = 0.7', () => {
+      // 1000px available, 500pt page, ratio 0.7 -> target 700px -> scale = 1.40
+      expect(calculateFitWidthScale(1000, 500, 0.7)).toBe(1.4);
+      // 500 * 1.4 = 700px (exactly 70% of 1000px)
+      expect(500 * calculateFitWidthScale(1000, 500, 0.7)).toBe(700);
+    });
+
+    it('clamps to MIN_SCALE and MAX_SCALE', () => {
+      // Very small available width clamped to MIN_SCALE
+      expect(calculateFitWidthScale(10, 1000, 0.7)).toBe(MIN_SCALE);
+      // Huge width clamped to MAX_SCALE
+      expect(calculateFitWidthScale(50000, 100, 0.7)).toBe(MAX_SCALE);
+    });
+
+    it('gracefully handles non-positive or invalid inputs', () => {
+      expect(calculateFitWidthScale(0, 500, 0.7)).toBe(1.0);
+      expect(calculateFitWidthScale(1000, 0, 0.7)).toBe(1.0);
+      // Negative or zero ratio defaults to 1.0 (full width)
+      expect(calculateFitWidthScale(1000, 500, 0)).toBe(2.0);
+      expect(calculateFitWidthScale(1000, 500, -0.5)).toBe(2.0);
+      expect(calculateFitWidthScale(1000, 500, NaN)).toBe(2.0);
     });
   });
 

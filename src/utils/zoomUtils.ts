@@ -48,6 +48,22 @@ export function clampScale(scale: number, minScale = MIN_SCALE, maxScale = MAX_S
 }
 
 /**
+ * Calculates the target scale to fit a given page width to an available container width,
+ * optionally scaled by a width ratio (e.g. 0.7 for 70% of available width).
+ */
+export function calculateFitWidthScale(
+  availableWidth: number,
+  pageWidth: number,
+  ratio = 1.0,
+  minScale = MIN_SCALE,
+  maxScale = MAX_SCALE
+): number {
+  if (availableWidth <= 0 || pageWidth <= 0) return 1.0;
+  const effectiveRatio = typeof ratio === 'number' && Number.isFinite(ratio) && ratio > 0 ? ratio : 1.0;
+  return clampScale((availableWidth * effectiveRatio) / pageWidth, minScale, maxScale);
+}
+
+/**
  * Calculates the safe rasterization scale for PDF.js viewport rendering so that
  * canvas dimensions and texture memory stay strictly within hardware limits.
  */

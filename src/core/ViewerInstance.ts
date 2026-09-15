@@ -164,6 +164,31 @@ export class WebViewerInstance {
   }
 
   /**
+   * Scale the document to fit the container width.
+   *
+   * @param ratio - Optional width ratio fraction (e.g. `0.7` for 70% of available width).
+   *   Defaults to `1.0` (100% full-width fit).
+   */
+  fitWidth(ratio?: number): void {
+    this.bus.emit('action-fit-to-width', typeof ratio === 'number' ? { ratio } : undefined);
+  }
+
+  /** Alias of `fitWidth`. */
+  fitToWidth(ratio?: number): void {
+    this.fitWidth(ratio);
+  }
+
+  /** Scale the document to fit the entire page within the container viewport. */
+  fitPage(): void {
+    this.bus.emit('action-fit-to-page');
+  }
+
+  /** Alias of `fitPage`. */
+  fitToPage(): void {
+    this.fitPage();
+  }
+
+  /**
    * Search the document for text matches, returning snippets and page bounding boxes.
    *
    * @param query - Search term.
@@ -359,9 +384,9 @@ export class WebViewerInstance {
     },
     getSelectedText: () => this.getSelectedText(),
     copySelectedText: () => this.copySelectedText(),
-    fitWidth: () => this.bus.emit('action-fit-to-width'),
+    fitWidth: (ratio?: number) => this.bus.emit('action-fit-to-width', typeof ratio === 'number' ? { ratio } : undefined),
     fitPage: () => this.bus.emit('action-fit-to-page'),
-    fitToWidth: () => this.bus.emit('action-fit-to-width'),
+    fitToWidth: (ratio?: number) => this.bus.emit('action-fit-to-width', typeof ratio === 'number' ? { ratio } : undefined),
     fitToPage: () => this.bus.emit('action-fit-to-page'),
     startCompare: (docA: any, docB: any, options?: any) => {
       if (typeof window !== 'undefined') {

@@ -476,4 +476,46 @@ describe('WebViewerInstance', () => {
     expect(onRedactionsChanged).toHaveBeenCalledTimes(1);
     expect(onRedactionsApplied).toHaveBeenCalledTimes(1);
   });
+
+  it('supports fitWidth and fitToWidth with ratio on instance and UI facade', () => {
+    const bus = new ViewerBus();
+    const inst = new WebViewerInstance(bus);
+    const onFitWidth = vi.fn();
+    const onFitPage = vi.fn();
+
+    bus.on('action-fit-to-width', onFitWidth);
+    bus.on('action-fit-to-page', onFitPage);
+
+    // UI facade
+    inst.UI.fitWidth(0.7);
+    expect(onFitWidth).toHaveBeenLastCalledWith({ ratio: 0.7 });
+
+    inst.UI.fitToWidth(0.85);
+    expect(onFitWidth).toHaveBeenLastCalledWith({ ratio: 0.85 });
+
+    inst.UI.fitWidth();
+    expect(onFitWidth).toHaveBeenLastCalledWith(undefined);
+
+    inst.UI.fitPage();
+    expect(onFitPage).toHaveBeenCalledTimes(1);
+
+    inst.UI.fitToPage();
+    expect(onFitPage).toHaveBeenCalledTimes(2);
+
+    // Instance direct methods
+    inst.fitWidth(0.7);
+    expect(onFitWidth).toHaveBeenLastCalledWith({ ratio: 0.7 });
+
+    inst.fitToWidth(0.5);
+    expect(onFitWidth).toHaveBeenLastCalledWith({ ratio: 0.5 });
+
+    inst.fitWidth();
+    expect(onFitWidth).toHaveBeenLastCalledWith(undefined);
+
+    inst.fitPage();
+    expect(onFitPage).toHaveBeenCalledTimes(3);
+
+    inst.fitToPage();
+    expect(onFitPage).toHaveBeenCalledTimes(4);
+  });
 });

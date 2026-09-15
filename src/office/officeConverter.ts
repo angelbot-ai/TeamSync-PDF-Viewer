@@ -195,7 +195,8 @@ export async function convertOfficeDocument(
     if (config.authToken) {
       const token = typeof config.authToken === 'function' ? await config.authToken() : config.authToken;
       if (token) {
-        customHeaders['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+        customHeaders['Authorization'] =
+          token.startsWith('Bearer ') || token.startsWith('Basic ') ? token : `Bearer ${token}`;
       }
     }
 
@@ -230,12 +231,10 @@ export async function convertOfficeDocument(
       throw new Error('Unsupported Office document input source.');
     }
 
-    // Construct FormData.
-    // Gotenberg standard format: files / files[0]
-    // General multipart proxies: 'file' or 'files'
+    // Construct FormData for Gotenberg / LibreOffice microservice.
+    // Gotenberg accepts files under the 'files' field name. Providing exactly one file returns the converted PDF directly.
     const formData = new FormData();
     formData.append('files', uploadBlob, uploadFileName);
-    formData.append('file', uploadBlob, uploadFileName);
 
     if (config.excelOptions) {
       if (config.excelOptions.fitToPageWidth) {

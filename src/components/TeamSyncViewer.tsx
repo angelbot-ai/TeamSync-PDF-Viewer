@@ -21,7 +21,7 @@ import { WebViewerInstance } from '../core/ViewerInstance';
 import { AnnotationManager } from '../annotations/AnnotationManager';
 import { printPdfBytes } from '../core/print';
 import { useShortcuts, matchShortcut } from '../hooks/useShortcuts';
-import type { WebViewerOptions, SDKPermissions, Redaction, TransientHighlight } from '../core/types';
+import type { WebViewerOptions, SDKPermissions, Redaction, TransientHighlight, LinkClickEvent } from '../core/types';
 import type { Annotation } from '../annotations/types';
 import { calculateNextZoomIn, calculateNextZoomOut, clampScale, MIN_SCALE, MAX_SCALE } from '../utils/zoomUtils';
 
@@ -54,6 +54,31 @@ export interface TeamSyncViewerProps extends Omit<WebViewerOptions, 'path'> {
   onTextSelected?: (info: { text: string }) => void;
   /** Fires whenever text is copied from the document. */
   onTextCopied?: (info: { text: string }) => void;
+  /** Unique ID for this viewer instance, enabling other viewers to target it by name. */
+  id?: string;
+  /**
+   * Target viewer instance, ref, getter, or instance ID to open cross-document links in.
+   * When a link annotation pointing to another PDF is clicked, the document will automatically
+   * be loaded and navigated in this target viewer instance.
+   */
+  targetViewer?:
+    | WebViewerInstance
+    | React.RefObject<WebViewerInstance | null>
+    | (() => WebViewerInstance | null)
+    | string;
+  /**
+   * Optional custom resolver for cross-document links.
+   * Allows transforming relative filenames, document IDs, or URNs into full fetchable document URLs or target pages.
+   */
+  resolveLinkUrl?: (
+    linkUrl: string,
+    context: { sourceViewer: WebViewerInstance; annotation?: Annotation }
+  ) => string | { url: string; page?: number } | Promise<string | { url: string; page?: number } | null> | null;
+  /**
+   * Fires when a link annotation or embedded PDF link is clicked.
+   * Call `event.preventDefault()` to suppress default behavior.
+   */
+  onLinkClick?: (event: LinkClickEvent) => boolean | void | Promise<void>;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -70,6 +95,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     assets, withCredentials = false, toolbar = true, sidebars = true, leftPanelOpen = true,
     className, style, hideAnnotationsUntilPageRendered = true,
     enableTextSelection = true, defaultTool = 'select', showSelectionTooltip = true,
+    id, targetViewer, resolveLinkUrl, onLinkClick,
   } = props;
 
   // Latest props for callbacks/bindings that must not re-subscribe on every render.
@@ -80,9 +106,25 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   const bus = useMemo(() => new ViewerBus(), []);
   const annotationManager = useMemo(() => new AnnotationManager(), []);
   const instanceRef = useRef<WebViewerInstance | null>(null);
-  if (!instanceRef.current) instanceRef.current = new WebViewerInstance(bus, annotationManager);
+  if (!instanceRef.current) instanceRef.current = new WebViewerInstance(bus, annotationManager, id);
   const instance = instanceRef.current;
   useImperativeHandle(ref, () => instance, [instance]);
+
+  useEffect(() => {
+    if (id) {
+      instance.id = id;
+      WebViewerInstance.registerInstance(id, instance);
+      return () => {
+        WebViewerInstance.unregisterInstance(id);
+      };
+    }
+  }, [instance, id]);
+
+  useEffect(() => {
+    if (targetViewer !== undefined) {
+      instance.setTargetViewer(targetViewer);
+    }
+  }, [instance, targetViewer]);
 
   // ---- document ------------------------------------------------------------------------------
   const requestedUrl = fileUrl ?? initialDoc;
@@ -618,6 +660,10 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             initialScale={initialScale}
             initialWidthRatio={initialWidthRatio ?? widthRatio}
             responsive={responsive}
+            instance={instance}
+            targetViewer={targetViewer}
+            resolveLinkUrl={resolveLinkUrl}
+            onLinkClick={onLinkClick}
           />
         </div>
         {isSettingsOpen && (

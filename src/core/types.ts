@@ -2,12 +2,14 @@
  * © 2026 AngelBot Ai Pvt Ltd. All rights reserved.
  * Public option and event types.
  */
+import type React from 'react';
 import type { ViewerPlugin } from '../plugins/types';
 import type { Annotation } from '../annotations/types';
 import type { AnnotationChangedEvent } from '../annotations/AnnotationManager';
 import type { PdfAssetPaths } from './pdfAssets';
+import type { WebViewerInstance } from './ViewerInstance';
 
-export type { PdfAssetPaths };
+export type { PdfAssetPaths, WebViewerInstance };
 
 export interface SearchBounds {
   x: number;
@@ -163,6 +165,51 @@ export interface WebViewerOptions {
   onRedactionsChange?: (redactions: Redaction[]) => void;
   /** Fires once per user click of Apply in the confirmation modal with all applied redactions. */
   onRedactionsApplied?: (redactions: Redaction[]) => void;
+  /** Unique identifier for this viewer instance, allowing other viewers to target it by name. */
+  id?: string;
+  /**
+   * Target viewer instance, ref, getter, or instance ID to open cross-document links in.
+   * When a link annotation pointing to another PDF is clicked, the document will automatically
+   * be loaded and navigated in this target viewer instance.
+   */
+  targetViewer?:
+    | WebViewerInstance
+    | React.RefObject<WebViewerInstance | null>
+    | (() => WebViewerInstance | null)
+    | string;
+  /**
+   * Optional custom resolver for cross-document links.
+   * Allows transforming relative filenames, document IDs, or URNs into full fetchable document URLs or target pages.
+   */
+  resolveLinkUrl?: (
+    linkUrl: string,
+    context: { sourceViewer: WebViewerInstance; annotation?: Annotation }
+  ) => string | { url: string; page?: number } | Promise<string | { url: string; page?: number } | null> | null;
+  /**
+   * Fires when a link annotation or embedded PDF link is clicked.
+   * Call `event.preventDefault()` to suppress default behavior.
+   */
+  onLinkClick?: (event: LinkClickEvent) => boolean | void | Promise<void>;
+}
+
+/** Details provided when a link annotation or embedded PDF link is clicked. */
+export interface LinkClickEvent {
+  /** The raw link URL or target string. */
+  url: string;
+  /** Target document URL if the link points to a document (clean without page hash). */
+  docUrl?: string;
+  /** Target page number (1-based), if specified in the link. */
+  pageNumber?: number;
+  /** True if the link points to an internal page in the current document. */
+  isInternalPage: boolean;
+  /** The annotation object if clicked from a link annotation. */
+  annotation?: Annotation;
+  /** Original mouse event if triggered by user interaction. */
+  originalEvent?: React.MouseEvent;
+  /** Calling this prevents default behavior (e.g. scrolling current document, auto-forwarding to targetViewer, or opening window.open). */
+  preventDefault: () => void;
+  /** Whether preventDefault() was called. */
+  readonly defaultPrevented: boolean;
 }
 
 /** Events available through `instance.on(type, listener)`. */
@@ -181,6 +228,7 @@ export interface ViewerEventMap {
   toolChanged: { tool: string | null };
   textSelected: { text: string };
   textCopied: { text: string };
+  linkClicked: LinkClickEvent;
   destroy: Record<string, never>;
 }
 

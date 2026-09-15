@@ -518,4 +518,110 @@ describe('WebViewerInstance', () => {
     inst.fitToPage();
     expect(onFitPage).toHaveBeenCalledTimes(4);
   });
+
+  describe('cross-instance targetViewer and registry', () => {
+    it('registers and unregisters instances by ID', () => {
+      WebViewerInstance.clearInstances();
+      const bus1 = new ViewerBus();
+      const inst1 = new WebViewerInstance(bus1, undefined, 'viewer-primary');
+
+      expect(WebViewerInstance.getInstance('viewer-primary')).toBe(inst1);
+      expect(inst1.id).toBe('viewer-primary');
+
+      const bus2 = new ViewerBus();
+      const inst2 = new WebViewerInstance(bus2);
+      WebViewerInstance.registerInstance('viewer-secondary', inst2);
+      expect(WebViewerInstance.getInstance('viewer-secondary')).toBe(inst2);
+
+      WebViewerInstance.unregisterInstance('viewer-secondary');
+      expect(WebViewerInstance.getInstance('viewer-secondary')).toBeUndefined();
+
+      inst1.destroy();
+      expect(WebViewerInstance.getInstance('viewer-primary')).toBeUndefined();
+    });
+
+    it('resolves targetViewer via instance, ref, getter, and ID string', () => {
+      WebViewerInstance.clearInstances();
+      const busA = new ViewerBus();
+      const instA = new WebViewerInstance(busA, undefined, 'viewer-a');
+      const busB = new ViewerBus();
+      const instB = new WebViewerInstance(busB, undefined, 'viewer-b');
+
+      // Direct instance
+      instA.setTargetViewer(instB);
+      expect(instA.getTargetViewer()).toBe(instB);
+
+      // String ID
+      instA.setTargetViewer('viewer-b');
+      expect(instA.getTargetViewer()).toBe(instB);
+
+      // React-style Ref
+      const ref = { current: instB };
+      instA.setTargetViewer(ref);
+      expect(instA.getTargetViewer()).toBe(instB);
+
+      // Getter function
+      instA.setTargetViewer(() => instB);
+      expect(instA.getTargetViewer()).toBe(instB);
+
+      // Null / none
+      instA.setTargetViewer(null);
+      expect(instA.getTargetViewer()).toBeNull();
+    });
+
+    it('subscribes to linkClicked event and emits action-open-link', () => {
+      const bus = new ViewerBus();
+      const inst = new WebViewerInstance(bus);
+      const onLinkClick = vi.fn();
+      const onActionOpenLink = vi.fn();
+
+      const off = inst.on('linkClicked', onLinkClick);
+      bus.on('action-open-link', onActionOpenLink);
+
+      const mockEvent = {
+        url: 'supporting.pdf#page=3',
+        docUrl: 'supporting.pdf',
+        pageNumber: 3,
+        isInternalPage: false,
+        preventDefault: vi.fn(),
+        defaultPrevented: false
+      };
+
+      bus.emit('linkClicked', mockEvent);
+      expect(onLinkClick).toHaveBeenCalledWith(mockEvent);
+
+      inst.openLink('supporting.pdf#page=2');
+      expect(onActionOpenLink).toHaveBeenCalledWith({ url: 'supporting.pdf#page=2' });
+
+      off();
+    });
+
+    it('loadOrNavigate jumps immediately if the document is already loaded', async () => {
+      const bus = new ViewerBus();
+      const inst = new WebViewerInstance(bus);
+      const goToPageMock = vi.fn();
+      const loadDocumentMock = vi.fn();
+
+      inst._bind({
+        getAnnotations: () => [],
+        getRedactions: () => [],
+        getWatermark: () => undefined,
+        getPdfDocument: () => null,
+        getDocumentUrl: () => 'exhibit-a.pdf',
+        getFileName: () => 'exhibit-a.pdf',
+        getCurrentUserName: () => undefined,
+        getCurrentPage: () => 1,
+        getPageCount: () => 5,
+        loadDocument: loadDocumentMock,
+        goToPage: goToPageMock,
+        getTransientHighlights: () => [],
+        setTransientHighlights: () => {}
+      }, null);
+
+      // Calling loadOrNavigate for the same document already loaded
+      await inst.loadOrNavigate('exhibit-a.pdf', { page: 4 });
+      expect(loadDocumentMock).not.toHaveBeenCalled();
+      expect(goToPageMock).toHaveBeenCalledWith(4, { smooth: true });
+    });
+  });
 });

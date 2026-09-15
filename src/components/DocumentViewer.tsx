@@ -15,7 +15,8 @@ import PageRenderer from './PageRenderer';
 import type { Annotation } from '../annotations/types';
 import { newAnnotationId } from '../annotations/ids';
 import type { AnnotationManager } from '../annotations/AnnotationManager';
-import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths, TransientHighlight, ToolMode, InitialScale } from '../core/types';
+import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths, TransientHighlight, ToolMode, InitialScale, LinkClickEvent, WebViewerInstance } from '../core/types';
+import { parseLinkTarget } from '../utils/linkUtils';
 import TextSelectionTooltip from './TextSelectionTooltip';
 import { findRegexRedactions } from '../utils/findRegexRedactions';
 import { convertToUnrotated, convertToRotated, normalizeRotation } from '../utils/rotationUtils';
@@ -88,6 +89,17 @@ interface DocumentViewerProps {
   initialScale?: InitialScale;
   initialWidthRatio?: number;
   responsive?: boolean;
+  instance?: WebViewerInstance;
+  targetViewer?:
+    | WebViewerInstance
+    | React.RefObject<WebViewerInstance | null>
+    | (() => WebViewerInstance | null)
+    | string;
+  resolveLinkUrl?: (
+    linkUrl: string,
+    context: { sourceViewer: WebViewerInstance; annotation?: Annotation }
+  ) => string | { url: string; page?: number } | Promise<string | { url: string; page?: number } | null> | null;
+  onLinkClick?: (event: LinkClickEvent) => boolean | void | Promise<void>;
 }
 
 export default function DocumentViewer({
@@ -102,6 +114,10 @@ export default function DocumentViewer({
   initialScale,
   initialWidthRatio,
   responsive = true,
+  instance,
+  targetViewer,
+  resolveLinkUrl,
+  onLinkClick,
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bus = useViewerBus();
@@ -1449,6 +1465,107 @@ export default function DocumentViewer({
     }
   };
 
+  const handleLinkClick = useCallback(async (linkUrl: string, ann?: Annotation, e?: React.MouseEvent) => {
+    const parsed = parseLinkTarget(linkUrl);
+    let defaultPrevented = false;
+
+    const linkEvent: LinkClickEvent = {
+      url: linkUrl,
+      docUrl: parsed.docUrl,
+      pageNumber: parsed.pageNumber,
+      isInternalPage: parsed.isInternalPage,
+      annotation: ann,
+      originalEvent: e,
+      preventDefault: () => {
+        defaultPrevented = true;
+      },
+      get defaultPrevented() {
+        return defaultPrevented;
+      }
+    };
+
+    bus.emit('linkClicked', linkEvent);
+    try {
+      const res = await onLinkClick?.(linkEvent);
+      if (res === false) {
+        defaultPrevented = true;
+      }
+    } catch (err) {
+      console.error('[teamsync-pdf-viewer] onLinkClick error:', err);
+    }
+
+    if (defaultPrevented) return;
+
+    // Internal page jump
+    if (parsed.isInternalPage && parsed.pageNumber) {
+      scrollToPage(parsed.pageNumber);
+      return;
+    }
+
+    // Resolve link if custom resolver provided
+    let effectiveDocUrl = parsed.docUrl;
+    let effectivePage = parsed.pageNumber;
+
+    if (resolveLinkUrl && instance) {
+      try {
+        const resolved = await resolveLinkUrl(linkUrl, {
+          sourceViewer: instance,
+          annotation: ann
+        });
+        if (resolved) {
+          if (typeof resolved === 'string') {
+            const reParsed = parseLinkTarget(resolved);
+            effectiveDocUrl = reParsed.docUrl ?? resolved;
+            effectivePage = reParsed.pageNumber ?? effectivePage;
+          } else {
+            effectiveDocUrl = resolved.url;
+            effectivePage = resolved.page ?? effectivePage;
+          }
+        }
+      } catch (err) {
+        console.error('[teamsync-pdf-viewer] resolveLinkUrl error:', err);
+      }
+    }
+
+    // Check targetViewer
+    const target = instance?.getTargetViewer();
+    if (target && effectiveDocUrl) {
+      try {
+        await target.loadOrNavigate(effectiveDocUrl, { page: effectivePage });
+        return;
+      } catch (err) {
+        console.error('[teamsync-pdf-viewer] Failed to open document in targetViewer:', err);
+      }
+    }
+
+    // Fallback: window.open
+    let linkHref = effectiveDocUrl || linkUrl;
+    if (effectivePage && !linkHref.includes('#page=')) {
+      linkHref = `${linkHref}#page=${effectivePage}`;
+    }
+    if (!/^https?:\/\//i.test(linkHref) && !linkHref.startsWith('/') && !linkHref.startsWith('./') && !linkHref.startsWith('#')) {
+      linkHref = 'https://' + linkHref;
+    }
+    const win = window.open(linkHref, '_blank', 'noopener,noreferrer');
+    if (win) win.opener = null;
+  }, [bus, instance, onLinkClick, resolveLinkUrl, scrollToPage]);
+
+  // Sync targetViewer with WebViewerInstance
+  useEffect(() => {
+    if (instance && targetViewer !== undefined) {
+      instance.setTargetViewer(targetViewer);
+    }
+  }, [instance, targetViewer]);
+
+  // Listen for programmatic link openings
+  useEffect(() => {
+    return bus.on('action-open-link', (data: any) => {
+      if (data?.url) {
+        handleLinkClick(data.url);
+      }
+    });
+  }, [bus, handleLinkClick]);
+
   const handleEraserClick = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (activeTool === 'eraser') {
@@ -1461,17 +1578,7 @@ export default function DocumentViewer({
     } else if (activeTool === null || activeTool === 'pan' || activeTool === 'select') {
       const ann = annotations.find(a => a.id === id);
       if (ann && ann.linkUrl && activeTab === 'View') {
-        if (ann.linkUrl.startsWith('#page=')) {
-          const targetPage = parseInt(ann.linkUrl.split('=')[1]);
-          scrollToPage(targetPage);
-        } else {
-          let linkHref = ann.linkUrl;
-          if (!/^https?:\/\//i.test(linkHref)) {
-            linkHref = 'https://' + linkHref;
-          }
-          const win = window.open(linkHref, '_blank', 'noopener,noreferrer');
-          if (win) win.opener = null;
-        }
+        handleLinkClick(ann.linkUrl, ann, e);
         return;
       } else if (ann && (ann.type === 'note' || ann.type === 'callout')) {
         if (permissions?.canEditAnnotations === false || !annotationManager.canEdit(ann)) {
@@ -2012,6 +2119,7 @@ export default function DocumentViewer({
                         onDiscardRedaction={handleDiscardRedaction}
                         onRendered={handlePageRendered}
                         hideAnnotationsUntilPageRendered={hideAnnotationsUntilPageRendered}
+                        onLinkClick={handleLinkClick}
                       />
                       {compareState.isActive && compareState.mode === 'overlay' && pdfDocB && (
                         <div style={{
@@ -2359,6 +2467,7 @@ export default function DocumentViewer({
           isSearching={isSearching}
           searchProgress={searchProgress}
           onResultClick={handleSearchResultClick}
+          onLinkClick={handleLinkClick}
         />
       )}
     </div>

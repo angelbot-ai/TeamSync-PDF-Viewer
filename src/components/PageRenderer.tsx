@@ -51,6 +51,7 @@ interface PageRendererProps {
   onRendered?: (pageNum: number) => void;
   /** Whether to hide annotations and transient highlights until the page canvas has finished rendering. Default: true. */
   hideAnnotationsUntilPageRendered?: boolean;
+  onLinkClick?: (url: string, annotation?: Annotation, e?: React.MouseEvent) => void;
 }
 
 function PageRendererComponent({
@@ -60,7 +61,7 @@ function PageRendererComponent({
   onMouseDown, onMouseMove, onMouseUp, onAnnotationClick, onAnnotationDoubleClick, onStartResize, onStartMove,
   onAnnotationMouseEnter, onClearSelection,
   watermark, watermarkText, redactions, onDiscardRedaction, onRendered,
-  hideAnnotationsUntilPageRendered = true
+  hideAnnotationsUntilPageRendered = true, onLinkClick
 }: PageRendererProps) {
   const onRenderedRef = useRef(onRendered);
   useEffect(() => {
@@ -372,6 +373,44 @@ function PageRendererComponent({
       isCancelled = true;
     };
   }, [textContent, pdfDoc, pageNum, rotation, redactions]);
+
+  // Load Native PDF Link Annotations
+  const [nativeLinks, setNativeLinks] = useState<Array<{ id: string; rect: number[]; url: string }>>([]);
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchNativeLinks = async () => {
+      try {
+        const page = await pdfDoc.getPage(pageNum);
+        const annotations = await page.getAnnotations({ intent: 'display' });
+        if (isCancelled) return;
+        const links: Array<{ id: string; rect: number[]; url: string }> = [];
+        for (let i = 0; i < annotations.length; i++) {
+          const a = annotations[i];
+          if (a.subtype === 'Link' && Array.isArray(a.rect) && a.rect.length === 4) {
+            let targetUrl = a.url;
+            if (!targetUrl && a.dest) {
+              targetUrl = typeof a.dest === 'string' ? `#${a.dest}` : Array.isArray(a.dest) && typeof a.dest[0] === 'number' ? `#page=${a.dest[0] + 1}` : undefined;
+            }
+            if (targetUrl) {
+              links.push({
+                id: a.id || `native-link-${pageNum}-${i}`,
+                rect: a.rect,
+                url: targetUrl
+              });
+            }
+          }
+        }
+        if (!isCancelled) setNativeLinks(links);
+      } catch {
+        // Ignore native annotation retrieval failures
+      }
+    };
+    fetchNativeLinks();
+    return () => {
+      isCancelled = true;
+    };
+  }, [pdfDoc, pageNum]);
+
   const pageAnnotations = annotations.filter(a => a.pageIndex === pageNum);
   const isOverlayVisible = !hideAnnotationsUntilPageRendered || isCanvasRendered;
 
@@ -529,6 +568,32 @@ function PageRendererComponent({
             onMouseLeave={(e) => onMouseUp(e, pageNum)}
           >
             <g transform={rotTransform}>
+              {/* Native PDF links */}
+              {nativeLinks.map((nl) => {
+                const x = nl.rect[0];
+                const y = basePageHeight - nl.rect[3];
+                const w = Math.max(0, nl.rect[2] - nl.rect[0]);
+                const h = Math.max(0, nl.rect[3] - nl.rect[1]);
+                return (
+                  <rect
+                    key={nl.id}
+                    x={x}
+                    y={y}
+                    width={w}
+                    height={h}
+                    fill="transparent"
+                    style={{ pointerEvents: 'all', cursor: 'pointer' }}
+                    onClick={(e) => {
+                      if (activeTab === 'View') {
+                        e.stopPropagation();
+                        onLinkClick?.(nl.url, undefined, e);
+                      }
+                    }}
+                  >
+                    <title>{nl.url}</title>
+                  </rect>
+                );
+              })}
               <React.Fragment>
                 {pageAnnotations.map(ann => {
           const fillColor = (ann.type === 'text' || ann.type === 'callout') ? 'transparent' : `${ann.color}${Math.floor(ann.opacity * 255).toString(16).padStart(2, '0')}`;

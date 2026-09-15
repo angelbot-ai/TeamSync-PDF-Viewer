@@ -27,7 +27,10 @@ export type {
   ViewerEventMap,
   ViewerEventType,
   ToolMode,
+  LinkClickEvent,
 } from './core/types';
+export { parseLinkTarget, isDocumentUrl } from './utils/linkUtils';
+export type { ParsedLinkTarget } from './utils/linkUtils';
 export { copyTextToClipboard } from './utils/clipboardUtils';
 export { TextSelectionTooltip } from './components/TextSelectionTooltip';
 export type { Annotation, AnnotationType, AnnotationPoint, AnnotationInput } from './annotations/types';

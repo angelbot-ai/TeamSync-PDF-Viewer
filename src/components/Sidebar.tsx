@@ -20,12 +20,13 @@ interface SidebarProps {
   onResultClick: (result: SearchResult) => void;
   activeTab: 'Comments' | 'Search';
   setActiveTab: (tab: 'Comments' | 'Search') => void;
+  onLinkClick?: (url: string, annotation?: any, e?: React.MouseEvent) => void;
 }
 
 export default function Sidebar({ 
   isOpen, annotations, setAnnotations, selectedAnnotationId, setSelectedAnnotationId,
   onSearch, searchResults, isSearching, searchProgress, onResultClick,
-  activeTab, setActiveTab
+  activeTab, setActiveTab, onLinkClick
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -230,7 +231,18 @@ export default function Sidebar({
             
             <div style={{ fontSize: '14px', color: 'var(--text-color)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
               {comment.type === 'link' ? (
-                <a href={comment.linkUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>
+                <a
+                  href={comment.linkUrl}
+                  onClick={(e) => {
+                    if (onLinkClick && comment.linkUrl) {
+                      e.preventDefault();
+                      onLinkClick(comment.linkUrl, comment, e);
+                    }
+                  }}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--primary)', textDecoration: 'none', cursor: 'pointer' }}
+                >
                   {comment.linkUrl || <span style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>Empty link</span>}
                 </a>
               ) : (

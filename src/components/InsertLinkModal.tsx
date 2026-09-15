@@ -3,6 +3,7 @@
  */
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
+import { parseLinkTarget } from '../utils/linkUtils';
 
 interface InsertLinkModalProps {
   initialUrl?: string;
@@ -14,21 +15,49 @@ interface InsertLinkModalProps {
 
 export default function InsertLinkModal({ initialUrl = '', initialText = '', showTextInput = false, onClose, onSave }: InsertLinkModalProps) {
   const isInitialPage = initialUrl.startsWith('#page=');
-  const [activeTab, setActiveTab] = useState<'url' | 'page'>(isInitialPage ? 'page' : 'url');
-  const [url, setUrl] = useState(isInitialPage ? '' : initialUrl);
+  const parsedInitial = parseLinkTarget(initialUrl);
+  const isInitialDoc = !isInitialPage && Boolean(parsedInitial.docUrl && !parsedInitial.isExternalWeb);
+
+  const initialTab: 'url' | 'page' | 'document' = isInitialPage
+    ? 'page'
+    : isInitialDoc
+    ? 'document'
+    : 'url';
+
+  const [activeTab, setActiveTab] = useState<'url' | 'page' | 'document'>(initialTab);
+  const [url, setUrl] = useState(isInitialPage || isInitialDoc ? '' : initialUrl);
   const [page, setPage] = useState(isInitialPage ? initialUrl.replace('#page=', '') : '1');
+  const [docUrl, setDocUrl] = useState(isInitialDoc ? parsedInitial.docUrl || '' : '');
+  const [docPage, setDocPage] = useState(isInitialDoc && parsedInitial.pageNumber ? String(parsedInitial.pageNumber) : '');
   const [text, setText] = useState(initialText);
 
-  const isSaveDisabled = activeTab === 'url' ? !url.trim() : !page.trim();
+  const isSaveDisabled =
+    activeTab === 'url' ? !url.trim() :
+    activeTab === 'page' ? !page.trim() :
+    !docUrl.trim();
 
   const handleSave = () => {
     if (isSaveDisabled) return;
-    const finalUrl = activeTab === 'page' ? `#page=${page}` : url;
+    let finalUrl = '';
+    if (activeTab === 'page') {
+      finalUrl = `#page=${page}`;
+    } else if (activeTab === 'document') {
+      finalUrl = docPage.trim() ? `${docUrl.trim()}#page=${docPage.trim()}` : docUrl.trim();
+    } else {
+      finalUrl = url.trim();
+    }
+
     if (showTextInput) {
       onSave(finalUrl, text.trim() || finalUrl);
     } else {
       onSave(finalUrl);
     }
+  };
+
+  const getPlaceholderText = () => {
+    if (activeTab === 'url') return url || 'Link text...';
+    if (activeTab === 'page') return `Page ${page}`;
+    return docUrl ? `${docUrl}${docPage ? ` (Page ${docPage})` : ''}` : 'Document link text...';
   };
 
   return (
@@ -41,7 +70,7 @@ export default function InsertLinkModal({ initialUrl = '', initialText = '', sho
         backgroundColor: '#fff',
         color: '#333',
         borderRadius: '8px',
-        width: '400px',
+        width: '420px',
         boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
         fontFamily: 'sans-serif',
         overflow: 'hidden',
@@ -53,7 +82,7 @@ export default function InsertLinkModal({ initialUrl = '', initialText = '', sho
           padding: '16px', borderBottom: '1px solid #e5e7eb', 
           display: 'flex', alignItems: 'center', justifyContent: 'space-between'
         }}>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Insert Link or Page</h2>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Insert Link, Page, or Document</h2>
           <button 
             onClick={onClose}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}
@@ -69,20 +98,25 @@ export default function InsertLinkModal({ initialUrl = '', initialText = '', sho
             <div 
               onClick={() => setActiveTab('url')}
               style={{ flex: 1, textAlign: 'center', padding: '8px', backgroundColor: activeTab === 'url' ? '#2b76b9' : '#fff', color: activeTab === 'url' ? '#fff' : '#6b7280', fontWeight: 500, fontSize: '13px', cursor: 'pointer' }}>
-              URL
+              Web URL
             </div>
             <div 
               onClick={() => setActiveTab('page')}
               style={{ flex: 1, textAlign: 'center', padding: '8px', backgroundColor: activeTab === 'page' ? '#2b76b9' : '#fff', color: activeTab === 'page' ? '#fff' : '#6b7280', fontWeight: 500, fontSize: '13px', cursor: 'pointer' }}>
-              Page
+              This Page
+            </div>
+            <div 
+              onClick={() => setActiveTab('document')}
+              style={{ flex: 1.2, textAlign: 'center', padding: '8px', backgroundColor: activeTab === 'document' ? '#2b76b9' : '#fff', color: activeTab === 'document' ? '#fff' : '#6b7280', fontWeight: 500, fontSize: '13px', cursor: 'pointer' }}>
+              Other Doc
             </div>
           </div>
 
-          {/* URL or Page input (mandatory) */}
-          {activeTab === 'url' ? (
+          {/* URL, Page, or Document input */}
+          {activeTab === 'url' && (
             <div style={{ marginBottom: showTextInput ? '16px' : '0' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 600, color: '#374151' }}>
-                Enter URL <span style={{ color: '#ef4444' }}>*</span>
+                Enter Web URL <span style={{ color: '#ef4444' }}>*</span>
               </label>
               <input 
                 type="text" 
@@ -99,10 +133,12 @@ export default function InsertLinkModal({ initialUrl = '', initialText = '', sho
                 autoFocus
               />
             </div>
-          ) : (
+          )}
+
+          {activeTab === 'page' && (
             <div style={{ marginBottom: showTextInput ? '16px' : '0' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 600, color: '#374151' }}>
-                Enter Page Number <span style={{ color: '#ef4444' }}>*</span>
+                Enter Page Number in Current Document <span style={{ color: '#ef4444' }}>*</span>
               </label>
               <input 
                 type="number" 
@@ -122,17 +158,56 @@ export default function InsertLinkModal({ initialUrl = '', initialText = '', sho
             </div>
           )}
 
-          {/* Text to Display (optional, below URL/Page) */}
+          {activeTab === 'document' && (
+            <div style={{ marginBottom: showTextInput ? '16px' : '0' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 600, color: '#374151' }}>
+                Document URL or File Name <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <input 
+                type="text" 
+                value={docUrl}
+                onChange={(e) => setDocUrl(e.target.value)}
+                placeholder="supporting-doc.pdf or https://..."
+                style={{
+                  width: '100%', padding: '10px', boxSizing: 'border-box', marginBottom: '12px',
+                  border: `1px solid ${!docUrl.trim() ? '#fca5a5' : '#d1d5db'}`, borderRadius: '4px', fontSize: '14px'
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSave();
+                }}
+                autoFocus
+              />
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 600, color: '#374151' }}>
+                Target Page <span style={{ color: '#9ca3af', fontWeight: 400, fontSize: '12px' }}>(optional — defaults to page 1)</span>
+              </label>
+              <input 
+                type="number" 
+                value={docPage}
+                min="1"
+                onChange={(e) => setDocPage(e.target.value)}
+                placeholder="1"
+                style={{
+                  width: '100%', padding: '10px', boxSizing: 'border-box',
+                  border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px'
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSave();
+                }}
+              />
+            </div>
+          )}
+
+          {/* Text to Display (optional, below inputs) */}
           {showTextInput && (
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 600, color: '#374151' }}>
-                Text to Display <span style={{ color: '#9ca3af', fontWeight: 400, fontSize: '12px' }}>(optional — defaults to URL/page)</span>
+                Text to Display <span style={{ color: '#9ca3af', fontWeight: 400, fontSize: '12px' }}>(optional — defaults to target)</span>
               </label>
               <input 
                 type="text" 
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder={activeTab === 'url' ? url || 'Link text...' : `Page ${page}`}
+                placeholder={getPlaceholderText()}
                 style={{
                   width: '100%', padding: '10px', boxSizing: 'border-box',
                   border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px'

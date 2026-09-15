@@ -3,6 +3,7 @@
  * WebViewerInstance — the imperative handle returned by `createWebViewer()` and exposed through
  * `<TeamSyncViewer ref>`. Keeps the legacy `UI` / `Core` facade for drop-in compatibility.
  */
+import type React from 'react';
 import type * as pdfjsLib from 'pdfjs-dist';
 import { ViewerBus } from './eventBus';
 import { buildPdfBytes, type ExportOptions } from './export';
@@ -35,19 +36,81 @@ const noBinding = (): never => {
 };
 
 export class WebViewerInstance {
+  private static instances = new Map<string, WebViewerInstance>();
+
+  /** Retrieve a registered WebViewerInstance by its ID. */
+  static getInstance(id: string): WebViewerInstance | undefined {
+    return WebViewerInstance.instances.get(id);
+  }
+
+  /** Register a WebViewerInstance with an ID. */
+  static registerInstance(id: string, instance: WebViewerInstance): void {
+    WebViewerInstance.instances.set(id, instance);
+  }
+
+  /** Unregister an instance by its ID. */
+  static unregisterInstance(id: string): void {
+    WebViewerInstance.instances.delete(id);
+  }
+
+  /** Clear all registered instances (primarily for testing). */
+  static clearInstances(): void {
+    WebViewerInstance.instances.clear();
+  }
+
   readonly bus: ViewerBus;
   /** Annotation list, history, permissions and XFDF import/export. */
   readonly annotationManager: AnnotationManager;
   /** Root element of the viewer once mounted. */
   element: HTMLElement | null = null;
+  /** Unique identifier for this instance. */
+  id?: string;
 
   private binding: ViewerBinding | null = null;
   private unmountRoot: (() => void) | null = null;
   private destroyed = false;
+  private targetViewerTarget:
+    | WebViewerInstance
+    | React.RefObject<WebViewerInstance | null>
+    | (() => WebViewerInstance | null)
+    | string
+    | null = null;
 
-  constructor(bus: ViewerBus, annotationManager: AnnotationManager = new AnnotationManager()) {
+  constructor(bus: ViewerBus, annotationManager: AnnotationManager = new AnnotationManager(), id?: string) {
     this.bus = bus;
     this.annotationManager = annotationManager;
+    if (id) {
+      this.id = id;
+      WebViewerInstance.registerInstance(id, this);
+    }
+  }
+
+  /** Sets the target viewer instance, ref, getter, or ID to receive cross-document links. */
+  setTargetViewer(
+    target:
+      | WebViewerInstance
+      | React.RefObject<WebViewerInstance | null>
+      | (() => WebViewerInstance | null)
+      | string
+      | null
+  ): void {
+    this.targetViewerTarget = target;
+  }
+
+  /** Resolves the target viewer instance if configured. */
+  getTargetViewer(): WebViewerInstance | null {
+    const t = this.targetViewerTarget;
+    if (!t) return null;
+    if (typeof t === 'string') {
+      return WebViewerInstance.getInstance(t) ?? null;
+    }
+    if (typeof t === 'function') {
+      return t();
+    }
+    if (typeof t === 'object' && 'current' in t) {
+      return t.current;
+    }
+    return t;
   }
 
   // ---- lifecycle -------------------------------------------------------------------------
@@ -83,6 +146,9 @@ export class WebViewerInstance {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    if (this.id) {
+      WebViewerInstance.unregisterInstance(this.id);
+    }
     try {
       this.bus.emit('destroy', {});
     } finally {
@@ -111,12 +177,23 @@ export class WebViewerInstance {
   // ---- document --------------------------------------------------------------------------
 
   /** Load (or reload) a document by URL. Resolves when loaded, rejects on load error. */
-  loadDocument(url: string): Promise<{ url: string; numPages: number }> {
+  loadDocument(
+    url: string,
+    options?: { page?: number; initialPage?: number }
+  ): Promise<{ url: string; numPages: number }> {
     const b = this.binding ?? noBinding();
+    const targetPage = options?.page ?? options?.initialPage;
     return new Promise((resolve, reject) => {
       const offLoaded = this.bus.on<ViewerEventMap['documentLoaded']>('documentLoaded', (d) => {
         if (d.url !== url) return;
         cleanup();
+        if (targetPage && targetPage > 0) {
+          setTimeout(() => {
+            try {
+              this.goToPage(targetPage, { smooth: true });
+            } catch {}
+          }, 50);
+        }
         resolve(d);
       });
       const offError = this.bus.on<ViewerEventMap['documentLoadError']>('documentLoadError', (d) => {
@@ -130,6 +207,32 @@ export class WebViewerInstance {
       };
       b.loadDocument(url);
     });
+  }
+
+  /**
+   * Loads a document or navigates to a page within it. If the document is already loaded,
+   * directly navigates to the requested page without reloading.
+   */
+  async loadOrNavigate(
+    url: string,
+    options?: { page?: number; initialPage?: number }
+  ): Promise<{ url: string; numPages: number } | void> {
+    const targetPage = options?.page ?? options?.initialPage;
+    if (this.getDocumentUrl() === url) {
+      if (targetPage && targetPage > 0) {
+        this.goToPage(targetPage, { smooth: true });
+      }
+      return;
+    }
+    return this.loadDocument(url, options);
+  }
+
+  /**
+   * Programmatically trigger link following for a given link URL or target,
+   * routing through targetViewer or opening appropriately.
+   */
+  openLink(linkUrl: string): void {
+    this.bus.emit('action-open-link', { url: linkUrl });
   }
 
   getDocumentUrl(): string | undefined {

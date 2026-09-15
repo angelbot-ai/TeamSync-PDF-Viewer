@@ -2,6 +2,15 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.6.1] — 2026-09-15
+
+### Added
+- **`initialWidthRatio` Option**: Added `initialWidthRatio?: number` (with `widthRatio?: number` as an alias) to `<TeamSyncViewer>` and `WebViewerOptions`, allowing clients to target an exact fraction of the available viewing width on initial load (e.g. `0.7` for 70% width).
+- **Responsive PDF Container Resizing**: Added automatic `ResizeObserver` tracking on the document container to refit the open PDF responsively at 60fps via `requestAnimationFrame` when the viewer page, container, or sidebars resize while in a width-ratio, fit-width, or fit-page mode.
+- **`responsive` Prop**: Added `responsive?: boolean` (defaults to `true`) to `<TeamSyncViewer>` and `WebViewerOptions` for explicit control over auto-refitting on container resize.
+- **Public `calculateFitWidthScale` Utility**: Exported `calculateFitWidthScale(availableWidth, pageWidth, ratio?, minScale?, maxScale?)` from the public package root.
+- **Ratio Support in `fitWidth` & `fitToWidth`**: Updated `instance.UI.fitWidth(ratio?)`, `instance.UI.fitToWidth(ratio?)`, and added direct instance methods `instance.fitWidth(ratio?)`, `instance.fitToWidth(ratio?)`, `instance.fitPage()`, and `instance.fitToPage()`.
+
 ## [1.6.0] — 2026-09-06
 
 ### Added

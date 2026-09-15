@@ -2,6 +2,14 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.7.1] — 2026-09-15
+
+### Fixed
+- **Default Responsive Fit-Width**: Resolved an issue where omitting `initialScale` prevented `ResizeObserver` from auto-refitting the document when the browser window or viewer container resized. Now defaults to `'fit-width'` and `{ type: 'fit-width', ratio: 1.0 }` when no explicit numeric zoom is provided.
+- **Dynamic Horizontal Page Centering**: Added live `containerDimensions` state tracking so that pages automatically re-center horizontally in real-time during window resize and sidebar toggles, eliminating stale pixel offsets and right-edge clipping.
+- **Programmatic Zoom Tracking**: Fixed dangling programmatic scale flag when `newScale === scale` during minor resize steps so manual zoom interactions properly clear auto-fit mode.
+- **Window Resize Event Listener**: Added window `resize` event listener alongside `ResizeObserver` for comprehensive container refitting across all viewport changes.
+
 ## [1.7.0] — 2026-09-15
 
 ### Added

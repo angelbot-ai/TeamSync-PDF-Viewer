@@ -109,6 +109,7 @@ if (rootElement) {
       {
         initialDoc: '/TeamSync.pdf?v=2',
         fileName: 'TeamSync.pdf',
+        initialScale: 'fit-width',
         currentUser: { id: 'demo', name: 'Demo User' },
         watermark: {
           text: 'CONFIDENTIAL',

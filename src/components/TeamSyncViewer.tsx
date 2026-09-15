@@ -376,7 +376,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
       const url = docUrlRef.current ?? '';
       if (!initialFitAppliedRef.current) {
         initialFitAppliedRef.current = true;
-        const fit = latest.current.initialScale;
+        const fit = latest.current.initialScale ?? 'fit-width';
         const widthRatio =
           latest.current.initialWidthRatio ??
           latest.current.widthRatio ??

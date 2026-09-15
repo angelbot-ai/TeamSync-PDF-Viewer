@@ -313,6 +313,17 @@ export default function DocumentViewer({
     [pageDims, fallbackDims.width, fallbackDims.height]
   );
   const [scrollPos, setScrollPos] = useState({ top: 0, left: 0 });
+  const [containerDimensions, setContainerDimensions] = useState<{ width: number; height: number }>({
+    width: 0,
+    height: 0,
+  });
+
+  useEffect(() => {
+    if (containerRef.current) {
+      const c = containerRef.current;
+      setContainerDimensions({ width: c.clientWidth, height: c.clientHeight });
+    }
+  }, []);
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef<{ x: number, y: number, scrollLeft: number, scrollTop: number } | null>(null);
 
@@ -509,7 +520,7 @@ export default function DocumentViewer({
   const activeFitModeRef = useRef<ActiveFitMode>(
     typeof initialWidthRatioValue === 'number'
       ? { type: 'fit-width', ratio: initialWidthRatioValue }
-      : initialScale === 'fit-width'
+      : (initialScale === 'fit-width' || initialScale === undefined)
       ? { type: 'fit-width', ratio: 1.0 }
       : initialScale === 'fit-page'
       ? { type: 'fit-page' }
@@ -518,7 +529,16 @@ export default function DocumentViewer({
 
   useEffect(() => {
     initialFitDoneRef.current = false;
-  }, [pdfDoc]);
+    if (typeof initialWidthRatioValue === 'number') {
+      activeFitModeRef.current = { type: 'fit-width', ratio: initialWidthRatioValue };
+    } else if (initialScale === 'fit-width' || initialScale === undefined) {
+      activeFitModeRef.current = { type: 'fit-width', ratio: 1.0 };
+    } else if (initialScale === 'fit-page') {
+      activeFitModeRef.current = { type: 'fit-page' };
+    } else {
+      activeFitModeRef.current = null;
+    }
+  }, [pdfDoc, initialScale, initialWidthRatioValue]);
 
   // Unified scroll offset maintenance for user-driven scale changes (wheel or toolbar)
   useEffect(() => {
@@ -1193,15 +1213,19 @@ export default function DocumentViewer({
 
       if (availableWidth > 0 && dims.width > 0) {
         const newScale = calculateFitWidthScale(availableWidth, dims.width, effectiveRatio);
-        isProgrammaticScaleRef.current = true;
+        if (newScale !== scale) {
+          isProgrammaticScaleRef.current = true;
+          setScale(newScale);
+        } else {
+          isProgrammaticScaleRef.current = false;
+        }
         if (containerRef.current && (pageNum === 1 || containerRef.current.scrollTop <= 1)) {
           containerRef.current.scrollTop = 0;
           containerRef.current.scrollLeft = 0;
         }
-        setScale(newScale);
       }
     },
-    [dimsFor, pageNum, setScale, initialWidthRatioValue]
+    [dimsFor, pageNum, scale, setScale, initialWidthRatioValue]
   );
 
   // Dynamic Fit to Page calculation
@@ -1215,14 +1239,18 @@ export default function DocumentViewer({
       const scaleX = availableWidth / dims.width;
       const scaleY = availableHeight / dims.height;
       const newScale = clampScale(Math.min(scaleX, scaleY));
-      isProgrammaticScaleRef.current = true;
+      if (newScale !== scale) {
+        isProgrammaticScaleRef.current = true;
+        setScale(newScale);
+      } else {
+        isProgrammaticScaleRef.current = false;
+      }
       if (containerRef.current && (pageNum === 1 || containerRef.current.scrollTop <= 1)) {
         containerRef.current.scrollTop = 0;
         containerRef.current.scrollLeft = 0;
       }
-      setScale(newScale);
     }
-  }, [dimsFor, pageNum, setScale]);
+  }, [dimsFor, pageNum, scale, setScale]);
 
   useBusEvent('action-fit-to-width', (detail) => handleFitToWidth(detail as { ratio?: number } | number | undefined));
   useBusEvent('action-fit-to-page', () => handleFitToPage());
@@ -1237,7 +1265,7 @@ export default function DocumentViewer({
     let prevWidth = container.clientWidth;
     let prevHeight = container.clientHeight;
 
-    const observer = new ResizeObserver(() => {
+    const handleResize = () => {
       const currentWidth = container.clientWidth;
       const currentHeight = container.clientHeight;
 
@@ -1246,6 +1274,8 @@ export default function DocumentViewer({
 
       prevWidth = currentWidth;
       prevHeight = currentHeight;
+
+      setContainerDimensions({ width: currentWidth, height: currentHeight });
 
       if (!activeFitModeRef.current) return;
 
@@ -1258,12 +1288,15 @@ export default function DocumentViewer({
           handleFitToPage();
         }
       });
-    });
+    };
 
+    const observer = new ResizeObserver(handleResize);
     observer.observe(container);
+    window.addEventListener('resize', handleResize);
 
     return () => {
       observer.disconnect();
+      window.removeEventListener('resize', handleResize);
       if (rafId) cancelAnimationFrame(rafId);
     };
   }, [responsive, handleFitToWidth, handleFitToPage]);
@@ -2062,7 +2095,8 @@ export default function DocumentViewer({
 
                 return row.map((p, pIdx) => {
                   let pLeft: number | undefined = undefined;
-                  const cW = containerRef.current?.clientWidth || 0;
+                  const cW = containerDimensions.width || containerRef.current?.clientWidth || 0;
+                  const cH = containerDimensions.height || containerRef.current?.clientHeight || 0;
                   const pageDim = dimsFor(p);
                   const firstWidth = dimsFor(row[0]).width * scale;
                   const thisWidth = pageDim.width * scale;
@@ -2083,8 +2117,8 @@ export default function DocumentViewer({
                         pdfDoc={pdfDoc!}
                         scale={scale}
                         rotation={rotation}
-                        containerWidth={containerRef.current?.clientWidth || 0}
-                        containerHeight={containerRef.current?.clientHeight || 0}
+                        containerWidth={cW}
+                        containerHeight={cH}
                         scrollTop={scrollPos.top}
                         scrollLeft={scrollPos.left}
                         pageTop={rTop}
@@ -2139,8 +2173,8 @@ export default function DocumentViewer({
                             pdfDoc={pdfDocB}
                             scale={scale}
                             rotation={rotation}
-                            containerWidth={containerRef.current?.clientWidth || 0}
-                            containerHeight={containerRef.current?.clientHeight || 0}
+                            containerWidth={cW}
+                            containerHeight={cH}
                             scrollTop={scrollPos.top}
                             scrollLeft={scrollPos.left}
                             pageTop={0}

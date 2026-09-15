@@ -126,5 +126,78 @@ describe('responsive fit and initial width-ratio calculations', () => {
       currentScale = calculateFitWidthScale(available, pageWidth, activeFitMode.ratio);
       expect(currentScale).toBe(1.12); // 800 * 0.7 = 560 / 500 = 1.12
     });
+
+    it('defaults to responsive fit-width (1.0 ratio) when initialScale is undefined', () => {
+      // Replicates the default `<TeamSyncViewer />` behavior without initialScale prop
+      const initialScale: undefined = undefined;
+      const initialWidthRatio: undefined = undefined;
+
+      const activeFitMode =
+        typeof initialWidthRatio === 'number'
+          ? { type: 'fit-width' as const, ratio: initialWidthRatio }
+          : (initialScale === 'fit-width' || initialScale === undefined)
+          ? { type: 'fit-width' as const, ratio: 1.0 }
+          : null;
+
+      expect(activeFitMode).toEqual({ type: 'fit-width', ratio: 1.0 });
+
+      let currentScale = 1.0;
+      const pageWidth = 612; // US Letter page width (like TeamSync.pdf)
+      const padding = 48;
+
+      let clientWidth = 959; // Screenshot width
+      const mockContainer = {
+        get clientWidth() { return clientWidth; },
+        get clientHeight() { return 1024; },
+      } as HTMLElement;
+
+      const observer = new (globalThis as any).ResizeObserver(() => {
+        if (!activeFitMode) return;
+        const available = mockContainer.clientWidth - padding;
+        currentScale = calculateFitWidthScale(available, pageWidth, activeFitMode.ratio);
+      });
+      observer.observe(mockContainer);
+
+      // Trigger resize callback at 959px
+      resizeCallback!([{ target: mockContainer }]);
+      // 959 - 48 = 911px available; 911 / 612 = 1.4885 -> 1.49
+      expect(currentScale).toBe(1.49);
+      // Page width at scale 1.49 is ~911.88px, fitting inside 959px with padding
+      expect(pageWidth * currentScale).toBeLessThanOrEqual(mockContainer.clientWidth);
+
+      // Narrow window to 600px
+      clientWidth = 600;
+      resizeCallback!([{ target: mockContainer }]);
+      // 600 - 48 = 552px available; 552 / 612 = 0.9019 -> 0.90
+      expect(currentScale).toBe(0.9);
+      expect(pageWidth * currentScale).toBeLessThanOrEqual(mockContainer.clientWidth);
+    });
+
+    it('recalculates horizontal page centering (pLeft) dynamically on container resize', () => {
+      const pageWidth = 612;
+      const scale = 1.0;
+      const thisWidth = pageWidth * scale; // 612px
+
+      // Window was initially wide (1526px)
+      let clientWidth = 1526;
+      let pLeft = Math.max(0, clientWidth / 2 - thisWidth / 2);
+      // 1526 / 2 - 612 / 2 = 763 - 306 = 457px
+      expect(pLeft).toBe(457);
+
+      // Window narrowed to 959px (user drag resize)
+      clientWidth = 959;
+      pLeft = Math.max(0, clientWidth / 2 - thisWidth / 2);
+      // 959 / 2 - 612 / 2 = 479.5 - 306 = 173.5px
+      expect(pLeft).toBe(173.5);
+      // Verify the page doesn't overflow right edge:
+      // pLeft (173.5) + thisWidth (612) = 785.5 <= 959 (no clipping!)
+      expect(pLeft + thisWidth).toBeLessThanOrEqual(clientWidth);
+
+      // When window narrows further to 500px (< thisWidth):
+      clientWidth = 500;
+      pLeft = Math.max(0, clientWidth / 2 - thisWidth / 2);
+      // 500 / 2 - 306 = -56 -> Math.max(0, -56) = 0
+      expect(pLeft).toBe(0);
+    });
   });
 });

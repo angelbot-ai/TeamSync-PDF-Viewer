@@ -203,3 +203,11 @@ export function getOfficeDocumentInfo(target: unknown): OfficeDocumentInfo | nul
     mimeType,
   };
 }
+
+export const isOfficeDocumentUrl = isOfficeDocument;
+export const isOfficeFile = isOfficeDocument;
+export const detectOfficeType = getOfficeFileType;
+export function isOfficeExtension(ext: string): boolean {
+  return getOfficeFileType(`file.${ext.replace(/^\./, '')}`) !== null;
+}
+export const SUPPORTED_OFFICE_EXTENSIONS = ['docx', 'doc', 'pptx', 'ppt', 'xlsx', 'xls'] as const;

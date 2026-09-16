@@ -68,3 +68,14 @@ export interface OfficeDocumentInfo {
   originalUrl?: string;
   mimeType: string;
 }
+
+/**
+ * Alias for OfficeConverterConfig for ergonomic naming.
+ */
+export type OfficeConversionConfig = OfficeConverterConfig;
+
+/**
+ * Alias for OfficeDocumentInfo / options.
+ */
+export type OfficeDocumentOptions = OfficeDocumentInfo;
+

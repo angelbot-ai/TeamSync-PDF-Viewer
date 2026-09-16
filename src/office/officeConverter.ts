@@ -288,3 +288,39 @@ export async function convertOfficeDocument(
     fromCache: false,
   };
 }
+
+/**
+ * Convenience helper to convert a remote Office document URL.
+ */
+export async function convertOfficeUrl(
+  url: string,
+  config: OfficeConverterConfig,
+  fileName?: string
+): Promise<ConvertOfficeDocumentResult> {
+  return convertOfficeDocument(url, config, fileName);
+}
+
+/**
+ * Convenience helper to convert a local Office File or Blob.
+ */
+export async function convertOfficeFile(
+  file: File | Blob,
+  config: OfficeConverterConfig,
+  fileName?: string
+): Promise<ConvertOfficeDocumentResult> {
+  return convertOfficeDocument(file, config, fileName);
+}
+
+/**
+ * Unified Office converter service object.
+ */
+export const officeConverter = {
+  convert: convertOfficeDocument,
+  convertDocument: convertOfficeDocument,
+  convertUrl: convertOfficeUrl,
+  convertFile: convertOfficeFile,
+  getCached: getCachedOfficePdf,
+  setCached: setCachedOfficePdf,
+  clearCache: clearOfficeCache,
+};
+

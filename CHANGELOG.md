@@ -2,6 +2,31 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.8.0] — 2026-09-17
+
+### Added
+- **Native Microsoft Office Document Viewing**:
+  - View Microsoft Word (`.docx`, `.doc`), Excel (`.xlsx`, `.xls`), and PowerPoint (`.pptx`, `.ppt`) documents natively inside `<TeamSyncViewer>`.
+  - Transparent document type detection via magic byte signatures and file extension inspection (`officeDetector.ts`).
+  - Animated conversion loading overlay (`OfficeLoadingOverlay.tsx`) with real-time status indication.
+  - Local drag-and-drop and toolbar file picker conversion fallback.
+- **Enterprise Hybrid Office Architecture**:
+  - **Edge CDN Pre-Conversion & Caching**: Fast 200–400ms cached vector PDF delivery via `/api/convert?file=...` with zero server CPU load on repeat views.
+  - **Client-Side On-The-Fly Fallback**: Multipart form upload proxy for local user file drops and selection via `POST /api/convert`.
+  - **Zero Leaked Secrets**: Gotenberg credentials injected server-side; client bundles never expose backend credentials.
+- **Host SDK Office Module**:
+  - Exported `useOfficeDocument` React hook for host applications to manage loading, pre-conversion, and error states before mounting the viewer.
+  - Exported `preloadOfficeDocument(fileOrUrl, config, fileName)` async helper for routers, loaders, and prefetching.
+  - Exported `officeConverter` client service supporting remote URL conversion (`convertOfficeUrl`) and multipart file uploads (`convertOfficeFile`).
+  - Added dedicated `./office` subpath export in `package.json` alongside root exports.
+  - Exported office detection utilities: `isOfficeDocumentUrl`, `isOfficeFile`, `detectOfficeType`, `isOfficeExtension`, `SUPPORTED_OFFICE_EXTENSIONS`.
+  - Exported TypeScript types: `OfficeConversionConfig`, `OfficeConversionState`, `OfficeFileType`, `OfficeDocumentOptions`, `UseOfficeDocumentResult`.
+- **Top-Level SDK Version Export & About Modal Synchronization**:
+  - Exported `VERSION` constant from `teamsync-pdf-viewer` public API.
+  - Automated build-time version synchronization script (`scripts/sync-version.mjs`) ensuring parity across package and git tags.
+  - Dynamic About modal reflecting the active release tag with a direct link to GitHub release notes.
+  - Edge release endpoint (`/api/version`) caching GitHub release metadata at the CDN edge.
+
 ## [1.7.1] — 2026-09-15
 
 ### Fixed

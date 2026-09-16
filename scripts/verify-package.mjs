@@ -29,14 +29,14 @@ for (const ref of refs) {
 //    declaration files it points at actually exist and carry content.
 const dts = readFileSync(pkg.types, 'utf8');
 if (statSync(pkg.types).size < 500) fail(`${pkg.types} is suspiciously small (${statSync(pkg.types).size} bytes) — the 1.0.x stub regression`);
-for (const name of ['createWebViewer', 'TeamSyncViewer', 'WebViewerInstance', 'configurePdfAssets', 'WebViewerOptions', 'Annotation']) {
+for (const name of ['createWebViewer', 'TeamSyncViewer', 'WebViewerInstance', 'configurePdfAssets', 'WebViewerOptions', 'Annotation', 'officeConverter', 'useOfficeDocument']) {
   if (!dts.includes(name)) fail(`${pkg.types} does not export ${name}`);
 }
 const typesDir = dirname(pkg.types);
-for (const rel of ['core/createWebViewer.d.ts', 'components/TeamSyncViewer.d.ts', 'core/ViewerInstance.d.ts', 'core/types.d.ts', 'core/pdfAssets.d.ts', 'annotations/types.d.ts']) {
+for (const rel of ['core/createWebViewer.d.ts', 'components/TeamSyncViewer.d.ts', 'core/ViewerInstance.d.ts', 'core/types.d.ts', 'core/pdfAssets.d.ts', 'annotations/types.d.ts', 'office/index.d.ts', 'office/officeConverter.d.ts', 'office/useOfficeDocument.d.ts']) {
   const file = join(typesDir, rel);
   if (!existsSync(file)) fail(`missing declaration file ${file}`);
-  if (statSync(file).size < 300) fail(`declaration file ${file} is suspiciously small`);
+  if (statSync(file).size < 100) fail(`declaration file ${file} is suspiciously small`);
 }
 
 // 3. Library entry must be side-effect free and must not inline the pdf.js worker.

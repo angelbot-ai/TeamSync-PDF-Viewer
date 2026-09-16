@@ -12,13 +12,24 @@ const pkg = JSON.parse(fs.readFileSync(packageJsonUrl, 'utf8'));
 
 let releaseVersion = pkg.version;
 
+function isGreater(v1, v2) {
+  const p1 = v1.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const p2 = v2.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    if ((p1[i] || 0) > (p2[i] || 0)) return true;
+    if ((p1[i] || 0) < (p2[i] || 0)) return false;
+  }
+  return false;
+}
+
 try {
   const gitTag = execSync('git describe --tags --abbrev=0', { stdio: ['ignore', 'pipe', 'ignore'] })
     .toString()
     .trim();
   if (gitTag && gitTag.startsWith('v')) {
     const tagNum = gitTag.slice(1);
-    if (tagNum) {
+    // If package.json was bumped higher than the latest git tag, keep package.json version
+    if (tagNum && !isGreater(pkg.version, tagNum)) {
       releaseVersion = tagNum;
     }
   }

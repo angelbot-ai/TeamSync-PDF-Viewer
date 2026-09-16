@@ -10,7 +10,7 @@ export const config = {
   runtime: 'edge',
 };
 
-const FALLBACK_VERSION = '1.7.1';
+const FALLBACK_VERSION = '1.8.0';
 const REPO_OWNER = 'angelbot-ai';
 const REPO_NAME = 'TeamSync-PDF-Viewer';
 

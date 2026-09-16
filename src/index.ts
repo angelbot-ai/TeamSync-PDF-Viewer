@@ -62,5 +62,35 @@ export { estimatePageDimensions, computeRowLayout, DEFAULT_FALLBACK_DIMS, hasDim
 export type { PageDimension, RowLayout } from './utils/layoutUtils';
 export * from './plugins/types';
 export * from './office';
+export {
+  officeConverter,
+  convertOfficeDocument,
+  convertOfficeFile,
+  convertOfficeUrl,
+} from './office/officeConverter';
+export {
+  useOfficeDocument,
+  preloadOfficeDocument,
+} from './office/useOfficeDocument';
+export type {
+  UseOfficeDocumentOptions,
+  UseOfficeDocumentResult,
+} from './office/useOfficeDocument';
+export {
+  isOfficeDocumentUrl,
+  isOfficeFile,
+  detectOfficeType,
+  isOfficeExtension,
+  SUPPORTED_OFFICE_EXTENSIONS,
+} from './office/officeDetector';
+export { OfficeLoadingOverlay } from './office/OfficeLoadingOverlay';
+export type {
+  OfficeConverterConfig,
+  OfficeConversionConfig,
+  OfficeConversionState,
+  OfficeFileType,
+  OfficeDocumentOptions,
+  OfficeDocumentInfo,
+} from './office/types';
 export { VERSION } from './version';
 

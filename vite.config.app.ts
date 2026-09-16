@@ -10,6 +10,16 @@ import { execSync } from 'node:child_process';
 
 const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
+function isGreater(v1: string, v2: string): boolean {
+  const p1 = v1.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const p2 = v2.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    if ((p1[i] || 0) > (p2[i] || 0)) return true;
+    if ((p1[i] || 0) < (p2[i] || 0)) return false;
+  }
+  return false;
+}
+
 function getReleaseVersion(): string {
   try {
     const gitTag = execSync('git describe --tags --abbrev=0', { stdio: ['ignore', 'pipe', 'ignore'] })
@@ -17,7 +27,7 @@ function getReleaseVersion(): string {
       .trim();
     if (gitTag && gitTag.startsWith('v')) {
       const tagNum = gitTag.slice(1);
-      if (tagNum) return tagNum;
+      if (tagNum && !isGreater(pkg.version, tagNum)) return tagNum;
     }
   } catch {}
   return pkg.version;

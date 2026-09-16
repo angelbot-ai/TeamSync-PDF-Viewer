@@ -8,6 +8,25 @@ import dts from 'vite-plugin-dts';
 import { resolve } from 'node:path';
 
 import postcss from 'postcss';
+import fs from 'node:fs';
+import { execSync } from 'node:child_process';
+
+const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+
+function getReleaseVersion(): string {
+  try {
+    const gitTag = execSync('git describe --tags --abbrev=0', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+    if (gitTag && gitTag.startsWith('v')) {
+      const tagNum = gitTag.slice(1);
+      if (tagNum) return tagNum;
+    }
+  } catch {}
+  return pkg.version;
+}
+
+const APP_VERSION = getReleaseVersion();
 
 /**
  * Prefix every selector in the EMITTED stylesheet with `.tspdf-root`.
@@ -70,6 +89,9 @@ function scopeEmittedCss() {
 }
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
   // The demo assets under public/ belong to the application build only.
   publicDir: false,
   server: {

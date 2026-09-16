@@ -51,8 +51,11 @@
   },
   "scripts": {
     "dev": "vite",
+    "sync:version": "node scripts/sync-version.mjs",
     "typecheck": "tsc -b",
+    "prebuild": "node scripts/sync-version.mjs",
     "build": "tsc -b && vite build",
+    "prebuild:app": "node scripts/sync-version.mjs",
     "build:app": "tsc -b && vite build --config vite.config.app.ts",
     "lint": "oxlint",
     "test": "vitest run",

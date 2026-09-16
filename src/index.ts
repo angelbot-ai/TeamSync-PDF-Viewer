@@ -62,4 +62,5 @@ export { estimatePageDimensions, computeRowLayout, DEFAULT_FALLBACK_DIMS, hasDim
 export type { PageDimension, RowLayout } from './utils/layoutUtils';
 export * from './plugins/types';
 export * from './office';
+export { VERSION } from './version';
 

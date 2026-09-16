@@ -2,13 +2,53 @@
  * © 2026 AngelBot Ai Pvt Ltd. All rights reserved.
  */
 import React from 'react';
-import { X, Info } from 'lucide-react';
+import { X, Info, ExternalLink } from 'lucide-react';
+import { VERSION } from '../version';
 
 interface AboutModalProps {
   onClose: () => void;
 }
 
 export default function AboutModal({ onClose }: AboutModalProps) {
+  const [version, setVersion] = React.useState<string>(VERSION);
+  const [releaseUrl, setReleaseUrl] = React.useState<string>(
+    `https://github.com/angelbot-ai/TeamSync-PDF-Viewer/releases/tag/v${VERSION}`
+  );
+
+  React.useEffect(() => {
+    let isMounted = true;
+    fetch('/api/version')
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .catch(() => {
+        return fetch('https://api.github.com/repos/angelbot-ai/TeamSync-PDF-Viewer/releases/latest')
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+          })
+          .then((data) => ({
+            version: data.tag_name ? data.tag_name.replace(/^v/, '') : VERSION,
+            releaseUrl: data.html_url || `https://github.com/angelbot-ai/TeamSync-PDF-Viewer/releases/tag/v${VERSION}`,
+          }));
+      })
+      .then((data) => {
+        if (isMounted && data && data.version) {
+          setVersion(data.version);
+          if (data.releaseUrl) {
+            setReleaseUrl(data.releaseUrl);
+          }
+        }
+      })
+      .catch(() => {
+        // Fallback to static VERSION
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -50,7 +90,31 @@ export default function AboutModal({ onClose }: AboutModalProps) {
         <div style={{ padding: '24px', overflowY: 'auto' }}>
           <div style={{ textAlign: 'center', marginBottom: '24px' }}>
             <h1 style={{ margin: '0 0 8px 0', fontSize: '24px', color: '#1f2937' }}>TeamSync PDF Viewer</h1>
-            <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>Version 1.0.0</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', margin: '4px 0 0 0' }}>
+              <span style={{ fontSize: '14px', color: '#6b7280' }}>Version {version}</span>
+              <a
+                href={releaseUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: '12px',
+                  color: '#2b76b9',
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  backgroundColor: '#eff6ff',
+                  border: '1px solid #dbeafe',
+                  fontWeight: 500,
+                }}
+                title="View release notes on GitHub"
+              >
+                <span>Release Notes</span>
+                <ExternalLink size={12} />
+              </a>
+            </div>
             <p style={{ margin: '8px 0 0 0', fontSize: '14px', color: '#4b5563' }}>© 2026 AngelBot Ai Pvt Ltd. All rights reserved.</p>
             <a href="https://www.teamsync.com" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', margin: '8px 0 0 0', fontSize: '14px', color: '#2b76b9', textDecoration: 'none', fontWeight: 500 }}>www.teamsync.com</a>
             <p style={{ margin: '8px 0 0 0', fontSize: '13px', color: '#4b5563', fontStyle: 'italic' }}>

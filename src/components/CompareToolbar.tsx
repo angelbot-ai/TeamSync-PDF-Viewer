@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Layers, Columns, FileText, SlidersHorizontal, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Layers, Columns, FileText, SlidersHorizontal, ChevronLeft, ChevronRight, X, MinusCircle, PlusCircle, Maximize2, Hand, MousePointer } from 'lucide-react';
 import type { CompareMode, CompareState } from '../types/compare';
 
 interface CompareToolbarProps {
@@ -14,6 +14,13 @@ interface CompareToolbarProps {
   onPrevDiff: () => void;
   onNextDiff: () => void;
   onExit: () => void;
+  is90Fit?: boolean;
+  zoomMultiplier?: number;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onFit90?: () => void;
+  activeTool?: string | null;
+  onSetTool?: (tool: string | null) => void;
 }
 
 export default function CompareToolbar({
@@ -23,7 +30,14 @@ export default function CompareToolbar({
   onToggleCurtain,
   onPrevDiff,
   onNextDiff,
-  onExit
+  onExit,
+  is90Fit = true,
+  zoomMultiplier = 1.0,
+  onZoomIn,
+  onZoomOut,
+  onFit90,
+  activeTool,
+  onSetTool
 }: CompareToolbarProps) {
   const { mode, colorA, colorB, showCurtain, diffItems, currentDiffIndex } = compareState;
 
@@ -38,7 +52,10 @@ export default function CompareToolbar({
       borderBottom: '1px solid #334155',
       height: '42px',
       fontSize: '13px',
-      zIndex: 100
+      zIndex: 100,
+      overflowX: 'auto',
+      whiteSpace: 'nowrap',
+      flexShrink: 0
     }}>
       {/* Compare Status Badge */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#38bdf8' }}>
@@ -138,6 +155,95 @@ export default function CompareToolbar({
             <SlidersHorizontal size={14} />
             <span>Curtain Slider</span>
           </button>
+        </>
+      )}
+
+      {/* Zoom & View Controls */}
+      {onZoomIn && onZoomOut && (
+        <>
+          <div style={{ width: '1px', height: '20px', backgroundColor: '#475569' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#0f172a', borderRadius: '6px', padding: '2px' }}>
+            <button
+              onClick={onZoomOut}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '26px', height: '26px', borderRadius: '4px', border: 'none',
+                backgroundColor: 'transparent', color: '#cbd5e1', cursor: 'pointer'
+              }}
+              title="Zoom Out (-)"
+              aria-label="Zoom Out"
+            >
+              <MinusCircle size={15} />
+            </button>
+
+            <button
+              onClick={onFit90}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '2px 8px', height: '26px', borderRadius: '4px', border: 'none',
+                backgroundColor: (is90Fit && zoomMultiplier === 1.0) ? '#0284c7' : 'transparent',
+                color: (is90Fit && zoomMultiplier === 1.0) ? '#ffffff' : '#cbd5e1',
+                cursor: 'pointer', fontSize: '11px', fontWeight: 600
+              }}
+              title="Reset both documents to 90% window fit"
+              aria-label="Fit to 90% Window"
+            >
+              <Maximize2 size={13} />
+              <span>{is90Fit && zoomMultiplier === 1.0 ? '90% Fit' : `${Math.round(zoomMultiplier * 100)}%`}</span>
+            </button>
+
+            <button
+              onClick={onZoomIn}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '26px', height: '26px', borderRadius: '4px', border: 'none',
+                backgroundColor: 'transparent', color: '#cbd5e1', cursor: 'pointer'
+              }}
+              title="Zoom In (+)"
+              aria-label="Zoom In"
+            >
+              <PlusCircle size={15} />
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Navigation & Pan Controls */}
+      {onSetTool && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', backgroundColor: '#0f172a', borderRadius: '6px', padding: '2px' }}>
+            <button
+              onClick={() => onSetTool('select')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '4px 8px', height: '26px', borderRadius: '4px', border: 'none',
+                backgroundColor: activeTool !== 'pan' ? '#0284c7' : 'transparent',
+                color: activeTool !== 'pan' ? '#ffffff' : '#94a3b8',
+                cursor: 'pointer', fontSize: '11px', fontWeight: 500
+              }}
+              title="Select / Pointer Tool"
+              aria-label="Select Tool"
+            >
+              <MousePointer size={13} />
+              <span>Select</span>
+            </button>
+
+            <button
+              onClick={() => onSetTool(activeTool === 'pan' ? 'select' : 'pan')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '4px 8px', height: '26px', borderRadius: '4px', border: 'none',
+                backgroundColor: activeTool === 'pan' ? '#0284c7' : 'transparent',
+                color: activeTool === 'pan' ? '#ffffff' : '#94a3b8',
+                cursor: 'pointer', fontSize: '11px', fontWeight: 500
+              }}
+              title="Pan Tool (Hand) — Click and drag to pan both documents"
+              aria-label="Pan Tool"
+            >
+              <Hand size={13} />
+              <span>Pan</span>
+            </button>
+          </div>
         </>
       )}
 

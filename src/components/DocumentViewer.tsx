@@ -131,7 +131,7 @@ export default function DocumentViewer({
   const [pdfDocB, setPdfDocB] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [compareState, setCompareState] = useState<CompareState>({
     isActive: false,
-    mode: 'overlay',
+    mode: 'side-by-side',
     colorA: '#e11d48',
     colorB: '#2563eb',
     opacityA: 0.8,
@@ -144,6 +144,21 @@ export default function DocumentViewer({
   });
   const [textDiffs, setTextDiffs] = useState<TextDiffSegment[]>([]);
   const [isDiffSidebarOpen, setIsDiffSidebarOpen] = useState(false);
+  const [isCompare90Fit, setIsCompare90Fit] = useState<boolean>(true);
+  const [compareZoomMultiplier, setCompareZoomMultiplier] = useState<number>(1.0);
+
+  const handleCompareZoomIn = useCallback(() => {
+    setCompareZoomMultiplier(prev => Math.min(Number((prev + 0.15).toFixed(2)), 3.0));
+  }, []);
+
+  const handleCompareZoomOut = useCallback(() => {
+    setCompareZoomMultiplier(prev => Math.max(Number((prev - 0.15).toFixed(2)), 0.3));
+  }, []);
+
+  const handleCompareFit90 = useCallback(() => {
+    setIsCompare90Fit(true);
+    setCompareZoomMultiplier(1.0);
+  }, []);
 
   // Latest-callback refs: parents may pass inline functions without re-triggering effects.
   const callbacksRef = useRef({ onRedactionsChange, onRedactionsApplied, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageRendered, onPageChange });
@@ -240,17 +255,18 @@ export default function DocumentViewer({
   useEffect(() => {
     const handleStartCompare = (data: any) => {
       const { docA, docB, options } = data || {};
-      if (options) {
-        setCompareState(prev => ({
-          ...prev,
-          mode: options.mode || prev.mode,
-          colorA: options.colorA || prev.colorA,
-          colorB: options.colorB || prev.colorB,
-          opacityA: options.opacityA || prev.opacityA,
-          opacityB: options.opacityB || prev.opacityB,
-          blendMode: options.blendMode || prev.blendMode
-        }));
-      }
+      setIsCompare90Fit(true);
+      setCompareZoomMultiplier(1.0);
+      setCompareState(prev => ({
+        ...prev,
+        isActive: true,
+        mode: options?.mode || 'side-by-side',
+        colorA: options?.colorA || prev.colorA,
+        colorB: options?.colorB || prev.colorB,
+        opacityA: options?.opacityA || prev.opacityA,
+        opacityB: options?.opacityB || prev.opacityB,
+        blendMode: options?.blendMode || prev.blendMode
+      }));
       if (docA) {
         loadDocA(docA);
       }
@@ -263,6 +279,8 @@ export default function DocumentViewer({
       setCompareState(prev => ({ ...prev, isActive: false }));
       setPdfDocB(null);
       setTextDiffs([]);
+      setIsCompare90Fit(true);
+      setCompareZoomMultiplier(1.0);
     };
 
     const handleSetCompareMode = (mode: string) => {
@@ -1678,6 +1696,13 @@ export default function DocumentViewer({
       {compareState.isActive && (
         <CompareToolbar
           compareState={compareState}
+          is90Fit={isCompare90Fit}
+          zoomMultiplier={compareZoomMultiplier}
+          onZoomIn={handleCompareZoomIn}
+          onZoomOut={handleCompareZoomOut}
+          onFit90={handleCompareFit90}
+          activeTool={activeTool}
+          onSetTool={(tool) => setActiveTool(tool as any)}
           onSetMode={(mode) => setCompareState(prev => ({ ...prev, mode }))}
           onSetColors={(colorA, colorB) => setCompareState(prev => ({ ...prev, colorA, colorB }))}
           onToggleCurtain={() => setCompareState(prev => ({ ...prev, showCurtain: !prev.showCurtain }))}
@@ -1695,6 +1720,8 @@ export default function DocumentViewer({
             setCompareState(prev => ({ ...prev, isActive: false }));
             setPdfDocB(null);
             setTextDiffs([]);
+            setIsCompare90Fit(true);
+            setCompareZoomMultiplier(1.0);
           }}
         />
       )}
@@ -1951,6 +1978,10 @@ export default function DocumentViewer({
               const idx = compareState.diffItems.findIndex(d => d.id === id);
               if (idx !== -1) handleSelectDiff(idx);
             }}
+            is90Fit={isCompare90Fit}
+            zoomMultiplier={compareZoomMultiplier}
+            onZoomIn={handleCompareZoomIn}
+            onZoomOut={handleCompareZoomOut}
           />
         ) : (
           <>

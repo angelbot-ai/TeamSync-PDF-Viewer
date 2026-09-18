@@ -16,10 +16,8 @@ export const config = {
 const RENDER_CONVERTER_URL =
   'https://teamsync-office-converter-1.onrender.com/forms/libreoffice/convert';
 
-// Converter credentials come ONLY from the deployment environment. A committed fallback
-// value used to live here; it is a secret for a live service and never belongs in source.
-// The env var is `Basic <base64(user:pass)>` (or any other Authorization value Gotenberg accepts).
-const BASIC_AUTH = (globalThis as any).process?.env?.GOTENBERG_BASIC_AUTH as string | undefined;
+// Converter credentials come from the deployment environment (GOTENBERG_BASIC_AUTH)
+// or optionally the Authorization header from the caller.
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -37,8 +35,14 @@ export default async function handler(request: Request): Promise<Response> {
     });
   }
 
+  // Converter credentials from environment or client authorization header
+  const basicAuth =
+    ((globalThis as any).process?.env?.GOTENBERG_BASIC_AUTH as string | undefined) ||
+    request.headers.get('Authorization') ||
+    undefined;
+
   // Fail closed: without a converter credential this function must not forward anything.
-  if (!BASIC_AUTH) {
+  if (!basicAuth) {
     return new Response(
       JSON.stringify({ error: 'Converter not configured', message: 'GOTENBERG_BASIC_AUTH is not set' }),
       { status: 503, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } }
@@ -99,7 +103,7 @@ export default async function handler(request: Request): Promise<Response> {
       const convResp = await fetch(RENDER_CONVERTER_URL, {
         method: 'POST',
         headers: {
-          Authorization: BASIC_AUTH as string,
+          Authorization: basicAuth,
         },
         body: formData,
       });
@@ -194,7 +198,7 @@ export default async function handler(request: Request): Promise<Response> {
       const convResp = await fetch(RENDER_CONVERTER_URL, {
         method: 'POST',
         headers: {
-          Authorization: BASIC_AUTH as string,
+          Authorization: basicAuth,
         },
         body: outFormData,
       });

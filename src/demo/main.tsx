@@ -117,11 +117,20 @@ if (rootElement) {
 
     window.parent.postMessage('VIEWER_READY', '*');
   } else {
-    // Standalone dev / demo mode (supports ?file= or ?doc= query param)
+    // Standalone dev / demo mode (supports ?file=, ?doc=, or ?compare=true query param)
     const searchParams = new URLSearchParams(window.location.search);
     const customDoc = searchParams.get('file') || searchParams.get('doc');
+    const isCompareInitial = searchParams.get('compare') === 'true';
 
-    const SAMPLES = [
+    const SAMPLES: Array<{
+      id: string;
+      name: string;
+      badge: string;
+      color: string;
+      url?: string;
+      fileName?: string;
+      isCompare?: boolean;
+    }> = [
       {
         id: 'pdf',
         name: 'TeamSync Manual',
@@ -154,9 +163,16 @@ if (rootElement) {
         url: '/api/convert?file=/sample_presentation.pptx',
         fileName: 'sample_presentation.pptx',
       },
+      {
+        id: 'compare',
+        name: 'Compare PDF',
+        badge: 'DIFF',
+        color: '#0284c7',
+        isCompare: true,
+      },
     ];
 
-    let currentDocUrl = customDoc || SAMPLES[0].url;
+    let currentDocUrl = customDoc || SAMPLES[0].url!;
     let viewerInstance: WebViewerInstance | null = null;
 
     // Create layout wrapper
@@ -184,24 +200,58 @@ if (rootElement) {
 
     SAMPLES.forEach((sample) => {
       const btn = document.createElement('button');
-      const isInitial = sample.url === currentDocUrl || (customDoc && customDoc.includes(sample.id));
+      const isInitial = sample.isCompare
+        ? isCompareInitial
+        : !isCompareInitial && (sample.url === currentDocUrl || (customDoc && customDoc.includes(sample.id)));
       btn.className = `teamsync-demo-btn ${isInitial ? 'active' : ''}`;
       btn.innerHTML = `<span class="teamsync-doc-badge" style="background: ${sample.color}">${sample.badge}</span> <span>${sample.name}</span>`;
 
       btn.onclick = () => {
         buttons.forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
-        currentDocUrl = sample.url;
-        if (viewerInstance) {
-          viewerInstance.loadDocument(sample.url);
+
+        if (sample.isCompare) {
+          window.dispatchEvent(
+            new CustomEvent('action-start-compare', {
+              detail: {
+                docA: '/sample_v1.pdf',
+                docB: '/sample_v2.pdf',
+                options: { mode: 'side-by-side' },
+              },
+            })
+          );
+          const u = new URL(window.location.href);
+          u.searchParams.set('compare', 'true');
+          u.searchParams.delete('file');
+          u.searchParams.delete('doc');
+          window.history.replaceState(null, '', u.toString());
+        } else {
+          window.dispatchEvent(new CustomEvent('action-stop-compare'));
+          if (sample.url) {
+            currentDocUrl = sample.url;
+            if (viewerInstance) {
+              viewerInstance.loadDocument(sample.url);
+            }
+            const u = new URL(window.location.href);
+            u.searchParams.set('file', sample.url);
+            u.searchParams.delete('compare');
+            window.history.replaceState(null, '', u.toString());
+          }
         }
-        const u = new URL(window.location.href);
-        u.searchParams.set('file', sample.url);
-        window.history.replaceState(null, '', u.toString());
       };
 
       buttons.push(btn);
       buttonsContainer.appendChild(btn);
+    });
+
+    window.addEventListener('action-stop-compare', () => {
+      const compareIdx = SAMPLES.findIndex((s) => s.isCompare);
+      if (compareIdx !== -1) buttons[compareIdx]?.classList.remove('active');
+      const curIdx = SAMPLES.findIndex((s) => s.url === currentDocUrl);
+      if (curIdx !== -1) buttons[curIdx]?.classList.add('active');
+      const u = new URL(window.location.href);
+      u.searchParams.delete('compare');
+      window.history.replaceState(null, '', u.toString());
     });
 
     bar.appendChild(buttonsContainer);
@@ -234,6 +284,19 @@ if (rootElement) {
       viewerEl
     ).then((instance) => {
       viewerInstance = instance;
+      if (isCompareInitial) {
+        setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent('action-start-compare', {
+              detail: {
+                docA: '/sample_v1.pdf',
+                docB: '/sample_v2.pdf',
+                options: { mode: 'side-by-side' },
+              },
+            })
+          );
+        }, 300);
+      }
     });
   }
 }

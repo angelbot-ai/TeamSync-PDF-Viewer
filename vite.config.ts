@@ -121,6 +121,7 @@ export default defineConfig({
       // emitted a 10-byte `export {}` stub. Use the app config and drop the demo entry.
       tsconfigPath: './tsconfig.app.json',
       entryRoot: 'src',
+      outDir: 'dist/src',
       include: ['src'],
       exclude: ['src/demo/**', 'src/**/*.test.*'],
       // Declarations are emitted per-file under dist/src/ (package.json `types` points at

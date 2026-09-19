@@ -2,6 +2,31 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.8.1] — 2026-09-19
+
+### Added
+- **Document Comparison UX Enhancements**:
+  - **Interactive Draggable Separator**: Introduced a movable vertical split separator between documents with real-time percentage split adjustment and smooth cursor dragging.
+  - **Optimal 90% Container Auto-Fit**: Implemented proportional viewport scaling that fits comparison documents to 90% of their split container window width, ensuring readable document layout with comfortable breathing room around margins.
+  - **Split Viewport Zoom & Pan Controls**: Added visible zoom in/out, fit to width, fit to page, and pan tool controls directly inside the comparison toolbar header for each split pane.
+  - **Comparison Demo Shortcut**: Added a one-click "Compare PDF" sample button to the demo top bar and URL query parameter support (`?compare=true`) for direct deep linking.
+- **Dynamic Office Conversion Credentials**:
+  - Client and server support for per-request converter credentials via `x-gotenberg-endpoint` and `x-gotenberg-token` headers, enabling multi-tenant and customer-provided conversion backends.
+
+### Security
+- **SSRF Prevention & Loopback Defense**: Strict validation of remote conversion URLs in `/api/convert`, blocking loopback (`127.0.0.0/8`, `::1`), link-local (`169.254.0.0/16`, `fe80::/10`), private RFC1918 subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), unique local IPv6 (`fc00::/7`), and major cloud provider metadata endpoints (AWS, Azure, GCP, Oracle Cloud).
+- **SSRF Redirect Traversal Defense**: Enforced `{ redirect: 'manual' }` on upstream remote file retrieval in edge functions, terminating HTTP 3xx redirect attempts with HTTP 400 Bad Request to prevent redirect-based SSRF circumvention.
+- **Microservice Boundary Limits**: Enforced strict 100MB download caps, 60s request timeout abort controllers, and validated content types to mitigate denial-of-service and memory exhaustion attacks.
+- **Server Error Sanitization**: Sanitized edge conversion error responses returned to clients, ensuring low-level LibreOffice/Gotenberg stack traces and server-side errors are captured only in internal server logs.
+- **Cross-Window PostMessage Restriction**: Replaced wildcard `*` target origin in iframe communication bridges with caller origin verification or explicit `trustedOrigins` configuration.
+- **Safe Regular Expression & ReDoS Mitigation**: Bounded regex evaluation length and introduced defensive execution caps in document search and redaction utilities to prevent catastrophic regex backtracking.
+- **PDF Link URI Protocol Sanitization**: Added strict protocol validation to embedded PDF links and annotation actions, rejecting malicious URI schemes (`javascript:`, `vbscript:`, `data:`) before execution.
+- **Production Deployment Security Headers**: Added `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy` to production edge deployments in `vercel.json`.
+- **Security Policy**: Added repository `SECURITY.md` establishing supported versions and responsible vulnerability disclosure workflows.
+
+### Fixed
+- **TypeScript Declaration Emission**: Configured `outDir: 'dist/src'` in `vite.config.ts` to ensure clean TypeScript `.d.ts` declaration generation conforming with `publint` and package exports.
+
 ## [1.8.0] — 2026-09-17
 
 ### Added

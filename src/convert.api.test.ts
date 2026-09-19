@@ -123,5 +123,49 @@ describe('api/convert edge function security', () => {
       const json = await response.json();
       expect(json.error).toBe('Payload Too Large');
     });
+
+    it('rejects HTTP redirects (301/302) to prevent second-order SSRF', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: {
+            Location: 'http://169.254.169.254/latest/meta-data/',
+          },
+        })
+      );
+
+      const request = new Request('https://pdfviewer.teamsync.com/api/convert?file=https://cdn.example.com/redirect.docx');
+      const response = await handler(request);
+      expect(response.status).toBe(400);
+
+      const json = await response.json();
+      expect(json.error).toBe('Redirects not permitted');
+      expect(json.message).toContain('HTTP redirect');
+    });
+
+    it('sanitizes upstream converter error messages and prevents path leakage', async () => {
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(
+          new Response(new Uint8Array([1, 2, 3]), {
+            status: 200,
+            headers: { 'Content-Length': '3' },
+          })
+        )
+        .mockResolvedValueOnce(
+          new Response('LibreOffice internal error: /tmp/gotenberg-38491/doc.docx failed', {
+            status: 500,
+            headers: { 'Content-Type': 'text/plain' },
+          })
+        );
+
+      const request = new Request('https://pdfviewer.teamsync.com/api/convert?file=https://cdn.example.com/doc.docx');
+      const response = await handler(request);
+      expect(response.status).toBe(500);
+
+      const json = await response.json();
+      expect(json.error).toBe('Conversion failed');
+      expect(json.message).toBe('The conversion microservice was unable to process the document.');
+      expect(json.details).toBeUndefined();
+    });
   });
 });

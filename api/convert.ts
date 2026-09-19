@@ -171,8 +171,21 @@ export default async function handler(request: Request): Promise<Response> {
 
       const targetUrl = validation.url.toString();
 
-      // Fetch the source office document
-      const fileResp = await fetch(targetUrl);
+      // Fetch the source office document with manual redirect handling to prevent redirect SSRF
+      const fileResp = await fetch(targetUrl, { redirect: 'manual' });
+      if (fileResp.status >= 300 && fileResp.status < 400) {
+        return new Response(
+          JSON.stringify({
+            error: 'Redirects not permitted',
+            message: 'Target URL resulted in an HTTP redirect. Provide the direct document URL for security.',
+          }),
+          {
+            status: 400,
+            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
       if (!fileResp.ok) {
         return new Response(
           JSON.stringify({
@@ -236,11 +249,12 @@ export default async function handler(request: Request): Promise<Response> {
 
       if (!convResp.ok) {
         const errText = await convResp.text();
+        console.error('[convert-edge] GET conversion failed:', convResp.status, errText);
         return new Response(
           JSON.stringify({
             error: 'Conversion failed',
             status: convResp.status,
-            details: errText,
+            message: 'The conversion microservice was unable to process the document.',
           }),
           {
             status: convResp.status,
@@ -359,11 +373,12 @@ export default async function handler(request: Request): Promise<Response> {
 
       if (!convResp.ok) {
         const errDetail = await convResp.text();
+        console.error('[convert-edge] POST conversion failed:', convResp.status, errDetail);
         return new Response(
           JSON.stringify({
             error: 'Conversion service failed',
             status: convResp.status,
-            details: errDetail,
+            message: 'The conversion microservice was unable to process the uploaded file.',
           }),
           {
             status: convResp.status,

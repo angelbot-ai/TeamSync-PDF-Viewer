@@ -16,6 +16,92 @@ export const config = {
 const RENDER_CONVERTER_URL =
   'https://teamsync-office-converter-1.onrender.com/forms/libreoffice/convert';
 
+export const MAX_DOCUMENT_SIZE = 25 * 1024 * 1024; // 25 MB
+
+/**
+ * Validates that a requested file URL is safe to fetch and not attempting
+ * Server-Side Request Forgery (SSRF) against internal, loopback, or metadata services.
+ */
+export function isSafeTargetUrl(
+  rawUrl: string,
+  reqOrigin: string
+): { safe: true; url: URL } | { safe: false; reason: string } {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl, reqOrigin);
+  } catch {
+    return { safe: false, reason: 'Malformed URL' };
+  }
+
+  // Only allow HTTP/HTTPS
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { safe: false, reason: `Disallowed protocol: ${parsed.protocol}` };
+  }
+
+  // Port restrictions: reject internal service ports
+  if (parsed.port && parsed.port !== '80' && parsed.port !== '443') {
+    return { safe: false, reason: `Disallowed port: ${parsed.port}` };
+  }
+
+  const hostname = parsed.hostname.toLowerCase().trim();
+
+  // Disallow loopback
+  if (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === '0.0.0.0' ||
+    hostname === '[::]' ||
+    hostname === '[::1]'
+  ) {
+    return { safe: false, reason: 'Loopback addresses are forbidden' };
+  }
+
+  // Disallow cloud metadata endpoints & link-local
+  if (
+    hostname === '169.254.169.254' ||
+    hostname.startsWith('169.254.') ||
+    hostname === 'metadata.google.internal' ||
+    hostname === 'instance-data'
+  ) {
+    return { safe: false, reason: 'Cloud metadata and link-local addresses are forbidden' };
+  }
+
+  // Disallow private IPv4 subnets (RFC 1918 & reserved)
+  if (
+    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+    /^0\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
+  ) {
+    return { safe: false, reason: 'Private IP subnets are forbidden' };
+  }
+
+  // Disallow IPv6 private / link-local / unique-local
+  if (
+    hostname.startsWith('[fe80:') ||
+    hostname.startsWith('[fc') ||
+    hostname.startsWith('[fd') ||
+    hostname === '[0:0:0:0:0:0:0:1]'
+  ) {
+    return { safe: false, reason: 'Private IPv6 addresses are forbidden' };
+  }
+
+  // Disallow internal domain suffixes
+  if (
+    hostname.endsWith('.internal') ||
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.localhost') ||
+    hostname.endsWith('.corp') ||
+    hostname.endsWith('.lan')
+  ) {
+    return { safe: false, reason: 'Internal domain names are forbidden' };
+  }
+
+  return { safe: true, url: parsed };
+}
+
 // Converter credentials come from the deployment environment (GOTENBERG_BASIC_AUTH)
 // or optionally the Authorization header from the caller.
 
@@ -68,13 +154,22 @@ export default async function handler(request: Request): Promise<Response> {
     }
 
     try {
-      // Resolve target file URL
-      let targetUrl = fileParam;
-      if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
-        const origin = reqUrl.origin;
-        const cleanPath = targetUrl.startsWith('/') ? targetUrl : `/${targetUrl}`;
-        targetUrl = `${origin}${cleanPath}`;
+      // SEC-01: Validate target URL against SSRF and internal network scanning
+      const validation = isSafeTargetUrl(fileParam, reqUrl.origin);
+      if (!validation.safe) {
+        return new Response(
+          JSON.stringify({
+            error: 'Forbidden target URL',
+            message: `Target URL is not permitted: ${validation.reason}`,
+          }),
+          {
+            status: 400,
+            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+          }
+        );
       }
+
+      const targetUrl = validation.url.toString();
 
       // Fetch the source office document
       const fileResp = await fetch(targetUrl);
@@ -92,7 +187,38 @@ export default async function handler(request: Request): Promise<Response> {
         );
       }
 
+      // SEC-02: Check content-length header before buffering
+      const contentLengthHeader = fileResp.headers.get('content-length');
+      if (contentLengthHeader) {
+        const contentLength = parseInt(contentLengthHeader, 10);
+        if (contentLength > MAX_DOCUMENT_SIZE) {
+          return new Response(
+            JSON.stringify({
+              error: 'Payload Too Large',
+              message: `Source document exceeds maximum allowed size of 25MB (${contentLength} bytes)`,
+            }),
+            {
+              status: 413,
+              headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+      }
+
       const fileBlob = await fileResp.blob();
+      if (fileBlob.size > MAX_DOCUMENT_SIZE) {
+        return new Response(
+          JSON.stringify({
+            error: 'Payload Too Large',
+            message: `Source document exceeds maximum allowed size of 25MB (${fileBlob.size} bytes)`,
+          }),
+          {
+            status: 413,
+            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
       const cleanName =
         targetUrl.split('#')[0].split('?')[0].split('/').pop() || 'document.docx';
 
@@ -152,6 +278,21 @@ export default async function handler(request: Request): Promise<Response> {
   // 3. POST: On-the-fly multipart file conversion
   if (request.method === 'POST') {
     try {
+      // SEC-02: Enforce payload size limit prior to parsing form data
+      const reqContentLength = parseInt(request.headers.get('content-length') || '0', 10);
+      if (reqContentLength > MAX_DOCUMENT_SIZE) {
+        return new Response(
+          JSON.stringify({
+            error: 'Payload Too Large',
+            message: `Uploaded payload exceeds maximum allowed size of 25MB (${reqContentLength} bytes)`,
+          }),
+          {
+            status: 413,
+            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
       const incomingFormData = await request.formData();
 
       // Ensure single 'files' entry for Gotenberg
@@ -160,6 +301,19 @@ export default async function handler(request: Request): Promise<Response> {
 
       for (const [key, value] of incomingFormData.entries()) {
         if (value instanceof Blob) {
+          if (value.size > MAX_DOCUMENT_SIZE) {
+            return new Response(
+              JSON.stringify({
+                error: 'Payload Too Large',
+                message: `Uploaded file exceeds maximum allowed size of 25MB (${value.size} bytes)`,
+              }),
+              {
+                status: 413,
+                headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+              }
+            );
+          }
+
           if (!fileFound) {
             let fileName = (value as File).name || 'document.docx';
             if (!fileName.includes('.') || fileName === 'blob' || fileName === 'convert') {

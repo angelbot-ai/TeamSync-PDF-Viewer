@@ -1,0 +1,127 @@
+/**
+ * © 2026 AngelBot Ai Pvt Ltd. All rights reserved.
+ */
+
+import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
+import handler, { isSafeTargetUrl, MAX_DOCUMENT_SIZE } from '../api/convert';
+
+describe('api/convert edge function security', () => {
+  beforeEach(() => {
+    (globalThis as any).process = {
+      env: {
+        GOTENBERG_BASIC_AUTH: 'Basic dGVzdDp0ZXN0',
+      },
+    };
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe('isSafeTargetUrl (SEC-01 SSRF Defenses)', () => {
+    const origin = 'https://pdfviewer.teamsync.com';
+
+    it('permits relative paths resolved against host origin', () => {
+      const res = isSafeTargetUrl('/sample.docx', origin);
+      expect(res.safe).toBe(true);
+      if (res.safe) {
+        expect(res.url.toString()).toBe('https://pdfviewer.teamsync.com/sample.docx');
+      }
+    });
+
+    it('permits valid external public HTTPS URLs', () => {
+      const res = isSafeTargetUrl('https://cdn.example.com/reports/document.docx', origin);
+      expect(res.safe).toBe(true);
+      if (res.safe) {
+        expect(res.url.toString()).toBe('https://cdn.example.com/reports/document.docx');
+      }
+    });
+
+    it('blocks loopback IP addresses and localhost', () => {
+      expect(isSafeTargetUrl('http://127.0.0.1/secret.docx', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://localhost/secret.docx', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://[::1]/secret.docx', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://0.0.0.0/secret.docx', origin).safe).toBe(false);
+    });
+
+    it('blocks cloud metadata endpoints and link-local addresses', () => {
+      expect(isSafeTargetUrl('http://169.254.169.254/latest/meta-data/', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://169.254.1.1/internal.doc', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://metadata.google.internal/computeMetadata/v1/', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://instance-data/latest/meta-data/', origin).safe).toBe(false);
+    });
+
+    it('blocks RFC1918 private IPv4 subnets', () => {
+      expect(isSafeTargetUrl('http://10.0.0.1/finance.xlsx', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://172.16.5.2/confidential.docx', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://172.31.255.255/doc.docx', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://192.168.1.100/admin.pptx', origin).safe).toBe(false);
+    });
+
+    it('blocks non-HTTP/HTTPS protocols', () => {
+      expect(isSafeTargetUrl('file:///etc/passwd', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('ftp://internal.server/doc.docx', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('gopher://internal.server/doc.docx', origin).safe).toBe(false);
+    });
+
+    it('blocks internal ports to avoid port scanning', () => {
+      expect(isSafeTargetUrl('http://example.com:6379/dump.rdb', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://example.com:22/banner', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://example.com:27017/test', origin).safe).toBe(false);
+    });
+  });
+
+  describe('handler integration', () => {
+    it('handles OPTIONS preflight request', async () => {
+      const request = new Request('https://pdfviewer.teamsync.com/api/convert', {
+        method: 'OPTIONS',
+      });
+      const response = await handler(request);
+      expect(response.status).toBe(204);
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    });
+
+    it('rejects SSRF attempts in GET request with 400 Bad Request', async () => {
+      const request = new Request('https://pdfviewer.teamsync.com/api/convert?file=http://169.254.169.254/secret');
+      const response = await handler(request);
+      expect(response.status).toBe(400);
+
+      const json = await response.json();
+      expect(json.error).toBe('Forbidden target URL');
+      expect(json.message).toContain('Cloud metadata and link-local addresses are forbidden');
+    });
+
+    it('rejects POST upload exceeding 25MB with 413 Payload Too Large', async () => {
+      const oversized = MAX_DOCUMENT_SIZE + 1024;
+      const request = new Request('https://pdfviewer.teamsync.com/api/convert', {
+        method: 'POST',
+        headers: {
+          'Content-Length': String(oversized),
+          'Content-Type': 'multipart/form-data; boundary=----WebKitFormBoundary123',
+        },
+      });
+
+      const response = await handler(request);
+      expect(response.status).toBe(413);
+      const json = await response.json();
+      expect(json.error).toBe('Payload Too Large');
+    });
+
+    it('rejects GET file fetch if content-length exceeds 25MB with 413', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(new Uint8Array(100), {
+          status: 200,
+          headers: {
+            'Content-Length': String(MAX_DOCUMENT_SIZE + 1000),
+          },
+        })
+      );
+
+      const request = new Request('https://pdfviewer.teamsync.com/api/convert?file=https://cdn.example.com/big.docx');
+      const response = await handler(request);
+      expect(response.status).toBe(413);
+      const json = await response.json();
+      expect(json.error).toBe('Payload Too Large');
+    });
+  });
+});

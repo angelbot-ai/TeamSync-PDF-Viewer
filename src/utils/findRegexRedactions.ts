@@ -15,6 +15,7 @@ export async function findRegexRedactions(
   const numPages = pdfDoc.numPages;
   // Pre-compile global regex instances once outside the page loop
   const globalRegexes = regexes.map(r => new RegExp(r, r.flags.includes('g') ? r.flags : r.flags + 'g'));
+  const disabledRegexes = new Set<RegExp>();
 
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
     try {
@@ -27,8 +28,22 @@ export async function findRegexRedactions(
 
       // Find matches for each pre-compiled regex
       for (const globalRegex of globalRegexes) {
+        if (disabledRegexes.has(globalRegex)) continue;
+
         globalRegex.lastIndex = 0; // Reset state for global regex reuse
+
+        // SEC-04: Guard against ReDoS catastrophic backtracking by bounding execution duration
+        const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
         const matches = [...fullText.matchAll(globalRegex)];
+        const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startTime;
+
+        if (elapsed > 250) {
+          console.warn(
+            `[teamsync-pdf-viewer] Regex evaluation took ${elapsed.toFixed(1)}ms on page ${pageNum}. Disabling pattern to prevent UI freeze:`,
+            globalRegex.source
+          );
+          disabledRegexes.add(globalRegex);
+        }
 
         for (const match of matches) {
           if (match.index === undefined) continue;
@@ -89,8 +104,8 @@ export async function findRegexRedactions(
       // Memory Management: Clear parsed text structures for this page to prevent >1GB OOM crashes
       page.cleanup();
       
-      // Thread Management: Yield to the main thread every 10 pages so the UI doesn't freeze
-      if (pageNum % 10 === 0) {
+      // Thread Management: Yield to the main thread every 3 pages so the UI remains fluid
+      if (pageNum % 3 === 0) {
         await new Promise(resolve => setTimeout(resolve, 0));
       }
     } catch (e) {

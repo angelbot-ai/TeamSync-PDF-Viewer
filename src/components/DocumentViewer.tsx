@@ -1594,7 +1594,10 @@ export default function DocumentViewer({
     if (effectivePage && !linkHref.includes('#page=')) {
       linkHref = `${linkHref}#page=${effectivePage}`;
     }
-    if (!/^https?:\/\//i.test(linkHref) && !linkHref.startsWith('/') && !linkHref.startsWith('./') && !linkHref.startsWith('#')) {
+    // SEC-05: Normalize protocol-relative URLs (//attacker.com) before checking relative paths
+    if (linkHref.startsWith('//')) {
+      linkHref = 'https:' + linkHref;
+    } else if (!/^https?:\/\//i.test(linkHref) && !linkHref.startsWith('/') && !linkHref.startsWith('./') && !linkHref.startsWith('#')) {
       linkHref = 'https://' + linkHref;
     }
     const win = window.open(linkHref, '_blank', 'noopener,noreferrer');

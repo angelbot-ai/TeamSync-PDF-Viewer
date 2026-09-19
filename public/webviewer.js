@@ -17,16 +17,25 @@ export default function WebViewer(options, viewerElement) {
     iframe.src = `${basePath}/index.html`;
     viewerElement.appendChild(iframe);
 
+    // SEC-03: Determine target origin from iframe URL to avoid wildcard '*' targetOrigin
+    let targetOrigin = '*';
+    try {
+      const parsedUrl = new URL(iframe.src, window.location.href);
+      if (parsedUrl.origin && parsedUrl.origin !== 'null') {
+        targetOrigin = parsedUrl.origin;
+      }
+    } catch {}
+
     // 3. Establish the Mock Legacy Instance API
     const instance = {
       iframeWindow: iframe.contentWindow,
       UI: {
-        setTheme: (theme) => iframe.contentWindow.postMessage({ type: 'UI_SET_THEME', theme }, '*'),
-        openElements: (elements) => iframe.contentWindow.postMessage({ type: 'UI_OPEN_ELEMENTS', elements }, '*'),
-        closeElements: (elements) => iframe.contentWindow.postMessage({ type: 'UI_CLOSE_ELEMENTS', elements }, '*'),
-        enableElements: (elements) => iframe.contentWindow.postMessage({ type: 'UI_OPEN_ELEMENTS', elements }, '*'),
-        disableElements: (elements) => iframe.contentWindow.postMessage({ type: 'UI_CLOSE_ELEMENTS', elements }, '*'),
-        setActiveLeftPanel: (panel) => iframe.contentWindow.postMessage({ type: 'UI_SET_ACTIVE_LEFT_PANEL', panel }, '*')
+        setTheme: (theme) => iframe.contentWindow.postMessage({ type: 'UI_SET_THEME', theme }, targetOrigin),
+        openElements: (elements) => iframe.contentWindow.postMessage({ type: 'UI_OPEN_ELEMENTS', elements }, targetOrigin),
+        closeElements: (elements) => iframe.contentWindow.postMessage({ type: 'UI_CLOSE_ELEMENTS', elements }, targetOrigin),
+        enableElements: (elements) => iframe.contentWindow.postMessage({ type: 'UI_OPEN_ELEMENTS', elements }, targetOrigin),
+        disableElements: (elements) => iframe.contentWindow.postMessage({ type: 'UI_CLOSE_ELEMENTS', elements }, targetOrigin),
+        setActiveLeftPanel: (panel) => iframe.contentWindow.postMessage({ type: 'UI_SET_ACTIVE_LEFT_PANEL', panel }, targetOrigin)
       },
       Core: {
         annotationManager: {
@@ -34,13 +43,14 @@ export default function WebViewer(options, viewerElement) {
             return new Promise((res) => {
               const listener = (event) => {
                 if (event.source !== iframe.contentWindow) return;
+                if (targetOrigin !== '*' && event.origin !== targetOrigin) return;
                 if (event.data.type === 'EXPORT_ANNOTATIONS_RESULT') {
                   window.removeEventListener('message', listener);
                   res(event.data.annotations);
                 }
               };
               window.addEventListener('message', listener);
-              iframe.contentWindow.postMessage({ type: 'CORE_EXPORT_ANNOTATIONS' }, '*');
+              iframe.contentWindow.postMessage({ type: 'CORE_EXPORT_ANNOTATIONS' }, targetOrigin);
             });
           }
         },
@@ -50,13 +60,14 @@ export default function WebViewer(options, viewerElement) {
               return new Promise((res) => {
                 const listener = (event) => {
                   if (event.source !== iframe.contentWindow) return;
+                  if (targetOrigin !== '*' && event.origin !== targetOrigin) return;
                   if (event.data.type === 'GET_FILE_DATA_RESULT') {
                     window.removeEventListener('message', listener);
                     res(event.data.data);
                   }
                 };
                 window.addEventListener('message', listener);
-                iframe.contentWindow.postMessage({ type: 'CORE_GET_FILE_DATA' }, '*');
+                iframe.contentWindow.postMessage({ type: 'CORE_GET_FILE_DATA' }, targetOrigin);
               });
             }
           })
@@ -67,6 +78,7 @@ export default function WebViewer(options, viewerElement) {
     // Wait for the React app inside the iframe to signal it is ready
     const messageListener = (event) => {
       if (event.source !== iframe.contentWindow) return;
+      if (targetOrigin !== '*' && event.origin !== targetOrigin) return;
       
       if (event.data === 'VIEWER_READY') {
         // Prepare options (stringify regexes since they can't be cloned directly via postMessage)
@@ -80,7 +92,7 @@ export default function WebViewer(options, viewerElement) {
         iframe.contentWindow.postMessage({ 
           type: 'INIT', 
           options: serializedOptions 
-        }, '*');
+        }, targetOrigin);
       } else if (event.data === 'VIEWER_INITIALIZED') {
         window.removeEventListener('message', messageListener);
         resolve(instance);

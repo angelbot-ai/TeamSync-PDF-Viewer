@@ -31,6 +31,11 @@ export function isDocumentUrl(url: string): boolean {
   // Direct .pdf extension
   if (cleanPath.endsWith('.pdf')) return true;
 
+  // Protocol-relative URLs (e.g. '//evil.com') are external web links unless explicitly pointing to a PDF
+  if (trimmed.startsWith('//')) {
+    return cleanPath.endsWith('.pdf') || cleanPath.endsWith('/pdf') || /[?&]format=pdf(&|$)/i.test(trimmed);
+  }
+
   // Relative file paths (e.g. 'docs/contract', './exhibits/a.pdf')
   if (!/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
     // If it has no scheme / protocol, it's a relative path / filename
@@ -94,7 +99,7 @@ export function parseLinkTarget(linkUrl: string): ParsedLinkTarget {
   }
 
   const isDoc = isDocumentUrl(docUrl);
-  const isWeb = /^https?:\/\//i.test(docUrl) && !isDoc;
+  const isWeb = (/^https?:\/\//i.test(docUrl) || docUrl.startsWith('//')) && !isDoc;
 
   return {
     rawUrl: raw,

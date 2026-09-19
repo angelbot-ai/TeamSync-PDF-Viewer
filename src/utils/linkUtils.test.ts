@@ -31,10 +31,16 @@ describe('linkUtils', () => {
       expect(isDocumentUrl('https://example.com/api/document?format=pdf')).toBe(true);
     });
 
-    it('returns false for external non-pdf websites', () => {
+    it('returns false for external non-pdf websites and protocol-relative links', () => {
       expect(isDocumentUrl('https://google.com')).toBe(false);
       expect(isDocumentUrl('http://teamsync.link/about')).toBe(false);
+      expect(isDocumentUrl('//evil.com')).toBe(false);
+      expect(isDocumentUrl('//phishing.site/login')).toBe(false);
       expect(isDocumentUrl('')).toBe(false);
+    });
+
+    it('recognizes protocol-relative pdf links as documents', () => {
+      expect(isDocumentUrl('//cdn.example.com/file.pdf')).toBe(true);
     });
   });
 
@@ -111,6 +117,16 @@ describe('linkUtils', () => {
         rawUrl: 'https://google.com',
         isInternalPage: false,
         docUrl: 'https://google.com',
+        pageNumber: undefined,
+        isExternalWeb: true
+      });
+    });
+
+    it('identifies protocol-relative web URLs as external web', () => {
+      expect(parseLinkTarget('//evil.com/phishing')).toEqual({
+        rawUrl: '//evil.com/phishing',
+        isInternalPage: false,
+        docUrl: '//evil.com/phishing',
         pageNumber: undefined,
         isExternalWeb: true
       });

@@ -89,27 +89,69 @@ const rootElement = document.getElementById('root');
 if (rootElement) {
   if (window !== window.parent) {
     // Running inside an iframe (packaged usage via public/webviewer.js)
+    let trustedParentOrigin: string | null = null;
+
+    // SEC-04: Safeguard regex strings against ReDoS before instantiating RegExp
+    const MAX_REGEX_LEN = 250;
+    const NESTED_QUANTIFIER_PATTERN = /\([^\)]*(\+|\*|\{[0-9]+,\})[^\)]*\)\s*(\+|\*|\{[0-9]+,\})/;
+
     window.addEventListener('message', (event) => {
       if (event.data?.type !== 'INIT') return;
       const { options } = event.data;
 
-      const regexRedactions = options.regexRedactions?.map((rStr: string) => {
-        const match = rStr.match(/^\/(.*)\/([a-z]*)$/);
-        if (match) return new RegExp(match[1], match[2] || '');
-        return new RegExp(rStr);
-      });
+      // SEC-03: Validate origin against allowedOrigins if specified, and bind trustedOrigin
+      const senderOrigin = event.origin;
+      const allowedOrigins: string[] | undefined = options?.allowedOrigins;
+      if (allowedOrigins && Array.isArray(allowedOrigins)) {
+        if (!allowedOrigins.includes(senderOrigin) && !allowedOrigins.includes('*')) {
+          console.warn('[teamsync-pdf-viewer] Rejecting INIT from unauthorized origin:', senderOrigin);
+          return;
+        }
+      }
+      trustedParentOrigin = senderOrigin === 'null' ? '*' : senderOrigin;
 
-      mount({ officeConverter: defaultOfficeConverter, ...options, regexRedactions }, rootElement).then((instance) => {
-        window.parent.postMessage('VIEWER_INITIALIZED', '*');
+      const safeRegexRedactions: RegExp[] = [];
+      if (Array.isArray(options?.regexRedactions)) {
+        for (const rStr of options.regexRedactions) {
+          if (typeof rStr !== 'string' || rStr.length > MAX_REGEX_LEN) {
+            console.warn('[teamsync-pdf-viewer] Skipping invalid or excessively long regex pattern');
+            continue;
+          }
+          if (NESTED_QUANTIFIER_PATTERN.test(rStr)) {
+            console.warn('[teamsync-pdf-viewer] Skipping potentially catastrophic backtracking regex pattern:', rStr);
+            continue;
+          }
+          try {
+            const match = rStr.match(/^\/(.*)\/([a-z]*)$/);
+            if (match) {
+              safeRegexRedactions.push(new RegExp(match[1], match[2] || ''));
+            } else {
+              safeRegexRedactions.push(new RegExp(rStr));
+            }
+          } catch (e) {
+            console.warn('[teamsync-pdf-viewer] Failed to compile regex redaction pattern:', rStr, e);
+          }
+        }
+      }
+
+      mount({ officeConverter: defaultOfficeConverter, ...options, regexRedactions: safeRegexRedactions }, rootElement).then((instance) => {
+        const targetOrigin = trustedParentOrigin || '*';
+        window.parent.postMessage('VIEWER_INITIALIZED', targetOrigin);
 
         window.addEventListener('message', async (cmdEvent) => {
+          // SEC-03: Only process commands originating from the verified initializing parent
+          if (trustedParentOrigin && trustedParentOrigin !== '*' && cmdEvent.origin !== trustedParentOrigin) {
+            console.warn('[teamsync-pdf-viewer] Ignoring command from untrusted origin:', cmdEvent.origin);
+            return;
+          }
+
           if (cmdEvent.data?.type === 'CORE_EXPORT_ANNOTATIONS') {
             // The iframe protocol predates XFDF support and expects the JSON annotation list.
             const anns = instance.Core.annotationManager.exportAnnotationsLegacyJson();
-            window.parent.postMessage({ type: 'EXPORT_ANNOTATIONS_RESULT', annotations: JSON.parse(anns) }, '*');
+            window.parent.postMessage({ type: 'EXPORT_ANNOTATIONS_RESULT', annotations: JSON.parse(anns) }, targetOrigin);
           } else if (cmdEvent.data?.type === 'CORE_GET_FILE_DATA') {
             const data = await instance.getFileData();
-            window.parent.postMessage({ type: 'GET_FILE_DATA_RESULT', data }, '*');
+            window.parent.postMessage({ type: 'GET_FILE_DATA_RESULT', data }, targetOrigin);
           }
         });
       });

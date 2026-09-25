@@ -1536,8 +1536,9 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
           <FormSignatureModal
             field={signingField}
             assignee={assignees.find((a) => a.id === signingField.assigneeId)}
+            actualUser={formManager.getActualUser()}
             currentValue={values[signingField.name]}
-            defaultSignerName={formManager.getAssignee(currentAssigneeId || undefined)?.name || ''}
+            defaultSignerName={formManager.getEffectiveSignerName() || ''}
             onSave={(val) => {
               formManager.setValue(signingField.name, val);
               setSigningField(null);

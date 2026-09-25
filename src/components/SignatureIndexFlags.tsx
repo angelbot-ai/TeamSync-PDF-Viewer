@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import type { FormManager } from '../forms/FormManager';
 import type { FormField, FormDataRecord, FormAssignee, FormSignatureValue, FormFeatureOptions } from '../forms/types';
+import type { ViewerUser } from '../core/types';
 
 interface SignatureIndexFlagsProps {
   formManager: FormManager;
@@ -36,6 +37,7 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
     formManager.getActiveFieldId()
   );
   const [options, setOptions] = useState<FormFeatureOptions>(() => formManager.getOptions());
+  const [actualUser, setActualUser] = useState<ViewerUser | null>(() => formManager.getActualUser());
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
   const [hoveredFieldId, setHoveredFieldId] = useState<string | null>(null);
 
@@ -50,6 +52,7 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
     );
     const unsubActive = formManager.onActiveFieldChange((act) => setActiveFieldId(act));
     const unsubOptions = formManager.onOptionsChange((opts) => setOptions(opts));
+    const unsubActualUser = formManager.onActualUserChange((u) => setActualUser(u));
 
     return () => {
       unsubFields();
@@ -58,6 +61,7 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
       unsubCurrent();
       unsubActive();
       unsubOptions();
+      unsubActualUser();
     };
   }, [formManager]);
 
@@ -242,7 +246,11 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <PenTool size={13} style={{ color: currentAssignee?.color || '#f59e0b' }} />
           <span>
-            {currentAssignee ? `${currentAssignee.name}'s Signatures` : 'Signature Flags'}
+            {actualUser?.name
+              ? `${actualUser.name}${currentAssignee ? ` (${currentAssignee.name})` : ''}`
+              : currentAssignee
+              ? `${currentAssignee.name}'s Signatures`
+              : 'Signature Flags'}
           </span>
           <span
             style={{

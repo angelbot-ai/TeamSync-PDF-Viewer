@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import type { FormManager } from '../forms/FormManager';
 import type { FormField, FormDataRecord, FormAssignee, FormFeatureOptions } from '../forms/types';
+import type { ViewerUser } from '../core/types';
 
 interface FormFillerActionsProps {
   formManager: FormManager;
@@ -33,6 +34,7 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
   const [currentAssigneeId, setCurrentAssigneeId] = useState<string | null>(() => formManager.getCurrentAssignee());
   const [activeFieldId, setActiveFieldId] = useState<string | null>(() => formManager.getActiveFieldId());
   const [options, setOptions] = useState<FormFeatureOptions>(() => formManager.getOptions());
+  const [actualUser, setActualUser] = useState<ViewerUser | null>(() => formManager.getActualUser());
   const [validationMsg, setValidationMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -42,6 +44,7 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
     const unsubCurrent = formManager.onCurrentAssigneeChange((curr) => setCurrentAssigneeId(curr));
     const unsubActive = formManager.onActiveFieldChange((act) => setActiveFieldId(act));
     const unsubOptions = formManager.onOptionsChange((opts) => setOptions(opts));
+    const unsubActualUser = formManager.onActualUserChange((u) => setActualUser(u));
 
     return () => {
       unsubFields();
@@ -50,6 +53,7 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
       unsubCurrent();
       unsubActive();
       unsubOptions();
+      unsubActualUser();
     };
   }, [formManager]);
 
@@ -140,7 +144,7 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '5px',
+              gap: '6px',
               backgroundColor: '#ffffff',
               border: '1px solid #cbd5e1',
               borderRadius: '5px',
@@ -149,17 +153,38 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
           >
             <Users size={13} color={currentAssignee?.color || '#64748b'} />
             <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>Filling as:</span>
+
+            {/* Actual User Name (if passed by host application) */}
+            {actualUser?.name && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: '#0f172a',
+                }}
+                title={actualUser.email ? `${actualUser.name} <${actualUser.email}>` : actualUser.name}
+              >
+                {actualUser.name}
+              </span>
+            )}
+
             {options.allowUserSwitching === false ? (
               <span
                 style={{
                   fontSize: '11px',
                   fontWeight: 600,
                   color: currentAssignee?.color || '#334155',
-                  padding: '1px 4px',
+                  backgroundColor: currentAssignee?.color ? `${currentAssignee.color}15` : '#f1f5f9',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
                 }}
-                title="Assigned user role is locked by host application"
+                title={
+                  actualUser?.name
+                    ? `Role locked to ${currentAssignee?.name || 'Assignee'} for ${actualUser.name}`
+                    : 'Assigned user role is locked by host application'
+                }
               >
-                {currentAssignee?.name || 'Current User'}
+                {actualUser?.name ? `(${currentAssignee?.name || 'Role'})` : (currentAssignee?.name || 'Current User')}
               </span>
             ) : (
               <select
@@ -175,7 +200,7 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
                   outline: 'none',
                 }}
               >
-                <option value="">All Users / Anyone</option>
+                <option value="">{actualUser?.name ? 'All Roles / Anyone' : 'All Users / Anyone'}</option>
                 {assignees.map((a) => {
                   const userFieldCount = fields.filter((f) => f.assigneeId === a.id).length;
                   return (

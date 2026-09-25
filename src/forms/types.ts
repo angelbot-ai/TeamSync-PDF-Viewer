@@ -23,8 +23,12 @@ export interface FormSignatureValue {
   type: SignatureType;
   /** PNG data URL for drawn, typed, or uploaded electronic signatures */
   dataUrl?: string;
-  /** Name of the signer */
+  /** Name of the actual signer */
   signerName?: string;
+  /** Optional email of the actual signer */
+  signerEmail?: string;
+  /** Optional role identifier or title fulfilled by the signer */
+  signerRole?: string;
   /** Signing epoch timestamp */
   timestamp?: number;
   /** Purpose/reason for digital signing */
@@ -96,14 +100,24 @@ export interface FormField {
   signTagText?: string;
 }
 
-export interface FormAssignee {
-  /** Unique assignee/role identifier (e.g. 'user_a', 'user_b') */
+/**
+ * FormRole represents a role/slot defined in a document form template
+ * (e.g. 'applicant', 'tenant', 'landlord', 'reviewer', 'user_a').
+ * The form template assigns fields to roles; the host application passes the actual user details.
+ */
+export interface FormRole {
+  /** Unique role identifier (e.g. 'applicant', 'tenant', 'landlord', 'user_a') */
   id: string;
-  /** Display label for this assignee (e.g. 'User A (Buyer)', 'User B (Reviewer)') */
+  /** Display label for this role (e.g. 'Applicant', 'Tenant', 'Landlord') */
   name: string;
   /** Hex color code for badges, borders and accents (e.g. '#2563eb') */
   color: string;
+  /** Optional human-readable description for the role */
+  description?: string;
 }
+
+/** FormAssignee is an alias for FormRole for backward compatibility. */
+export type FormAssignee = FormRole;
 
 export type FormDataRecord = Record<string, any>;
 
@@ -200,4 +214,10 @@ export interface FormFeatureOptions {
    * Default: false.
    */
   hideToolbar?: boolean;
+
+  /**
+   * Active form role identifier for form filling (e.g. 'applicant', 'tenant', 'user_a').
+   * Controls which fields and signature flags are active for the current user.
+   */
+  currentRole?: string | null;
 }

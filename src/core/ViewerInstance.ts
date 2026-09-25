@@ -10,7 +10,7 @@ import { buildPdfBytes, type ExportOptions } from './export';
 import type { Annotation } from '../annotations/types';
 import { AnnotationManager } from '../annotations/AnnotationManager';
 import { createGeometryResolver } from '../annotations/geometry';
-import type { Redaction, WatermarkOptions, ViewerEventMap, ViewerEventType, TransientHighlight } from './types';
+import type { Redaction, WatermarkOptions, ViewerEventMap, ViewerEventType, TransientHighlight, ViewerUser } from './types';
 import { searchPdfText, type SearchResult } from '../hooks/usePdfSearch';
 import { copyTextToClipboard } from '../utils/clipboardUtils';
 import { FormManager } from '../forms/FormManager';
@@ -19,6 +19,7 @@ import type {
   FormDataRecord,
   FormValidationResult,
   FormAssignee,
+  FormRole,
   FormFeatureOptions,
 } from '../forms/types';
 
@@ -522,6 +523,39 @@ export class WebViewerInstance {
     return this.formManager.getUser();
   }
 
+  /** Returns the actual user details passed by the host application, if set. */
+  getActualUser(): ViewerUser | null {
+    return this.formManager.getActualUser();
+  }
+
+  /**
+   * Sets the actual user details passed by the host application.
+   * If the user specifies a role/roleId, that role is automatically activated.
+   */
+  setActualUser(user: ViewerUser | null): void {
+    this.formManager.setActualUser(user);
+  }
+
+  /** Returns all configured form template roles. */
+  getFormRoles(): FormRole[] {
+    return this.formManager.getRoles();
+  }
+
+  /** Sets the list of form template roles. */
+  setFormRoles(roles: FormRole[]): void {
+    this.formManager.setRoles(roles);
+  }
+
+  /** Returns the active form role ID. */
+  getCurrentRole(): string | null {
+    return this.formManager.getCurrentRole();
+  }
+
+  /** Sets the active form role ID. */
+  setCurrentRole(roleId: string | null): void {
+    this.formManager.setCurrentRole(roleId);
+  }
+
   /** Returns current form feature options and visibility rules. */
   getFormOptions(): FormFeatureOptions {
     return this.formManager.getOptions();
@@ -575,7 +609,7 @@ export class WebViewerInstance {
         annotations: this.annotationManager.getAnnotationsList(),
         redactions: b.getRedactions(),
         watermark: b.getWatermark(),
-        signerName: b.getCurrentUserName(),
+        signerName: this.formManager.getEffectiveSignerName() || b.getCurrentUserName(),
         formFields: this.formManager.getFields(),
         formData: this.formManager.getValues(),
       },

@@ -14,7 +14,9 @@ import { AnnotationManager } from '../annotations/AnnotationManager';
 import { FormFillerActions } from '../components/FormFillerActions';
 import { SignatureIndexFlags } from '../components/SignatureIndexFlags';
 import { FormFieldLayer } from '../components/FormFieldLayer';
-import type { FormField, FormAssignee, FormFeatureOptions } from './types';
+import { FormSignatureModal } from '../components/FormSignatureModal';
+import type { FormField, FormAssignee, FormRole, FormFeatureOptions } from './types';
+import type { ViewerUser } from '../core/types';
 
 // @ts-ignore
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -283,5 +285,173 @@ describe('Form SDK & Programmatic Feature Control', () => {
     expect(container.textContent).toContain('Applicant Name');
     expect(container.textContent).toContain('Reviewer Notes');
     expect(container.querySelector('svg.lucide-lock')).toBeNull();
+  });
+
+  it('correctly distinguishes template roles from actual user passed by application', () => {
+    const templateRoles: FormRole[] = [
+      { id: 'tenant', name: 'Tenant', color: '#2563eb' },
+      { id: 'landlord', name: 'Landlord', color: '#10b981' },
+    ];
+    const formManager = new FormManager(sampleFields, {}, templateRoles);
+
+    // Initial state: template roles are set, no actual user yet
+    expect(formManager.getRoles().length).toBe(2);
+    expect(formManager.getActualUser()).toBeNull();
+    expect(formManager.getEffectiveSignerName()).toBe('');
+
+    // Host application passes actual user details fulfilling the 'tenant' role
+    const actualUser: ViewerUser = {
+      id: 'usr_abc123',
+      name: 'John Doe',
+      email: 'john@example.com',
+      role: 'tenant',
+    };
+
+    formManager.setActualUser(actualUser);
+
+    // Verify role mapping and actual user details
+    expect(formManager.getActualUser()).toEqual(actualUser);
+    expect(formManager.getCurrentRole()).toBe('tenant');
+    expect(formManager.getEffectiveSignerName()).toBe('John Doe');
+
+    // Verify that template roles were not mutated with random user IDs
+    expect(formManager.getRoles().map((r) => r.id)).toEqual(['tenant', 'landlord']);
+    expect(formManager.getRoles().some((r) => r.id === 'usr_abc123')).toBe(false);
+  });
+
+  it('exposes role and actual user methods on WebViewerInstance', () => {
+    const bus = new ViewerBus();
+    const annManager = new AnnotationManager();
+    const templateRoles: FormRole[] = [
+      { id: 'applicant', name: 'Applicant', color: '#2563eb' },
+      { id: 'reviewer', name: 'Reviewer', color: '#9333ea' },
+    ];
+    const formManager = new FormManager(sampleFields, {}, templateRoles);
+    const instance = new WebViewerInstance(bus, annManager, 'test-viewer', formManager);
+
+    // Set actual user via instance
+    instance.setActualUser({
+      id: 'usr_xyz',
+      name: 'Alice Johnson',
+      email: 'alice@company.com',
+      role: 'reviewer',
+    });
+
+    expect(instance.getActualUser()?.name).toBe('Alice Johnson');
+    expect(instance.getActualUser()?.email).toBe('alice@company.com');
+    expect(instance.getCurrentRole()).toBe('reviewer');
+
+    // Switch role programmatically
+    instance.setCurrentRole('applicant');
+    expect(instance.getCurrentRole()).toBe('applicant');
+
+    // Roles list
+    expect(instance.getFormRoles().length).toBe(2);
+  });
+
+  it('displays actual user name and role badge cleanly in FormFillerActions', async () => {
+    const templateRoles: FormRole[] = [
+      { id: 'tenant', name: 'Tenant', color: '#2563eb' },
+      { id: 'landlord', name: 'Landlord', color: '#10b981' },
+    ];
+    const formManager = new FormManager(sampleFields, {}, templateRoles);
+    formManager.setActualUser({
+      id: 'usr_99',
+      name: 'Robert Davis',
+      email: 'robert@domain.com',
+      role: 'tenant',
+    });
+    formManager.setOptions({ allowUserSwitching: false });
+
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<FormFillerActions formManager={formManager} />);
+    });
+
+    // Shows actual user name "Robert Davis" and locked role badge "(Tenant)"
+    expect(container.textContent).toContain('Filling as:');
+    expect(container.textContent).toContain('Robert Davis');
+    expect(container.textContent).toContain('(Tenant)');
+    expect(container.querySelector('select')).toBeNull();
+
+    // Enable role switching: Robert Davis remains the user, but role selector dropdown is rendered
+    await act(async () => {
+      formManager.setOptions({ allowUserSwitching: true });
+    });
+
+    expect(container.textContent).toContain('Robert Davis');
+    const select = container.querySelector('select');
+    expect(select).not.toBeNull();
+    expect(select?.value).toBe('tenant');
+  });
+
+  it('defaults signature modal signer name to actual user and records email and role on save', async () => {
+    const templateRole: FormRole = { id: 'applicant', name: 'Applicant', color: '#2563eb' };
+    const actualUser: ViewerUser = {
+      id: 'usr_42',
+      name: 'Sarah Connor',
+      email: 'sarah@resistance.org',
+      role: 'applicant',
+    };
+
+    const sigField: FormField = {
+      id: 'sig_field',
+      name: 'signature',
+      label: 'Sign Here',
+      type: 'signature',
+      pageIndex: 1,
+      x: 50,
+      y: 100,
+      width: 200,
+      height: 60,
+      assigneeId: 'applicant',
+    };
+
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <FormSignatureModal
+          field={sigField}
+          assignee={templateRole}
+          actualUser={actualUser}
+          defaultSignerName={actualUser.name}
+          onSave={onSave}
+          onClose={onClose}
+        />
+      );
+    });
+
+    // Header shows Role: Applicant and Signer: Sarah Connor (sarah@resistance.org)
+    expect(container.textContent).toContain('Role: Applicant');
+    expect(container.textContent).toContain('Signer: Sarah Connor');
+    expect(container.textContent).toContain('User session: Sarah Connor');
+
+    // Switch to "Type" tab and adopt
+    const typeBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Type')
+    );
+    await act(async () => {
+      typeBtn?.click();
+    });
+
+    const adoptBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Adopt & Sign')
+    );
+    await act(async () => {
+      adoptBtn?.click();
+    });
+
+    // onSave received actual user details
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'electronic',
+        signerName: 'Sarah Connor',
+        signerEmail: 'sarah@resistance.org',
+        signerRole: 'Applicant',
+      })
+    );
   });
 });

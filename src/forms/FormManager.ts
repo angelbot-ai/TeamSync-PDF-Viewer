@@ -8,8 +8,10 @@ import type {
   FormDataRecord,
   FormValidationResult,
   FormAssignee,
+  FormRole,
   FormFeatureOptions,
 } from './types';
+import type { ViewerUser } from '../core/types';
 
 export const DEFAULT_FORM_OPTIONS: FormFeatureOptions = {
   canCreateForms: true,
@@ -60,18 +62,27 @@ export class FormManager {
   private activeAssigneeListeners = new Set<(assigneeId: string | null) => void>();
   private activeFieldListeners = new Set<(fieldId: string | null) => void>();
   private optionsListeners = new Set<(options: FormFeatureOptions) => void>();
+  private actualUser: ViewerUser | null = null;
+  private actualUserListeners = new Set<(user: ViewerUser | null) => void>();
   private readOnly = false;
 
   constructor(
     initialFields: FormField[] = [],
     initialValues: FormDataRecord = {},
     initialAssignees: FormAssignee[] = DEFAULT_ASSIGNEES,
-    initialOptions: Partial<FormFeatureOptions> = {}
+    initialOptions: Partial<FormFeatureOptions> = {},
+    initialActualUser: ViewerUser | null = null
   ) {
     this.fields = [...initialFields];
     this.values = { ...initialValues };
     this.assignees = initialAssignees && initialAssignees.length > 0 ? [...initialAssignees] : [...DEFAULT_ASSIGNEES];
     this.options = { ...DEFAULT_FORM_OPTIONS, ...initialOptions };
+    if (initialActualUser) {
+      this.setActualUser(initialActualUser);
+    }
+    if (this.options.currentRole) {
+      this.setCurrentRole(this.options.currentRole);
+    }
   }
 
   // ---- Subscriptions -----------------------------------------------------------------------
@@ -367,12 +378,102 @@ export class FormManager {
     return () => this.optionsListeners.delete(listener);
   }
 
+  // ---- Actual User vs Template Roles ------------------------------------------------------
+
+  /** Returns the actual logged-in user details passed by the host application, if set. */
+  getActualUser(): ViewerUser | null {
+    return this.actualUser ? { ...this.actualUser } : null;
+  }
+
   /**
-   * Sets the active form user. If a user object with id/name/color is passed and not already
-   * in the assignees list, it is automatically registered as a recognized assignee.
+   * Sets the actual logged-in user details passed by the host application.
+   * If the user specifies a role or roleId, that role is automatically activated for form filling.
    */
-  setUser(user: { id: string; name?: string; color?: string } | string | null): void {
+  setActualUser(user: ViewerUser | null): void {
+    this.actualUser = user ? { ...user } : null;
+    const targetRole = user?.role || user?.roleId;
+    if (targetRole) {
+      this.setCurrentAssignee(targetRole);
+    }
+    for (const listener of this.actualUserListeners) {
+      try {
+        listener(this.getActualUser());
+      } catch (err) {
+        console.error('Error in FormManager actualUser listener:', err);
+      }
+    }
+  }
+
+  /** Subscribes to changes in the actual logged-in user details. */
+  onActualUserChange(listener: (user: ViewerUser | null) => void): () => void {
+    this.actualUserListeners.add(listener);
+    return () => this.actualUserListeners.delete(listener);
+  }
+
+  /**
+   * Returns the effective signer name:
+   * Prioritizes the actual user's real name (from host application),
+   * falling back to the active role name or an empty string.
+   */
+  getEffectiveSignerName(): string {
+    if (this.actualUser?.name) {
+      return this.actualUser.name;
+    }
+    const role = this.getAssignee(this.currentAssigneeId || undefined);
+    return role?.name || '';
+  }
+
+  // ---- Role Aliases (Template Roles) ------------------------------------------------------
+
+  /** Returns all configured form template roles. */
+  getRoles(): FormRole[] {
+    return this.getAssignees();
+  }
+
+  /** Sets the list of form template roles. */
+  setRoles(roles: FormRole[]): void {
+    this.setAssignees(roles);
+  }
+
+  /** Returns a form template role by ID. */
+  getRole(id?: string): FormRole | undefined {
+    return this.getAssignee(id);
+  }
+
+  /** Returns the active form role ID. */
+  getCurrentRole(): string | null {
+    return this.getCurrentAssignee();
+  }
+
+  /** Sets the active form role ID. */
+  setCurrentRole(roleId: string | null): void {
+    this.setCurrentAssignee(roleId);
+  }
+
+  onRolesChange(listener: (roles: FormRole[]) => void): () => void {
+    return this.onAssigneesChange(listener);
+  }
+
+  onCurrentRoleChange(listener: (roleId: string | null) => void): () => void {
+    return this.onCurrentAssigneeChange(listener);
+  }
+
+  /**
+   * Sets the active form user / persona.
+   * - If a string is passed, activates that role ID.
+   * - If an actual user object with role/roleId is passed, records actual user and activates their role.
+   * - If an actual user object without a role is passed, registers them and activates for backward compatibility.
+   */
+  setUser(
+    user:
+      | ViewerUser
+      | FormAssignee
+      | { id: string; name?: string; color?: string; role?: string; roleId?: string; email?: string }
+      | string
+      | null
+  ): void {
     if (!user) {
+      this.setActualUser(null);
       this.setCurrentAssignee(null);
       return;
     }
@@ -382,19 +483,45 @@ export class FormManager {
       return;
     }
 
-    // Object provided: ensure user is in the assignees list
-    const existing = this.assignees.find((a) => a.id === user.id);
-    if (!existing) {
-      this.addAssignee({
-        id: user.id,
-        name: user.name || user.id,
-        color: user.color || '#2563eb',
+    const userObj = user as any;
+    const roleId = userObj.role || userObj.roleId;
+    if (roleId) {
+      this.setActualUser({
+        id: userObj.id,
+        name: userObj.name || userObj.id,
+        email: userObj.email,
+        role: roleId,
+        color: userObj.color,
       });
-    } else if (user.name && existing.name !== user.name) {
-      this.updateAssignee(user.id, { name: user.name, ...(user.color ? { color: user.color } : {}) });
+      this.setCurrentAssignee(roleId);
+      return;
     }
 
-    this.setCurrentAssignee(user.id);
+    // Check if user.id corresponds to an existing template role
+    const existing = this.assignees.find((a) => a.id === userObj.id);
+    if (existing) {
+      this.setActualUser({
+        id: userObj.id,
+        name: userObj.name || existing.name,
+        role: userObj.id,
+        color: userObj.color || existing.color,
+      });
+      this.setCurrentAssignee(userObj.id);
+      return;
+    }
+
+    // Legacy fallback: register user as an assignee
+    this.setActualUser({
+      id: userObj.id,
+      name: userObj.name || userObj.id,
+      color: userObj.color || '#2563eb',
+    });
+    this.addAssignee({
+      id: userObj.id,
+      name: userObj.name || userObj.id,
+      color: userObj.color || '#2563eb',
+    });
+    this.setCurrentAssignee(userObj.id);
   }
 
   /** Returns the current active form user assignee record, if set. */

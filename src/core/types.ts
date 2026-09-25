@@ -10,7 +10,7 @@ import type { PdfAssetPaths } from './pdfAssets';
 import type { WebViewerInstance } from './ViewerInstance';
 import type { OfficeConverterConfig, OfficeFileType } from '../office/types';
 import type { FormManager } from '../forms/FormManager';
-import type { FormField, FormDataRecord, FormAssignee, FormFeatureOptions } from '../forms/types';
+import type { FormField, FormDataRecord, FormAssignee, FormRole, FormFeatureOptions } from '../forms/types';
 
 export type {
   PdfAssetPaths,
@@ -21,6 +21,7 @@ export type {
   FormField,
   FormDataRecord,
   FormAssignee,
+  FormRole,
   FormFeatureOptions,
 };
 
@@ -82,6 +83,14 @@ export interface SDKPermissions {
 export interface ViewerUser {
   id: string;
   name: string;
+  /** Optional email address of the user */
+  email?: string;
+  /** Form template role fulfilled by this user on the document (e.g. 'applicant', 'tenant', 'user_a') */
+  role?: string;
+  /** Alias of role */
+  roleId?: string;
+  /** User visual accent color */
+  color?: string;
 }
 
 export type InitialScale = number | 'fit-width' | 'fit-page' | { type: 'fit-width'; ratio?: number };
@@ -158,10 +167,15 @@ export interface WebViewerOptions {
    */
   formOptions?: FormFeatureOptions;
   /**
-   * The active form assignee ID or user. Controls which fields and signature flags are interactive/visible for this user.
+   * The active form role ID (e.g. 'applicant', 'tenant', 'landlord').
+   * Controls which fields and signature flags are interactive/visible for this role.
    */
+  currentRole?: string | null;
+  /** Alias of `currentRole`. */
   currentFormAssignee?: string | null;
-  /** Custom list of form assignees/signers. */
+  /** Custom list of form template roles. */
+  formRoles?: FormRole[];
+  /** Alias of `formRoles`. */
   formAssignees?: FormAssignee[];
   /** Pre-populated form fields schema. */
   formFields?: FormField[];
@@ -169,7 +183,12 @@ export interface WebViewerOptions {
   formData?: FormDataRecord;
   /** Shorthand for "no annotation/redaction editing at all". */
   readOnly?: boolean;
-  /** Author attached to annotations created in this viewer. */
+  /**
+   * Actual user details passed by the host application (name, email, role, etc.).
+   * If user has a `role` property, the viewer automatically activates that role for form filling.
+   */
+  actualUser?: ViewerUser;
+  /** Author attached to annotations created in this viewer, and current user details. */
   currentUser?: ViewerUser;
   /** pdf.js worker / CMap / font / wasm locations (see `configurePdfAssets`). */
   assets?: PdfAssetPaths;

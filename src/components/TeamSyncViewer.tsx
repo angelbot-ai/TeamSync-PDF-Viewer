@@ -116,10 +116,13 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     id, targetViewer, resolveLinkUrl, onLinkClick,
     officeConverter, onOfficeConverting, onOfficeConverted, onOfficeConversionError,
     currentUser,
+    actualUser,
     formManager: propFormManager,
     formOptions,
     currentFormAssignee,
+    currentRole,
     formAssignees,
+    formRoles,
     formFields,
     formData,
   } = props;
@@ -131,9 +134,13 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   const rootRef = useRef<HTMLDivElement>(null);
   const bus = useMemo(() => new ViewerBus(), []);
   const annotationManager = useMemo(() => new AnnotationManager(), []);
+  const effectiveAssignees = formRoles || formAssignees;
+  const effectiveActualUser = actualUser || currentUser;
+  const effectiveCurrentRole = currentRole !== undefined ? currentRole : currentFormAssignee;
+
   const formManager = useMemo(
-    () => propFormManager || new FormManager(formFields, formData, formAssignees, formOptions),
-    [propFormManager, formFields, formData, formAssignees, formOptions]
+    () => propFormManager || new FormManager(formFields, formData, effectiveAssignees, formOptions, effectiveActualUser),
+    [propFormManager, formFields, formData, effectiveAssignees, formOptions, effectiveActualUser]
   );
   const instanceRef = useRef<WebViewerInstance | null>(null);
   if (!instanceRef.current) instanceRef.current = new WebViewerInstance(bus, annotationManager, id, formManager);
@@ -154,12 +161,14 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     }
   }, [formManager, formData]);
 
-  // Sync formAssignees when passed as prop
+  // Sync formRoles / formAssignees when passed as prop
   useEffect(() => {
-    if (formAssignees) {
+    if (formRoles) {
+      formManager.setRoles(formRoles);
+    } else if (formAssignees) {
       formManager.setAssignees(formAssignees);
     }
-  }, [formManager, formAssignees]);
+  }, [formManager, formRoles, formAssignees]);
 
   // Sync formOptions when passed as prop
   useEffect(() => {
@@ -168,14 +177,23 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     }
   }, [formManager, formOptions]);
 
-  // Sync active user when currentFormAssignee or currentUser is passed
+  // Sync actual user when actualUser or currentUser is passed
   useEffect(() => {
-    if (currentFormAssignee !== undefined) {
-      formManager.setCurrentAssignee(currentFormAssignee);
+    if (actualUser !== undefined) {
+      formManager.setActualUser(actualUser);
     } else if (currentUser) {
       formManager.setUser(currentUser);
     }
-  }, [formManager, currentFormAssignee, currentUser]);
+  }, [formManager, actualUser, currentUser]);
+
+  // Sync active role when currentRole or currentFormAssignee is passed
+  useEffect(() => {
+    if (currentRole !== undefined) {
+      formManager.setCurrentRole(currentRole);
+    } else if (currentFormAssignee !== undefined) {
+      formManager.setCurrentAssignee(currentFormAssignee);
+    }
+  }, [formManager, currentRole, currentFormAssignee]);
 
   // Sync SDK permissions for forms (canCreateForms, canFillForms)
   useEffect(() => {

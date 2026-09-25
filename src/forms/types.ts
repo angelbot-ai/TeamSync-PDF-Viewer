@@ -5,6 +5,7 @@
 
 export type FormFieldType =
   | 'text'
+  | 'textbox'
   | 'textarea'
   | 'datetime'
   | 'checklist'

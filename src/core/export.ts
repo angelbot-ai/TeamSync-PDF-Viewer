@@ -396,7 +396,7 @@ export async function buildPdfBytes(input: ExportInput, options: ExportOptions =
       const filledVal = values[field.name] !== undefined ? values[field.name] : field.defaultValue;
 
       try {
-        if (field.type === 'text') {
+        if (field.type === 'text' || (field.type as string) === 'textbox') {
           const tf = form.createTextField(field.name);
           tf.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
           if (filledVal !== undefined && filledVal !== null && filledVal !== '') tf.setText(String(filledVal));

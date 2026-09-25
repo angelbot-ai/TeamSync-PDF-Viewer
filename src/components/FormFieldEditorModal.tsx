@@ -170,8 +170,8 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({ fiel
             />
           </div>
 
-          {/* Placeholder (for text & textarea) */}
-          {['text', 'textarea', 'datetime'].includes(field.type) && (
+          {/* Placeholder (for text, textbox & textarea) */}
+          {['text', 'textbox', 'textarea', 'datetime'].includes(field.type) && (
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>
                 Placeholder

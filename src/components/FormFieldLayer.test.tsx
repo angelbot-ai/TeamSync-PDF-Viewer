@@ -191,4 +191,40 @@ describe('FormFieldLayer', () => {
     const textInput = container.querySelector('input[type="text"]') as HTMLInputElement;
     expect(textInput.disabled).toBe(true);
   });
+
+  it('renders textbox fields in View tab when field type is textbox or text', async () => {
+    const textboxField: FormField = {
+      id: 'tb1',
+      name: 'user_comment',
+      type: 'textbox',
+      pageIndex: 1,
+      x: 30,
+      y: 40,
+      width: 200,
+      height: 36,
+      placeholder: 'Type your message...',
+    };
+    const formManager = new FormManager([textboxField]);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <FormFieldLayer
+          pageNum={1}
+          scale={1}
+          rotation={0}
+          basePageWidth={600}
+          basePageHeight={800}
+          activeTab="View"
+          activeTool="select"
+          setActiveTool={vi.fn()}
+          formManager={formManager}
+        />
+      );
+    });
+
+    const textInput = container.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(textInput).not.toBeNull();
+    expect(textInput.placeholder).toBe('Type your message...');
+  });
 });

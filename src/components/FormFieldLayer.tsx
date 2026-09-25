@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Settings, Trash2, Copy, Check } from 'lucide-react';
+import { Settings, Trash2, Copy } from 'lucide-react';
 import type { FormField, FormToolType, FormDataRecord } from '../forms/types';
 import type { FormManager } from '../forms/FormManager';
 import { FormFieldEditorModal } from './FormFieldEditorModal';
@@ -188,18 +188,19 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
       const finalY = Math.round(h > 15 ? minY : creationRect.startY);
 
       const fieldId = newId();
-      const count = formManager.getFields().filter((f) => f.type === activeTool).length + 1;
+      const count = formManager.getFields().filter((f) => f.type === activeTool || (activeTool === 'textbox' && (f.type === 'text' || (f.type as string) === 'textbox'))).length + 1;
+      const resolvedType = (activeTool === 'textbox' ? 'text' : activeTool) as FormField['type'];
       const newField: FormField = {
         id: fieldId,
         name: `${activeTool}_${count}`,
-        type: activeTool as FormField['type'],
+        type: resolvedType,
         pageIndex: pageNum,
         x: Math.max(0, Math.min(basePageWidth - finalW, finalX)),
         y: Math.max(0, Math.min(basePageHeight - finalH, finalY)),
         width: finalW,
         height: finalH,
         label: `${activeTool.charAt(0).toUpperCase() + activeTool.slice(1)} ${count}`,
-        placeholder: ['textbox', 'textarea'].includes(activeTool) ? 'Enter text...' : undefined,
+        placeholder: ['textbox', 'text', 'textarea'].includes(activeTool) ? 'Enter text...' : undefined,
         required: false,
         options: ['checklist', 'dropdown', 'radio'].includes(activeTool) ? ['Option 1', 'Option 2', 'Option 3'] : undefined,
         dateFormat: activeTool === 'datetime' ? 'datetime' : undefined,
@@ -306,7 +307,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
         left: 0,
         width: '100%',
         height: '100%',
-        pointerEvents: activeTab === 'Forms' ? (isCreating ? 'auto' : 'auto') : 'auto',
+        pointerEvents: activeTab === 'Forms' ? 'auto' : 'none',
         cursor: isCreating ? 'crosshair' : 'default',
         zIndex: 15,
       }}
@@ -515,10 +516,11 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
               height: `${rot.height * scale}px`,
               zIndex: 16,
               boxSizing: 'border-box',
+              pointerEvents: 'auto',
             }}
           >
             {/* Textbox Input */}
-            {field.type === 'text' && (
+            {(field.type === 'text' || (field.type as string) === 'textbox') && (
               <input
                 type="text"
                 disabled={isReadOnly}
@@ -530,12 +532,13 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                   height: '100%',
                   fontSize: `${fontSizePx}px`,
                   padding: `${2 * scale}px ${6 * scale}px`,
-                  border: '1px solid #cbd5e1',
+                  border: '1.5px solid #94a3b8',
                   borderRadius: '3px',
                   backgroundColor: '#ffffff',
-                  color: '#1e293b',
+                  color: '#0f172a',
                   boxSizing: 'border-box',
                   outline: 'none',
+                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
                 }}
               />
             )}

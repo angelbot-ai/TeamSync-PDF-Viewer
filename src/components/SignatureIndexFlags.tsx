@@ -1,8 +1,8 @@
 /**
  * © 2026 AngelBot Ai Pvt Ltd. All rights reserved.
- * SignatureIndexFlags — Sticky / Index Flags attached to the side of the viewer
- * to clearly indicate required signatures for the active user across the document.
- * Modeled after physical Post-it arrow index flags, providing 1-click jump & sign navigation.
+ * SignatureIndexFlags — Clean sidebar flags on the right edge of the viewer
+ * showing only the current user's pending and completed signature fields
+ * with 1-click jump & sign navigation.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -12,7 +12,6 @@ import {
   ChevronRight,
   ChevronLeft,
   ShieldCheck,
-  Tag,
 } from 'lucide-react';
 import type { FormManager } from '../forms/FormManager';
 import type { FormField, FormDataRecord, FormAssignee, FormSignatureValue } from '../forms/types';
@@ -58,35 +57,35 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
     };
   }, [formManager]);
 
-  // Filter to signature fields
+  // All signature fields
   const signatureFields = useMemo(() => {
     return fields.filter(
       (f) => f.type === 'signature' || f.type === 'digital_signature'
     );
   }, [fields]);
 
-  // Signatures relevant for the current role
-  const relevantSignatures = useMemo(() => {
+  // ONLY show the current user's signatures (strict filter — no other users, no "anyone" overflow)
+  const mySignatures = useMemo(() => {
     if (!currentAssigneeId) {
-      return signatureFields; // All signatures if no specific role selected
+      return []; // No user selected → don't show the dock at all
     }
-    // Show fields assigned to this user, plus unassigned ones
     return signatureFields.filter(
-      (f) => !f.assigneeId || f.assigneeId === currentAssigneeId
+      (f) => f.assigneeId === currentAssigneeId
     );
   }, [signatureFields, currentAssigneeId]);
 
-  // Only display in View (filler) or Forms modes
+  // Only display in View mode
   if (activeTab !== 'View' && activeTab !== 'Forms') {
     return null;
   }
 
-  if (signatureFields.length === 0) {
+  // Don't render if no user is selected or no signatures for this user
+  if (!currentAssigneeId || mySignatures.length === 0) {
     return null;
   }
 
-  // Determine current user context
   const currentAssignee = assignees.find((a) => a.id === currentAssigneeId);
+  const userColor = currentAssignee?.color || '#3b82f6';
 
   const checkIsSigned = (field: FormField): boolean => {
     const val = values[field.name];
@@ -99,31 +98,30 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
     return false;
   };
 
-  const pendingSignatures = relevantSignatures.filter((f) => !checkIsSigned(f));
-  const totalPending = pendingSignatures.length;
+  const pendingCount = mySignatures.filter((f) => !checkIsSigned(f)).length;
+  const signedCount = mySignatures.length - pendingCount;
 
   const handleJumpToSignature = (field: FormField) => {
     formManager.setActiveFieldId(field.id);
 
-    // After scrolling has commenced, trigger click to open modal
     setTimeout(() => {
       const fieldEl = document.getElementById(`tspdf-field-${field.id}`);
       if (fieldEl) {
         fieldEl.focus();
         fieldEl.click();
 
-        // Temporary visual flash highlight
+        // Brief amber highlight flash
         fieldEl.style.transition = 'box-shadow 0.3s ease';
         const originalBoxShadow = fieldEl.style.boxShadow;
-        fieldEl.style.boxShadow = '0 0 0 4px #f59e0b, 0 0 20px rgba(245, 158, 11, 0.6)';
+        fieldEl.style.boxShadow = '0 0 0 4px #f59e0b, 0 0 20px rgba(245, 158, 11, 0.5)';
         setTimeout(() => {
           fieldEl.style.boxShadow = originalBoxShadow;
-        }, 1200);
+        }, 1000);
       }
     }, 250);
   };
 
-  // If collapsed, display a single compact floating sticky tab
+  // Collapsed: show a compact pill
   if (isCollapsed) {
     return (
       <div
@@ -139,33 +137,38 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
       >
         <button
           onClick={() => setIsCollapsed(false)}
-          title={`Show signature index flags (${totalPending} pending)`}
+          title={`${currentAssignee?.name || 'User'}: ${pendingCount} signature${pendingCount !== 1 ? 's' : ''} pending`}
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
-            backgroundColor: totalPending > 0 ? (currentAssignee?.color || '#f59e0b') : '#16a34a',
+            gap: '5px',
+            backgroundColor: pendingCount > 0 ? userColor : '#16a34a',
             color: '#ffffff',
             border: 'none',
-            borderRadius: '8px 0 0 8px',
-            padding: '8px 12px 8px 10px',
+            borderRadius: '20px 0 0 20px',
+            padding: '7px 10px 7px 12px',
             cursor: 'pointer',
-            boxShadow: '-3px 4px 12px rgba(0, 0, 0, 0.22)',
+            boxShadow: '-2px 2px 10px rgba(0, 0, 0, 0.2)',
             fontSize: '12px',
-            fontWeight: 700,
-            letterSpacing: '0.3px',
-            transition: 'transform 0.15s ease, background-color 0.2s ease',
+            fontWeight: 600,
+            transition: 'transform 0.15s ease',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateX(-4px)';
+            e.currentTarget.style.transform = 'translateX(-3px)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'translateX(0)';
           }}
         >
-          <ChevronLeft size={16} />
-          <span>✍️</span>
-          <span>{totalPending > 0 ? `${totalPending} Sign` : 'All Signed'}</span>
+          <ChevronLeft size={14} />
+          {pendingCount > 0 ? (
+            <span>{pendingCount} to sign</span>
+          ) : (
+            <>
+              <Check size={14} strokeWidth={3} />
+              <span>Done</span>
+            </>
+          )}
         </button>
       </div>
     );
@@ -186,93 +189,88 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'flex-end',
-        gap: '6px',
+        gap: '0px',
       }}
     >
-      {/* Top Dock Header & Minimize Tab */}
+      {/* Header */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '6px',
-          backgroundColor: '#1e293b',
-          color: '#f8fafc',
-          padding: '5px 8px 5px 10px',
-          borderRadius: '8px 0 0 8px',
-          boxShadow: '-2px 3px 8px rgba(0,0,0,0.18)',
-          fontSize: '11px',
-          fontWeight: 700,
-          borderRight: 'none',
+          gap: '8px',
+          backgroundColor: userColor,
+          color: '#ffffff',
+          padding: '6px 8px 6px 12px',
+          borderRadius: '12px 0 0 0',
+          fontSize: '12px',
+          fontWeight: 600,
+          letterSpacing: '0.2px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <Tag size={13} style={{ color: currentAssignee?.color || '#38bdf8' }} />
-          <span>
-            {currentAssignee ? `${currentAssignee.name}'s Signatures` : 'Signature Flags'}
-          </span>
-          <span
-            style={{
-              backgroundColor: totalPending > 0 ? '#ef4444' : '#16a34a',
-              color: '#ffffff',
-              fontSize: '10px',
-              padding: '1px 5px',
-              borderRadius: '10px',
-              fontWeight: 800,
-              marginLeft: '2px',
-            }}
-          >
-            {totalPending > 0 ? `${totalPending} due` : '✓ All signed'}
-          </span>
-        </div>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <PenTool size={13} />
+          {currentAssignee?.name || 'User'}
+        </span>
+
+        {/* Progress pill */}
+        <span
+          style={{
+            backgroundColor: 'rgba(255,255,255,0.25)',
+            fontSize: '10px',
+            fontWeight: 700,
+            padding: '2px 7px',
+            borderRadius: '10px',
+          }}
+        >
+          {pendingCount > 0
+            ? `${signedCount}/${mySignatures.length}`
+            : '✓ All done'}
+        </span>
+
         <button
           onClick={() => setIsCollapsed(true)}
-          title="Minimize signature flags dock"
+          title="Minimize"
           style={{
             background: 'none',
             border: 'none',
-            color: '#94a3b8',
+            color: 'rgba(255,255,255,0.7)',
             cursor: 'pointer',
             padding: '2px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
             borderRadius: '4px',
-            marginLeft: '4px',
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.color = '#ffffff';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.color = '#94a3b8';
+            e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
           }}
         >
           <ChevronRight size={14} />
         </button>
       </div>
 
-      {/* List of Sticky Index Flags */}
+      {/* Signature list */}
       <div
         style={{
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'flex-end',
-          gap: '7px',
+          alignItems: 'stretch',
           overflowY: 'auto',
           maxHeight: 'calc(100vh - 240px)',
-          paddingRight: '0px',
-          paddingBottom: '8px',
+          backgroundColor: '#ffffff',
+          borderRadius: '0 0 0 12px',
+          borderLeft: `2px solid ${userColor}`,
+          borderBottom: `1px solid ${userColor}33`,
+          boxShadow: '-2px 4px 14px rgba(0,0,0,0.12)',
         }}
       >
-        {relevantSignatures.map((field) => {
+        {mySignatures.map((field, idx) => {
           const isSigned = checkIsSigned(field);
-          const assignee = assignees.find((a) => a.id === field.assigneeId);
-          const fieldColor = isSigned ? '#16a34a' : assignee?.color || '#f59e0b';
-          const isAssignedToOther =
-            currentAssigneeId !== null &&
-            Boolean(field.assigneeId) &&
-            field.assigneeId !== currentAssigneeId;
           const isHovered = hoveredFieldId === field.id;
           const isActive = activeFieldId === field.id;
+          const fieldLabel = field.label || field.name || `Signature ${idx + 1}`;
 
           return (
             <div
@@ -282,134 +280,84 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
               onMouseEnter={() => setHoveredFieldId(field.id)}
               onMouseLeave={() => setHoveredFieldId(null)}
               style={{
-                display: 'inline-flex',
+                display: 'flex',
                 alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
                 cursor: 'pointer',
-                filter: isHovered || isActive
-                  ? 'drop-shadow(-3px 4px 10px rgba(0, 0, 0, 0.28))'
-                  : 'drop-shadow(-2px 3px 6px rgba(0, 0, 0, 0.16))',
-                transform: isHovered || isActive ? 'translateX(-5px)' : 'translateX(0)',
-                transition: 'transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), filter 0.18s ease',
+                backgroundColor: isActive
+                  ? `${userColor}12`
+                  : isHovered
+                  ? '#f8fafc'
+                  : '#ffffff',
+                borderBottom: '1px solid #f1f5f9',
+                transition: 'background-color 0.12s ease',
+                minWidth: '160px',
               }}
-              title={`Page ${field.pageIndex}: ${field.label || field.name} (${
-                isSigned ? 'Signed' : isAssignedToOther ? `Assigned to ${assignee?.name}` : 'Click to jump & sign'
-              })`}
+              title={`Page ${field.pageIndex} · ${fieldLabel}${isSigned ? ' (Signed)' : ' — Click to sign'}`}
             >
-              {/* Arrow pointing left toward the PDF document canvas */}
+              {/* Status icon */}
               <div
                 style={{
-                  width: 0,
-                  height: 0,
-                  borderTop: '15px solid transparent',
-                  borderBottom: '15px solid transparent',
-                  borderRight: `12px solid ${isAssignedToOther ? '#94a3b8' : fieldColor}`,
-                  flexShrink: 0,
-                }}
-              />
-
-              {/* Sticky Note / Index Tab Body */}
-              <div
-                style={{
-                  backgroundColor: isAssignedToOther ? '#64748b' : fieldColor,
-                  color: '#ffffff',
-                  padding: '5px 12px 5px 6px',
-                  borderRadius: '0 6px 6px 0',
+                  width: '22px',
+                  height: '22px',
+                  borderRadius: '50%',
+                  backgroundColor: isSigned ? '#dcfce7' : `${userColor}15`,
+                  border: `2px solid ${isSigned ? '#16a34a' : userColor}`,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  letterSpacing: '0.3px',
-                  whiteSpace: 'nowrap',
-                  boxShadow: 'inset 2px 0 3px rgba(0,0,0,0.12)',
-                  minWidth: isHovered ? '160px' : '110px',
-                  maxWidth: '240px',
-                  justifyContent: 'space-between',
-                  transition: 'min-width 0.2s ease',
+                  justifyContent: 'center',
+                  flexShrink: 0,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden' }}>
+                {isSigned ? (
+                  <Check size={12} strokeWidth={3} color="#16a34a" />
+                ) : field.type === 'digital_signature' ? (
+                  <ShieldCheck size={12} color={userColor} />
+                ) : (
+                  <PenTool size={11} color={userColor} />
+                )}
+              </div>
+
+              {/* Field info */}
+              <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: isSigned ? '#16a34a' : '#1e293b',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    lineHeight: 1.3,
+                  }}
+                >
                   {isSigned ? (
-                    <Check size={13} strokeWidth={3} style={{ flexShrink: 0 }} />
-                  ) : field.type === 'digital_signature' ? (
-                    <ShieldCheck size={13} style={{ flexShrink: 0 }} />
+                    <>{fieldLabel} ✓</>
                   ) : (
-                    <PenTool size={13} style={{ flexShrink: 0 }} />
+                    fieldLabel
                   )}
-
-                  {/* Page indicator pill */}
-                  <span
-                    style={{
-                      backgroundColor: 'rgba(0,0,0,0.22)',
-                      padding: '1px 5px',
-                      borderRadius: '4px',
-                      fontSize: '9.5px',
-                      fontWeight: 800,
-                      flexShrink: 0,
-                    }}
-                  >
-                    P.{field.pageIndex}
-                  </span>
-
-                  {/* Flow order pill if available */}
-                  {field.flowOrder !== undefined && (
-                    <span
-                      style={{
-                        backgroundColor: 'rgba(255,255,255,0.25)',
-                        padding: '1px 4px',
-                        borderRadius: '6px',
-                        fontSize: '9px',
-                        fontWeight: 800,
-                        flexShrink: 0,
-                      }}
-                    >
-                      #{field.flowOrder}
-                    </span>
-                  )}
-
-                  {/* Field Label / Sign Here Text */}
-                  <span
-                    style={{
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {isSigned
-                      ? 'SIGNED'
-                      : field.label || field.signTagText || 'SIGN HERE'}
-                  </span>
                 </div>
-
-                {/* Assignee pill */}
-                <div style={{ flexShrink: 0, marginLeft: '4px' }}>
-                  {assignee ? (
-                    <span
-                      style={{
-                        backgroundColor: 'rgba(255,255,255,0.22)',
-                        padding: '1px 5px',
-                        borderRadius: '10px',
-                        fontSize: '9px',
-                        fontWeight: 700,
-                      }}
-                    >
-                      {assignee.name}
-                    </span>
-                  ) : (
-                    <span
-                      style={{
-                        backgroundColor: 'rgba(255,255,255,0.22)',
-                        padding: '1px 5px',
-                        borderRadius: '10px',
-                        fontSize: '9px',
-                        fontWeight: 600,
-                      }}
-                    >
-                      Anyone
-                    </span>
-                  )}
+                <div
+                  style={{
+                    fontSize: '10px',
+                    color: '#94a3b8',
+                    fontWeight: 500,
+                    marginTop: '1px',
+                  }}
+                >
+                  Page {field.pageIndex}
+                  {field.flowOrder !== undefined && ` · Step ${field.flowOrder}`}
+                  {field.type === 'digital_signature' && ' · Digital'}
                 </div>
               </div>
+
+              {/* Jump arrow (visible on hover) */}
+              <ChevronRight
+                size={14}
+                color={isHovered || isActive ? userColor : '#cbd5e1'}
+                style={{ flexShrink: 0, transition: 'color 0.12s ease' }}
+              />
             </div>
           );
         })}

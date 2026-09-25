@@ -24,7 +24,39 @@ describe('SignatureIndexFlags', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders sticky index flags for required signatures in View mode', async () => {
+  it('renders nothing when no user is selected', async () => {
+    const sigA: FormField = {
+      id: 'sig_a',
+      name: 'applicant_sig',
+      label: 'Applicant Signature',
+      type: 'signature',
+      pageIndex: 1,
+      x: 50,
+      y: 100,
+      width: 200,
+      height: 50,
+      assigneeId: 'user_a',
+    };
+
+    const formManager = new FormManager([sigA]);
+    // No current assignee set — dock should not render
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <SignatureIndexFlags
+          formManager={formManager}
+          activeTab="View"
+        />
+      );
+    });
+
+    // Nothing should render because no user is selected
+    expect(container.textContent).toBe('');
+    expect(container.querySelector('.tspdf-signature-index-flags')).toBeNull();
+  });
+
+  it('shows only the current user\'s signature flags when a user is selected', async () => {
     const sigA: FormField = {
       id: 'sig_a',
       name: 'applicant_sig',
@@ -53,58 +85,6 @@ describe('SignatureIndexFlags', () => {
     };
 
     const formManager = new FormManager([sigA, sigB]);
-    const root = createRoot(container);
-
-    await act(async () => {
-      root.render(
-        <SignatureIndexFlags
-          formManager={formManager}
-          activeTab="View"
-        />
-      );
-    });
-
-    // Check header and tabs
-    expect(container.textContent).toContain('Signature Flags');
-    expect(container.textContent).toContain('Applicant Signature');
-    expect(container.textContent).toContain('Executive Signature');
-    expect(container.textContent).toContain('P.1');
-    expect(container.textContent).toContain('P.2');
-    expect(container.textContent).toContain('#1');
-    expect(container.textContent).toContain('#2');
-    expect(container.textContent).toContain('User A');
-    expect(container.textContent).toContain('User B');
-    expect(container.textContent).toContain('2 due');
-  });
-
-  it('filters sticky index flags to indicate signatures needed specifically for that user', async () => {
-    const sigA: FormField = {
-      id: 'sig_a',
-      name: 'applicant_sig',
-      label: 'Applicant Signature',
-      type: 'signature',
-      pageIndex: 1,
-      x: 50,
-      y: 100,
-      width: 200,
-      height: 50,
-      assigneeId: 'user_a',
-    };
-    const sigB: FormField = {
-      id: 'sig_b',
-      name: 'approver_sig',
-      label: 'Executive Signature',
-      type: 'digital_signature',
-      pageIndex: 2,
-      x: 50,
-      y: 200,
-      width: 220,
-      height: 60,
-      assigneeId: 'user_b',
-    };
-
-    const formManager = new FormManager([sigA, sigB]);
-    // Switch active user role to User A
     formManager.setCurrentAssignee('user_a');
 
     const root = createRoot(container);
@@ -118,11 +98,12 @@ describe('SignatureIndexFlags', () => {
       );
     });
 
-    // Should indicate User A's signatures
-    expect(container.textContent).toContain("User A's Signatures");
+    // Should show User A's name in the header and their signature
+    expect(container.textContent).toContain('User A');
     expect(container.textContent).toContain('Applicant Signature');
-    expect(container.textContent).toContain('1 due');
-    // Executive Signature (User B) should not be included under User A's flags
+    expect(container.textContent).toContain('Page 1');
+
+    // User B's signature should NOT be visible
     expect(container.textContent).not.toContain('Executive Signature');
 
     // Switch to User B
@@ -130,12 +111,12 @@ describe('SignatureIndexFlags', () => {
       formManager.setCurrentAssignee('user_b');
     });
 
-    expect(container.textContent).toContain("User B's Signatures");
+    expect(container.textContent).toContain('User B');
     expect(container.textContent).toContain('Executive Signature');
     expect(container.textContent).not.toContain('Applicant Signature');
   });
 
-  it('updates sticky flag status to SIGNED when a signature is completed', async () => {
+  it('updates status when a signature is completed', async () => {
     const sigA: FormField = {
       id: 'sig_a',
       name: 'applicant_sig',
@@ -162,8 +143,8 @@ describe('SignatureIndexFlags', () => {
       );
     });
 
-    expect(container.textContent).toContain('1 due');
-    expect(container.textContent).toContain('Applicant Signature');
+    // Should show "0/1" progress (pending)
+    expect(container.textContent).toContain('0/1');
 
     // Sign the field
     await act(async () => {
@@ -174,12 +155,12 @@ describe('SignatureIndexFlags', () => {
       });
     });
 
-    // Flag should update to completed signed status
-    expect(container.textContent).toContain('All signed');
-    expect(container.textContent).toContain('SIGNED');
+    // Should update to "All done"
+    expect(container.textContent).toContain('All done');
+    expect(container.textContent).toContain('✓');
   });
 
-  it('navigates and triggers active field change when a sticky flag is clicked', async () => {
+  it('navigates and triggers active field change when a flag is clicked', async () => {
     const sigA: FormField = {
       id: 'sig_a',
       name: 'applicant_sig',
@@ -194,6 +175,7 @@ describe('SignatureIndexFlags', () => {
     };
 
     const formManager = new FormManager([sigA]);
+    formManager.setCurrentAssignee('user_a');
     const root = createRoot(container);
 
     await act(async () => {
@@ -215,7 +197,7 @@ describe('SignatureIndexFlags', () => {
     expect(formManager.getActiveFieldId()).toBe('sig_a');
   });
 
-  it('allows collapsing and expanding the sticky flags dock', async () => {
+  it('allows collapsing and expanding the dock', async () => {
     const sigA: FormField = {
       id: 'sig_a',
       name: 'applicant_sig',
@@ -230,6 +212,7 @@ describe('SignatureIndexFlags', () => {
     };
 
     const formManager = new FormManager([sigA]);
+    formManager.setCurrentAssignee('user_a');
     const root = createRoot(container);
 
     await act(async () => {
@@ -242,17 +225,17 @@ describe('SignatureIndexFlags', () => {
     });
 
     // Find collapse button
-    const collapseBtn = container.querySelector('button[title="Minimize signature flags dock"]') as HTMLButtonElement;
+    const collapseBtn = container.querySelector('button[title="Minimize"]') as HTMLButtonElement;
     expect(collapseBtn).not.toBeNull();
 
     await act(async () => {
       collapseBtn.click();
     });
 
-    // Now collapsed button should appear
+    // Collapsed pill should appear
     const collapsedBtn = container.querySelector('.tspdf-sticky-flags-collapsed button') as HTMLButtonElement;
     expect(collapsedBtn).not.toBeNull();
-    expect(collapsedBtn.textContent).toContain('1 Sign');
+    expect(collapsedBtn.textContent).toContain('1 to sign');
 
     // Click to expand
     await act(async () => {

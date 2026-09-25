@@ -1011,8 +1011,8 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
               </div>
             )}
 
-            {/* Page Margin Sticky / Index Flag for Signature */}
-            {isSignature && activeTab === 'View' && (
+            {/* Page Margin Sticky / Index Flag for Signature — only for current user's fields */}
+            {isSignature && activeTab === 'View' && currentAssigneeId && field.assigneeId === currentAssigneeId && (
               <div
                 className="tspdf-page-sticky-flag"
                 onClick={(e) => {
@@ -1023,59 +1023,43 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 }}
                 style={{
                   position: 'absolute',
-                  right: '-12px',
+                  right: '-8px',
                   top: '50%',
                   transform: 'translateY(-50%) translateX(100%)',
-                  display: 'flex',
-                  alignItems: 'center',
                   zIndex: 26,
                   cursor: isReadOnly ? 'default' : 'pointer',
                   userSelect: 'none',
-                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))',
-                  transition: 'transform 0.15s ease',
                 }}
                 title={
                   isSigned
                     ? `Signed: ${field.label || 'Signature'}`
-                    : isAssignedToOther
-                    ? `Assigned to ${assignee?.name || 'another user'}`
                     : `Click to sign: ${field.label || 'Signature'}`
                 }
               >
-                {/* Pointing chevron arrow */}
                 <div
                   style={{
-                    width: 0,
-                    height: 0,
-                    borderTop: '11px solid transparent',
-                    borderBottom: '11px solid transparent',
-                    borderRight: `9px solid ${isSigned ? '#16a34a' : isAssignedToOther ? '#94a3b8' : fieldColor}`,
-                  }}
-                />
-                <div
-                  style={{
-                    backgroundColor: isSigned ? '#16a34a' : isAssignedToOther ? '#94a3b8' : fieldColor,
+                    backgroundColor: isSigned ? '#16a34a' : fieldColor,
                     color: '#ffffff',
-                    padding: '2px 8px 2px 5px',
-                    borderRadius: '0 4px 4px 0',
-                    fontSize: `${Math.max(8.5, 9.5 * scale)}px`,
-                    fontWeight: 700,
-                    letterSpacing: '0.2px',
+                    padding: '4px 10px',
+                    borderRadius: '14px',
+                    fontSize: `${Math.max(9, 10 * scale)}px`,
+                    fontWeight: 600,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '4px',
                     whiteSpace: 'nowrap',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
                   }}
                 >
                   {isSigned ? (
                     <>
                       <Check size={11} strokeWidth={3} />
-                      <span>SIGNED</span>
+                      <span>Signed</span>
                     </>
                   ) : (
                     <>
-                      <span>✍️</span>
-                      <span>{isAssignedToOther ? (assignee ? assignee.name : 'LOCKED') : 'SIGN'}</span>
+                      <PenTool size={10} />
+                      <span>Sign</span>
                     </>
                   )}
                 </div>

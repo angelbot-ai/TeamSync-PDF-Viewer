@@ -18,6 +18,8 @@ import {
   Download,
   Upload,
   Eye,
+  ListOrdered,
+  Users,
 } from 'lucide-react';
 import type { FormToolType } from '../forms/types';
 import type { FormManager } from '../forms/FormManager';
@@ -27,6 +29,10 @@ interface FormsToolbarProps {
   setActiveTool: (tool: FormToolType) => void;
   formManager: FormManager;
   onSwitchToView?: () => void;
+  showFlowOrder?: boolean;
+  setShowFlowOrder?: (show: boolean) => void;
+  selectedAssigneeFilter?: string | null;
+  setSelectedAssigneeFilter?: (id: string | null) => void;
 }
 
 export const FormsToolbar: React.FC<FormsToolbarProps> = ({
@@ -34,6 +40,10 @@ export const FormsToolbar: React.FC<FormsToolbarProps> = ({
   setActiveTool,
   formManager,
   onSwitchToView,
+  showFlowOrder = true,
+  setShowFlowOrder,
+  selectedAssigneeFilter = null,
+  setSelectedAssigneeFilter,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -150,6 +160,46 @@ export const FormsToolbar: React.FC<FormsToolbarProps> = ({
           active={activeTool === 'radio'}
           onClick={() => setActiveTool('radio')}
         />
+
+        <div style={{ width: '1px', height: '20px', backgroundColor: '#e5e7eb', margin: '0 6px' }} />
+
+        {/* Show Flow Order Numbers Toggle */}
+        {setShowFlowOrder && (
+          <ToolButton
+            icon={<ListOrdered size={16} />}
+            label="Show Flow Order"
+            active={showFlowOrder}
+            onClick={() => setShowFlowOrder(!showFlowOrder)}
+          />
+        )}
+
+        {/* Assignee View Filter */}
+        {setSelectedAssigneeFilter && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '2px' }}>
+            <Users size={14} color="#64748b" />
+            <select
+              value={selectedAssigneeFilter || ''}
+              onChange={(e) => setSelectedAssigneeFilter(e.target.value || null)}
+              style={{
+                fontSize: '12px',
+                padding: '2px 6px',
+                border: '1px solid #d1d5db',
+                borderRadius: '4px',
+                backgroundColor: '#ffffff',
+                color: '#334155',
+                cursor: 'pointer',
+              }}
+              title="Filter fields by user assignment"
+            >
+              <option value="">All Users</option>
+              {formManager.getAssignees().map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Right section: Builder Utilities & Test Form */}

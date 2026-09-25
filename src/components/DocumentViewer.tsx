@@ -132,6 +132,8 @@ export default function DocumentViewer({
   const containerRef = useRef<HTMLDivElement>(null);
   const bus = useViewerBus();
   const [activeFormTool, setActiveFormTool] = useState<FormToolType>('select');
+  const [showFlowOrder, setShowFlowOrder] = useState<boolean>(true);
+  const [selectedAssigneeFilter, setSelectedAssigneeFilter] = useState<string | null>(null);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [pageNum, setPageNum] = useState(1);
@@ -470,6 +472,41 @@ export default function DocumentViewer({
       });
     }
   }, [compareState.diffItems, pageNum, scale, pageTransition, rowIndexOfPage, rowLayout.tops]);
+
+  // Smooth scroll document to active form field during form flow navigation
+  useEffect(() => {
+    if (!formManager) return;
+    const unsub = formManager.onActiveFieldChange((fieldId) => {
+      if (!fieldId) return;
+      const target = formManager.getFields().find((f) => f.id === fieldId);
+      if (!target) return;
+
+      if (pageTransition !== 'continuous' && target.pageIndex !== pageNum) {
+        setPageNum(target.pageIndex);
+      }
+
+      if (containerRef.current) {
+        const p = target.pageIndex;
+        const rIdx = rowIndexOfPage(p);
+        const rowTop = pageTransition === 'continuous' && rIdx >= 0 ? (rowLayout.tops[rIdx] ?? 0) : 0;
+        const viewHeight = containerRef.current.clientHeight || 600;
+        const viewWidth = containerRef.current.clientWidth || 800;
+
+        const targetY = target.y * scale;
+        const targetX = target.x * scale;
+
+        const scrollToY = Math.max(0, rowTop + targetY - viewHeight / 3);
+        const scrollToX = Math.max(0, targetX - viewWidth / 4);
+
+        containerRef.current.scrollTo({
+          top: scrollToY,
+          left: scrollToX,
+          behavior: 'smooth',
+        });
+      }
+    });
+    return unsub;
+  }, [formManager, pageTransition, pageNum, rowIndexOfPage, rowLayout.tops, scale]);
 
   // The annotation list lives in the AnnotationManager (undo/redo, permissions, events, XFDF).
   const annotations = useSyncExternalStore(annotationManager.subscribe, annotationManager.getSnapshot, annotationManager.getSnapshot);
@@ -1879,6 +1916,10 @@ export default function DocumentViewer({
           setActiveTool={setActiveFormTool}
           formManager={formManager}
           onSwitchToView={() => setActiveTab?.('View')}
+          showFlowOrder={showFlowOrder}
+          setShowFlowOrder={setShowFlowOrder}
+          selectedAssigneeFilter={selectedAssigneeFilter}
+          setSelectedAssigneeFilter={setSelectedAssigneeFilter}
         />
       )}
 
@@ -2221,6 +2262,8 @@ export default function DocumentViewer({
                         activeFormTool={activeFormTool}
                         setActiveFormTool={setActiveFormTool}
                         canFillForms={permissions?.canFillForms !== false}
+                        showFlowOrder={showFlowOrder}
+                        selectedAssigneeFilter={selectedAssigneeFilter}
                       />
                       {compareState.isActive && compareState.mode === 'overlay' && pdfDocB && (
                         <div style={{

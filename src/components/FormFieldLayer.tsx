@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Settings, Trash2, Copy } from 'lucide-react';
-import type { FormField, FormToolType, FormDataRecord } from '../forms/types';
+import { Settings, Trash2, Copy, Lock } from 'lucide-react';
+import type { FormField, FormToolType, FormDataRecord, FormAssignee } from '../forms/types';
 import type { FormManager } from '../forms/FormManager';
 import { FormFieldEditorModal } from './FormFieldEditorModal';
 import { convertToRotatedRect, convertToUnrotated } from '../utils/rotationUtils';
@@ -21,6 +21,8 @@ interface FormFieldLayerProps {
   setActiveTool: (tool: FormToolType) => void;
   formManager: FormManager;
   canFillForms?: boolean;
+  showFlowOrder?: boolean;
+  selectedAssigneeFilter?: string | null;
 }
 
 const newId = (): string =>
@@ -39,9 +41,14 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
   setActiveTool,
   formManager,
   canFillForms = true,
+  showFlowOrder = true,
+  selectedAssigneeFilter = null,
 }) => {
   const [fields, setFields] = useState<FormField[]>(() => formManager.getFieldsForPage(pageNum));
   const [values, setValues] = useState<FormDataRecord>(() => formManager.getValues());
+  const [assignees, setAssignees] = useState<FormAssignee[]>(() => formManager.getAssignees());
+  const [currentAssigneeId, setCurrentAssigneeId] = useState<string | null>(() => formManager.getCurrentAssignee());
+  const [activeFieldId, setActiveFieldId] = useState<string | null>(() => formManager.getActiveFieldId());
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<FormField | null>(null);
 
@@ -63,7 +70,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
   const unW = rotation % 180 === 0 ? basePageWidth : basePageHeight;
   const unH = rotation % 180 === 0 ? basePageHeight : basePageWidth;
 
-  // Sync fields and values from FormManager
+  // Sync fields, values, assignees and flow state from FormManager
   useEffect(() => {
     const unsubFields = formManager.onFieldsChange(() => {
       setFields(formManager.getFieldsForPage(pageNum));
@@ -71,13 +78,35 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
     const unsubData = formManager.onDataChange((newValues) => {
       setValues(newValues);
     });
+    const unsubAssignees = formManager.onAssigneesChange((newAssignees) => {
+      setAssignees(newAssignees);
+    });
+    const unsubCurrent = formManager.onCurrentAssigneeChange((curr) => {
+      setCurrentAssigneeId(curr);
+    });
+    const unsubActive = formManager.onActiveFieldChange((actId) => {
+      setActiveFieldId(actId);
+    });
     return () => {
       unsubFields();
       unsubData();
+      unsubAssignees();
+      unsubCurrent();
+      unsubActive();
     };
   }, [formManager, pageNum]);
 
-  // Keyboard deletion of selected field
+  // Auto-focus active field when navigated in Filler mode
+  useEffect(() => {
+    if (activeFieldId && activeTab === 'View') {
+      const el = document.getElementById(`tspdf-field-${activeFieldId}`);
+      if (el && document.activeElement !== el) {
+        el.focus();
+      }
+    }
+  }, [activeFieldId, activeTab]);
+
+  // Keyboard deletion of selected field in builder
   useEffect(() => {
     if (activeTab !== 'Forms' || !selectedFieldId) return;
 
@@ -149,69 +178,79 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
             y = initialField.y + dy;
           }
         }
-        formManager.updateField(fieldId, { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) }, false);
+        formManager.updateField(fieldId, {
+          x: Math.round(x),
+          y: Math.round(y),
+          width: Math.round(width),
+          height: Math.round(height),
+        }, false);
       }
       return;
     }
 
     if (creationRect) {
       const pt = getPdfCoordinates(e);
-      setCreationRect((prev) => (prev ? { ...prev, curX: pt.x, curY: pt.y } : null));
+      setCreationRect(prev => prev ? { ...prev, curX: pt.x, curY: pt.y } : null);
     }
   }, [creationRect, getPdfCoordinates, basePageWidth, basePageHeight, formManager]);
 
   const handleMouseUp = useCallback(() => {
     if (dragRef.current) {
       dragRef.current = null;
-      return;
     }
 
-    if (creationRect && isCreating && activeTool) {
+    if (creationRect) {
       const minX = Math.min(creationRect.startX, creationRect.curX);
       const minY = Math.min(creationRect.startY, creationRect.curY);
       const w = Math.abs(creationRect.curX - creationRect.startX);
       const h = Math.abs(creationRect.curY - creationRect.startY);
 
-      const defaultDims: Record<string, { w: number; h: number }> = {
-        textbox: { w: 180, h: 36 },
-        textarea: { w: 220, h: 72 },
-        datetime: { w: 180, h: 36 },
-        checklist: { w: 180, h: 90 },
-        dropdown: { w: 160, h: 36 },
-        radio: { w: 160, h: 70 },
-      };
+      // Only create if rectangle has reasonable dimensions and active creation tool
+      if (activeTool && activeTool !== 'select' && w >= 20 && h >= 15) {
+        const defaultLabels: Record<string, string> = {
+          textbox: 'Text Field',
+          textarea: 'Text Area',
+          datetime: 'Date/Time',
+          checklist: 'Checklist',
+          dropdown: 'Dropdown',
+          radio: 'Radio Group',
+        };
 
-      const dim = defaultDims[activeTool] || { w: 160, h: 36 };
-      const finalW = w > 15 ? Math.round(w) : dim.w;
-      const finalH = h > 15 ? Math.round(h) : dim.h;
-      const finalX = Math.round(w > 15 ? minX : creationRect.startX);
-      const finalY = Math.round(h > 15 ? minY : creationRect.startY);
+        const existingCount = formManager.getFields().length;
+        const targetAssigneeId = selectedAssigneeFilter || (assignees.length > 0 ? assignees[0].id : undefined);
 
-      const fieldId = newId();
-      const count = formManager.getFields().filter((f) => f.type === activeTool || (activeTool === 'textbox' && (f.type === 'text' || (f.type as string) === 'textbox'))).length + 1;
-      const resolvedType = (activeTool === 'textbox' ? 'text' : activeTool) as FormField['type'];
-      const newField: FormField = {
-        id: fieldId,
-        name: `${activeTool}_${count}`,
-        type: resolvedType,
-        pageIndex: pageNum,
-        x: Math.max(0, Math.min(basePageWidth - finalW, finalX)),
-        y: Math.max(0, Math.min(basePageHeight - finalH, finalY)),
-        width: finalW,
-        height: finalH,
-        label: `${activeTool.charAt(0).toUpperCase() + activeTool.slice(1)} ${count}`,
-        placeholder: ['textbox', 'text', 'textarea'].includes(activeTool) ? 'Enter text...' : undefined,
-        required: false,
-        options: ['checklist', 'dropdown', 'radio'].includes(activeTool) ? ['Option 1', 'Option 2', 'Option 3'] : undefined,
-        dateFormat: activeTool === 'datetime' ? 'datetime' : undefined,
-      };
+        const newField: FormField = {
+          id: newId(),
+          name: `${activeTool}_${existingCount + 1}`,
+          label: defaultLabels[activeTool] || 'Field',
+          type: activeTool === 'textbox' ? 'text' : (activeTool as any),
+          pageIndex: pageNum,
+          x: Math.round(minX),
+          y: Math.round(minY),
+          width: Math.round(w),
+          height: Math.round(h),
+          required: false,
+          assigneeId: targetAssigneeId,
+          flowOrder: existingCount + 1,
+          fontSize: 13,
+          textColor: '#0f172a',
+          backgroundColor: '#ffffff',
+          borderRadius: 3,
+          borderWidth: 1,
+          options: ['checklist', 'dropdown', 'radio'].includes(activeTool)
+            ? ['Option 1', 'Option 2', 'Option 3']
+            : undefined,
+          dateFormat: activeTool === 'datetime' ? 'datetime' : undefined,
+        };
 
-      formManager.addField(newField);
-      setSelectedFieldId(fieldId);
-      setActiveTool('select');
+        formManager.addField(newField);
+        setSelectedFieldId(newField.id);
+        setActiveTool('select');
+      }
+
       setCreationRect(null);
     }
-  }, [creationRect, isCreating, activeTool, pageNum, basePageWidth, basePageHeight, formManager, setActiveTool]);
+  }, [creationRect, activeTool, pageNum, formManager, setActiveTool, selectedAssigneeFilter, assignees]);
 
   useEffect(() => {
     window.addEventListener('mousemove', handleMouseMove);
@@ -222,14 +261,13 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
     };
   }, [handleMouseMove, handleMouseUp]);
 
-  // Start field resize
-  const handleStartResize = (field: FormField, handle: string, e: React.MouseEvent) => {
+  const handleStartMove = (field: FormField, e: React.MouseEvent) => {
+    if (activeTab !== 'Forms' || activeTool !== 'select') return;
     e.stopPropagation();
-    e.preventDefault();
+    setSelectedFieldId(field.id);
     const pt = getPdfCoordinates(e);
     dragRef.current = {
-      type: 'resize',
-      handle,
+      type: 'move',
       fieldId: field.id,
       startX: pt.x,
       startY: pt.y,
@@ -237,14 +275,12 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
     };
   };
 
-  // Start field move
-  const handleStartMove = (field: FormField, e: React.MouseEvent) => {
+  const handleStartResize = (field: FormField, handle: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    e.preventDefault();
-    setSelectedFieldId(field.id);
     const pt = getPdfCoordinates(e);
     dragRef.current = {
-      type: 'move',
+      type: 'resize',
+      handle,
       fieldId: field.id,
       startX: pt.x,
       startY: pt.y,
@@ -260,6 +296,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
       name: `${field.name}_copy`,
       x: Math.min(basePageWidth - field.width, field.x + 20),
       y: Math.min(basePageHeight - field.height, field.y + 20),
+      flowOrder: field.flowOrder !== undefined ? field.flowOrder + 1 : undefined,
     };
     formManager.addField(dup);
     setSelectedFieldId(dup.id);
@@ -269,6 +306,18 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
     e.stopPropagation();
     formManager.deleteField(id);
     if (selectedFieldId === id) setSelectedFieldId(null);
+  };
+
+  // Keyboard navigation helper for filler inputs
+  const handleInputKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        formManager.goToPreviousField();
+      } else {
+        formManager.goToNextField();
+      }
+    }
   };
 
   // Render Creation Preview Box
@@ -320,6 +369,10 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
         const isSelected = activeTab === 'Forms' && selectedFieldId === field.id;
         const fieldValue = values[field.name] !== undefined ? values[field.name] : (field.defaultValue ?? '');
 
+        const assignee = assignees.find((a) => a.id === field.assigneeId);
+        const fieldColor = assignee?.color || '#0284c7';
+        const isFilteredOut = Boolean(selectedAssigneeFilter && field.assigneeId !== selectedAssigneeFilter);
+
         // --------------------------------------------------------------------------------------
         // BUILDER MODE PRESENTATION
         // --------------------------------------------------------------------------------------
@@ -343,9 +396,9 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 top: `${rot.y * scale}px`,
                 width: `${rot.width * scale}px`,
                 height: `${rot.height * scale}px`,
-                backgroundColor: isSelected ? 'rgba(2, 132, 199, 0.15)' : 'rgba(240, 249, 255, 0.75)',
-                border: isSelected ? '2px solid #0284c7' : '1px dashed #38bdf8',
-                borderRadius: '4px',
+                backgroundColor: isSelected ? `${fieldColor}26` : `${fieldColor}12`,
+                border: isSelected ? `2px solid ${fieldColor}` : `1.5px dashed ${fieldColor}`,
+                borderRadius: `${field.borderRadius ?? 4}px`,
                 cursor: 'move',
                 zIndex: isSelected ? 25 : 20,
                 display: 'flex',
@@ -353,37 +406,96 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 justifyContent: 'center',
                 padding: '4px 6px',
                 boxSizing: 'border-box',
-                boxShadow: isSelected ? '0 0 0 2px rgba(2, 132, 199, 0.3)' : 'none',
+                boxShadow: isSelected ? `0 0 0 2px ${fieldColor}4d` : 'none',
+                opacity: isFilteredOut ? 0.35 : 1,
+                transition: 'opacity 0.15s ease',
               }}
             >
-              {/* Field Label & Type Tag */}
+              {/* Field Label, Flow Order & Assignee Badge */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', overflow: 'hidden' }}>
-                <span
-                  style={{
-                    fontSize: `${Math.max(10, 11 * scale)}px`,
-                    fontWeight: 600,
-                    color: '#0369a1',
-                    whiteSpace: 'nowrap',
-                    textOverflow: 'ellipsis',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {field.label || field.name}
-                  {field.required && <span style={{ color: '#ef4444' }}> *</span>}
-                </span>
-                <span
-                  style={{
-                    fontSize: `${Math.max(8, 9 * scale)}px`,
-                    backgroundColor: '#e0f2fe',
-                    color: '#0284c7',
-                    padding: '1px 4px',
-                    borderRadius: '3px',
-                    textTransform: 'uppercase',
-                    fontWeight: 700,
-                  }}
-                >
-                  {field.type}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0, overflow: 'hidden' }}>
+                  {showFlowOrder && field.flowOrder !== undefined && (
+                    <span
+                      style={{
+                        fontSize: `${Math.max(9, 10 * scale)}px`,
+                        fontWeight: 700,
+                        backgroundColor: fieldColor,
+                        color: '#ffffff',
+                        padding: '1px 5px',
+                        borderRadius: '10px',
+                        flexShrink: 0,
+                        lineHeight: 1.2,
+                      }}
+                      title={`Flow step ${field.flowOrder}`}
+                    >
+                      #{field.flowOrder}
+                    </span>
+                  )}
+                  <span
+                    style={{
+                      fontSize: `${Math.max(10, 11 * scale)}px`,
+                      fontWeight: 600,
+                      color: fieldColor,
+                      whiteSpace: 'nowrap',
+                      textOverflow: 'ellipsis',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {field.label || field.name}
+                    {field.required && <span style={{ color: '#ef4444' }}> *</span>}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                  {assignee ? (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        fontSize: `${Math.max(8, 9 * scale)}px`,
+                        backgroundColor: `${fieldColor}22`,
+                        color: fieldColor,
+                        border: `1px solid ${fieldColor}44`,
+                        padding: '1px 4px',
+                        borderRadius: '10px',
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={`Assigned to ${assignee.name}`}
+                    >
+                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: fieldColor }} />
+                      {assignee.name.split(' ')[0]}
+                    </span>
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: `${Math.max(8, 9 * scale)}px`,
+                        backgroundColor: '#f1f5f9',
+                        color: '#64748b',
+                        padding: '1px 4px',
+                        borderRadius: '3px',
+                        fontWeight: 500,
+                      }}
+                    >
+                      Anyone
+                    </span>
+                  )}
+
+                  <span
+                    style={{
+                      fontSize: `${Math.max(8, 9 * scale)}px`,
+                      backgroundColor: '#e0f2fe',
+                      color: '#0284c7',
+                      padding: '1px 4px',
+                      borderRadius: '3px',
+                      textTransform: 'uppercase',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {field.type}
+                  </span>
+                </div>
               </div>
 
               {/* Quick floating action bar when selected */}
@@ -417,7 +529,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                       border: 'none',
                       cursor: 'pointer',
                       padding: '4px',
-                      color: '#0284c7',
+                      color: fieldColor,
                     }}
                   >
                     <Settings size={14} />
@@ -462,7 +574,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                       width: '7px',
                       height: '7px',
                       backgroundColor: '#ffffff',
-                      border: '1.5px solid #0284c7',
+                      border: `1.5px solid ${fieldColor}`,
                       borderRadius: '1px',
                       zIndex: 30,
                     };
@@ -502,8 +614,60 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
         // --------------------------------------------------------------------------------------
         // FILLER MODE PRESENTATION (View Tab)
         // --------------------------------------------------------------------------------------
-        const isReadOnly = !canFillForms || field.readOnly;
-        const fontSizePx = Math.max(11, 13 * scale);
+        const isAssignedToOther = currentAssigneeId !== null && !!field.assigneeId && field.assigneeId !== currentAssigneeId;
+        const isReadOnly = !canFillForms || field.readOnly || isAssignedToOther;
+        const isActive = activeFieldId === field.id;
+
+        // Custom styled dimensions and appearance
+        const effectiveFontSizePx = Math.max(10, (field.fontSize || 13) * scale);
+        const effectiveFontFamily = field.fontFamily || 'inherit';
+        const effectiveFontWeight = field.fontWeight || 'normal';
+        const effectiveFontStyle = field.fontStyle || 'normal';
+        const effectiveTextAlign = field.textAlign || 'left';
+
+        const effectiveTextColor = isAssignedToOther
+          ? '#94a3b8'
+          : field.textColor || '#0f172a';
+
+        const effectiveBgColor = isAssignedToOther
+          ? 'rgba(241, 245, 249, 0.8)'
+          : field.backgroundColor === 'transparent'
+          ? 'transparent'
+          : field.backgroundColor || '#ffffff';
+
+        const effectiveBorderColor = isAssignedToOther
+          ? '#cbd5e1'
+          : field.borderColor || (assignee ? assignee.color : '#94a3b8');
+
+        const effectiveBorderWidth = field.borderWidth ?? 1.5;
+        const effectiveBorderRadius = field.borderRadius ?? 3;
+
+        const baseInputStyle: React.CSSProperties = {
+          width: '100%',
+          height: '100%',
+          fontSize: `${effectiveFontSizePx}px`,
+          fontFamily: effectiveFontFamily,
+          fontWeight: effectiveFontWeight,
+          fontStyle: effectiveFontStyle,
+          textAlign: effectiveTextAlign,
+          color: effectiveTextColor,
+          backgroundColor: effectiveBgColor,
+          border: `${effectiveBorderWidth}px solid ${effectiveBorderColor}`,
+          borderRadius: `${effectiveBorderRadius}px`,
+          boxSizing: 'border-box',
+          outline: 'none',
+          boxShadow: isActive
+            ? `0 0 0 2.5px ${fieldColor}80`
+            : isAssignedToOther
+            ? 'none'
+            : '0 1px 2px rgba(0, 0, 0, 0.05)',
+          cursor: isReadOnly ? 'not-allowed' : 'text',
+          transition: 'box-shadow 0.15s ease, border-color 0.15s ease',
+        };
+
+        const handleFocus = () => {
+          formManager.setActiveFieldId(field.id);
+        };
 
         return (
           <div
@@ -514,31 +678,79 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
               top: `${rot.y * scale}px`,
               width: `${rot.width * scale}px`,
               height: `${rot.height * scale}px`,
-              zIndex: 16,
+              zIndex: isActive ? 22 : 16,
               boxSizing: 'border-box',
               pointerEvents: 'auto',
             }}
           >
+            {/* Top Multi-User Badge / Lock indicator */}
+            {isAssignedToOther ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '-18px',
+                  left: '0px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  backgroundColor: fieldColor,
+                  color: '#ffffff',
+                  fontSize: `${Math.max(9, 10 * scale)}px`,
+                  fontWeight: 600,
+                  padding: '1px 5px',
+                  borderRadius: '3px',
+                  pointerEvents: 'none',
+                  zIndex: 25,
+                  whiteSpace: 'nowrap',
+                  lineHeight: 1.2,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                }}
+              >
+                <Lock size={10} />
+                <span>{assignee ? assignee.name : 'Other User'}</span>
+              </div>
+            ) : assignee ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '-16px',
+                  left: '0px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  backgroundColor: '#ffffff',
+                  color: fieldColor,
+                  border: `1px solid ${fieldColor}`,
+                  fontSize: `${Math.max(8, 9 * scale)}px`,
+                  fontWeight: 600,
+                  padding: '0 4px',
+                  borderRadius: '3px',
+                  pointerEvents: 'none',
+                  zIndex: 25,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+                  lineHeight: 1.3,
+                }}
+              >
+                <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: fieldColor }} />
+                <span>{assignee.name}</span>
+                {field.flowOrder !== undefined && <span style={{ opacity: 0.7 }}>#{field.flowOrder}</span>}
+              </div>
+            ) : null}
+
             {/* Textbox Input */}
             {(field.type === 'text' || (field.type as string) === 'textbox') && (
               <input
+                id={`tspdf-field-${field.id}`}
                 type="text"
                 disabled={isReadOnly}
                 value={fieldValue}
                 placeholder={field.placeholder || field.label || ''}
                 onChange={(e) => formManager.setValue(field.name, e.target.value)}
+                onFocus={handleFocus}
+                onKeyDown={handleInputKeyDown}
                 style={{
-                  width: '100%',
-                  height: '100%',
-                  fontSize: `${fontSizePx}px`,
+                  ...baseInputStyle,
                   padding: `${2 * scale}px ${6 * scale}px`,
-                  border: '1.5px solid #94a3b8',
-                  borderRadius: '3px',
-                  backgroundColor: '#ffffff',
-                  color: '#0f172a',
-                  boxSizing: 'border-box',
-                  outline: 'none',
-                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
                 }}
               />
             )}
@@ -546,23 +758,17 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
             {/* Text Area Input */}
             {field.type === 'textarea' && (
               <textarea
+                id={`tspdf-field-${field.id}`}
                 disabled={isReadOnly}
                 value={fieldValue}
                 placeholder={field.placeholder || field.label || ''}
                 onChange={(e) => formManager.setValue(field.name, e.target.value)}
+                onFocus={handleFocus}
+                onKeyDown={handleInputKeyDown}
                 style={{
-                  width: '100%',
-                  height: '100%',
-                  fontSize: `${fontSizePx}px`,
-                  padding: `${4 * scale}px ${6 * scale}px`,
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '3px',
-                  backgroundColor: '#ffffff',
-                  color: '#1e293b',
-                  boxSizing: 'border-box',
+                  ...baseInputStyle,
                   resize: 'none',
-                  outline: 'none',
-                  fontFamily: 'inherit',
+                  padding: `${4 * scale}px ${6 * scale}px`,
                 }}
               />
             )}
@@ -570,21 +776,16 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
             {/* Date and Time Picker */}
             {field.type === 'datetime' && (
               <input
+                id={`tspdf-field-${field.id}`}
                 type={field.dateFormat === 'date' ? 'date' : field.dateFormat === 'time' ? 'time' : 'datetime-local'}
                 disabled={isReadOnly}
                 value={fieldValue}
                 onChange={(e) => formManager.setValue(field.name, e.target.value)}
+                onFocus={handleFocus}
+                onKeyDown={handleInputKeyDown}
                 style={{
-                  width: '100%',
-                  height: '100%',
-                  fontSize: `${fontSizePx}px`,
+                  ...baseInputStyle,
                   padding: `${2 * scale}px ${6 * scale}px`,
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '3px',
-                  backgroundColor: '#ffffff',
-                  color: '#1e293b',
-                  boxSizing: 'border-box',
-                  outline: 'none',
                 }}
               />
             )}
@@ -592,18 +793,18 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
             {/* Check List (Multi-item list with checkboxes) */}
             {field.type === 'checklist' && (
               <div
+                id={`tspdf-field-${field.id}`}
+                tabIndex={isReadOnly ? -1 : 0}
+                onFocus={handleFocus}
+                onKeyDown={handleInputKeyDown}
                 style={{
-                  width: '100%',
-                  height: '100%',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '3px',
+                  ...baseInputStyle,
                   padding: `${4 * scale}px ${6 * scale}px`,
-                  boxSizing: 'border-box',
                   overflowY: 'auto',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: `${2 * scale}px`,
+                  cursor: isReadOnly ? 'not-allowed' : 'default',
                 }}
               >
                 {(field.options && field.options.length > 0 ? field.options : ['Check item']).map((opt, oIdx) => {
@@ -617,9 +818,10 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                         display: 'flex',
                         alignItems: 'center',
                         gap: `${4 * scale}px`,
-                        fontSize: `${fontSizePx}px`,
-                        color: '#334155',
-                        cursor: isReadOnly ? 'default' : 'pointer',
+                        fontSize: `${effectiveFontSizePx}px`,
+                        fontFamily: effectiveFontFamily,
+                        color: effectiveTextColor,
+                        cursor: isReadOnly ? 'not-allowed' : 'pointer',
                         userSelect: 'none',
                       }}
                     >
@@ -635,7 +837,8 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                           }
                         }}
                         style={{
-                          cursor: isReadOnly ? 'default' : 'pointer',
+                          cursor: isReadOnly ? 'not-allowed' : 'pointer',
+                          accentColor: fieldColor,
                         }}
                       />
                       <span>{opt}</span>
@@ -648,12 +851,21 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
             {/* Single Checkbox */}
             {field.type === 'checkbox' && (
               <div
+                id={`tspdf-field-${field.id}`}
+                tabIndex={isReadOnly ? -1 : 0}
+                onFocus={handleFocus}
+                onKeyDown={handleInputKeyDown}
                 style={{
-                  width: '100%',
-                  height: '100%',
+                  ...baseInputStyle,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  cursor: isReadOnly ? 'not-allowed' : 'pointer',
+                }}
+                onClick={() => {
+                  if (!isReadOnly) {
+                    formManager.setValue(field.name, !fieldValue);
+                  }
                 }}
               >
                 <input
@@ -664,7 +876,8 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                   style={{
                     width: '75%',
                     height: '75%',
-                    cursor: isReadOnly ? 'default' : 'pointer',
+                    cursor: isReadOnly ? 'not-allowed' : 'pointer',
+                    accentColor: fieldColor,
                   }}
                 />
               </div>
@@ -673,20 +886,16 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
             {/* Dropdown Select */}
             {field.type === 'dropdown' && (
               <select
+                id={`tspdf-field-${field.id}`}
                 disabled={isReadOnly}
                 value={fieldValue}
                 onChange={(e) => formManager.setValue(field.name, e.target.value)}
+                onFocus={handleFocus}
+                onKeyDown={handleInputKeyDown}
                 style={{
-                  width: '100%',
-                  height: '100%',
-                  fontSize: `${fontSizePx}px`,
+                  ...baseInputStyle,
                   padding: `${2 * scale}px ${4 * scale}px`,
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '3px',
-                  backgroundColor: '#ffffff',
-                  color: '#1e293b',
-                  boxSizing: 'border-box',
-                  outline: 'none',
+                  cursor: isReadOnly ? 'not-allowed' : 'pointer',
                 }}
               >
                 <option value="">{field.placeholder || '-- Select --'}</option>
@@ -701,18 +910,18 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
             {/* Radio Group */}
             {field.type === 'radio' && (
               <div
+                id={`tspdf-field-${field.id}`}
+                tabIndex={isReadOnly ? -1 : 0}
+                onFocus={handleFocus}
+                onKeyDown={handleInputKeyDown}
                 style={{
-                  width: '100%',
-                  height: '100%',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '3px',
+                  ...baseInputStyle,
                   padding: `${4 * scale}px ${6 * scale}px`,
-                  boxSizing: 'border-box',
                   overflowY: 'auto',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: `${2 * scale}px`,
+                  cursor: isReadOnly ? 'not-allowed' : 'default',
                 }}
               >
                 {(field.options || []).map((opt, oIdx) => (
@@ -722,9 +931,10 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                       display: 'flex',
                       alignItems: 'center',
                       gap: `${4 * scale}px`,
-                      fontSize: `${fontSizePx}px`,
-                      color: '#334155',
-                      cursor: isReadOnly ? 'default' : 'pointer',
+                      fontSize: `${effectiveFontSizePx}px`,
+                      fontFamily: effectiveFontFamily,
+                      color: effectiveTextColor,
+                      cursor: isReadOnly ? 'not-allowed' : 'pointer',
                       userSelect: 'none',
                     }}
                   >
@@ -734,7 +944,10 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                       disabled={isReadOnly}
                       checked={fieldValue === opt}
                       onChange={() => formManager.setValue(field.name, opt)}
-                      style={{ cursor: isReadOnly ? 'default' : 'pointer' }}
+                      style={{
+                        cursor: isReadOnly ? 'not-allowed' : 'pointer',
+                        accentColor: fieldColor,
+                      }}
                     />
                     <span>{opt}</span>
                   </label>
@@ -749,6 +962,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
       {editingField && (
         <FormFieldEditorModal
           field={editingField}
+          assignees={assignees}
           onSave={(updates) => {
             formManager.updateField(editingField.id, updates);
             setEditingField(null);

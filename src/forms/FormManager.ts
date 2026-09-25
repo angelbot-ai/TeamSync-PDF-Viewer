@@ -3,7 +3,13 @@
  * FormManager — central state manager for PDF forms builder schema and form filler data.
  */
 
-import type { FormField, FormDataRecord, FormValidationResult } from './types';
+import type { FormField, FormDataRecord, FormValidationResult, FormAssignee } from './types';
+
+export const DEFAULT_ASSIGNEES: FormAssignee[] = [
+  { id: 'user_a', name: 'User A', color: '#2563eb' },
+  { id: 'user_b', name: 'User B', color: '#9333ea' },
+  { id: 'user_c', name: 'User C', color: '#059669' },
+];
 
 export interface FormFieldsChangeEvent {
   fields: FormField[];
@@ -22,15 +28,26 @@ const MAX_HISTORY = 100;
 export class FormManager {
   private fields: FormField[] = [];
   private values: FormDataRecord = {};
+  private assignees: FormAssignee[] = [...DEFAULT_ASSIGNEES];
+  private currentAssigneeId: string | null = null;
+  private activeFieldId: string | null = null;
   private past: HistorySnapshot[] = [];
   private future: HistorySnapshot[] = [];
   private fieldsListeners = new Set<FormFieldsChangeListener>();
   private dataListeners = new Set<FormDataChangeListener>();
+  private assigneesListeners = new Set<(assignees: FormAssignee[]) => void>();
+  private activeAssigneeListeners = new Set<(assigneeId: string | null) => void>();
+  private activeFieldListeners = new Set<(fieldId: string | null) => void>();
   private readOnly = false;
 
-  constructor(initialFields: FormField[] = [], initialValues: FormDataRecord = {}) {
+  constructor(
+    initialFields: FormField[] = [],
+    initialValues: FormDataRecord = {},
+    initialAssignees: FormAssignee[] = DEFAULT_ASSIGNEES
+  ) {
     this.fields = [...initialFields];
     this.values = { ...initialValues };
+    this.assignees = initialAssignees && initialAssignees.length > 0 ? [...initialAssignees] : [...DEFAULT_ASSIGNEES];
   }
 
   // ---- Subscriptions -----------------------------------------------------------------------
@@ -222,13 +239,134 @@ export class FormManager {
     return this.readOnly;
   }
 
+  // ---- Assignees & Multi-User -------------------------------------------------------------
+
+  getAssignees(): FormAssignee[] {
+    return [...this.assignees];
+  }
+
+  setAssignees(assignees: FormAssignee[]): void {
+    this.assignees = [...assignees];
+    for (const l of this.assigneesListeners) l(this.getAssignees());
+  }
+
+  addAssignee(assignee: FormAssignee): void {
+    if (this.assignees.some((a) => a.id === assignee.id)) return;
+    this.assignees.push(assignee);
+    for (const l of this.assigneesListeners) l(this.getAssignees());
+  }
+
+  getAssignee(id?: string): FormAssignee | undefined {
+    if (!id) return undefined;
+    return this.assignees.find((a) => a.id === id);
+  }
+
+  onAssigneesChange(listener: (assignees: FormAssignee[]) => void): () => void {
+    this.assigneesListeners.add(listener);
+    return () => this.assigneesListeners.delete(listener);
+  }
+
+  getCurrentAssignee(): string | null {
+    return this.currentAssigneeId;
+  }
+
+  setCurrentAssignee(id: string | null): void {
+    this.currentAssigneeId = id;
+    for (const l of this.activeAssigneeListeners) l(id);
+  }
+
+  onCurrentAssigneeChange(listener: (assigneeId: string | null) => void): () => void {
+    this.activeAssigneeListeners.add(listener);
+    return () => this.activeAssigneeListeners.delete(listener);
+  }
+
+  // ---- Active Field & Form Flow -----------------------------------------------------------
+
+  getActiveFieldId(): string | null {
+    return this.activeFieldId;
+  }
+
+  setActiveFieldId(fieldId: string | null): void {
+    this.activeFieldId = fieldId;
+    for (const l of this.activeFieldListeners) l(fieldId);
+  }
+
+  onActiveFieldChange(listener: (fieldId: string | null) => void): () => void {
+    this.activeFieldListeners.add(listener);
+    return () => this.activeFieldListeners.delete(listener);
+  }
+
+  /**
+   * Returns form fields sorted according to flow order.
+   * If assigneeId is provided, filters to fields assigned to that user.
+   */
+  getFlowFields(assigneeId?: string | null): FormField[] {
+    const targetAssignee = assigneeId !== undefined ? assigneeId : this.currentAssigneeId;
+    let list = [...this.fields];
+
+    if (targetAssignee) {
+      list = list.filter((f) => f.assigneeId === targetAssignee);
+    }
+
+    return list.sort((a, b) => {
+      if (a.flowOrder !== undefined && b.flowOrder !== undefined) {
+        return a.flowOrder - b.flowOrder;
+      }
+      if (a.flowOrder !== undefined) return -1;
+      if (b.flowOrder !== undefined) return 1;
+      if (a.pageIndex !== b.pageIndex) return a.pageIndex - b.pageIndex;
+      if (Math.abs(a.y - b.y) > 10) return a.y - b.y;
+      return a.x - b.x;
+    });
+  }
+
+  getNextField(currentFieldId?: string | null, assigneeId?: string | null): FormField | null {
+    const flow = this.getFlowFields(assigneeId);
+    if (flow.length === 0) return null;
+    const curId = currentFieldId ?? this.activeFieldId;
+    if (!curId) return flow[0];
+    const idx = flow.findIndex((f) => f.id === curId);
+    if (idx === -1) return flow[0];
+    if (idx + 1 < flow.length) return flow[idx + 1];
+    return flow[0]; // loop around
+  }
+
+  getPreviousField(currentFieldId?: string | null, assigneeId?: string | null): FormField | null {
+    const flow = this.getFlowFields(assigneeId);
+    if (flow.length === 0) return null;
+    const curId = currentFieldId ?? this.activeFieldId;
+    if (!curId) return flow[flow.length - 1];
+    const idx = flow.findIndex((f) => f.id === curId);
+    if (idx === -1) return flow[flow.length - 1];
+    if (idx - 1 >= 0) return flow[idx - 1];
+    return flow[flow.length - 1]; // loop around
+  }
+
+  goToNextField(assigneeId?: string | null): FormField | null {
+    const next = this.getNextField(this.activeFieldId, assigneeId);
+    if (next) {
+      this.setActiveFieldId(next.id);
+    }
+    return next;
+  }
+
+  goToPreviousField(assigneeId?: string | null): FormField | null {
+    const prev = this.getPreviousField(this.activeFieldId, assigneeId);
+    if (prev) {
+      this.setActiveFieldId(prev.id);
+    }
+    return prev;
+  }
+
   // ---- Validation --------------------------------------------------------------------------
 
-  validate(): FormValidationResult {
+  validate(assigneeId?: string | null): FormValidationResult {
+    const targetAssignee = assigneeId !== undefined ? assigneeId : this.currentAssigneeId;
     const errors: Record<string, string> = {};
 
     for (const field of this.fields) {
       if (!field.required) continue;
+      if (targetAssignee && field.assigneeId && field.assigneeId !== targetAssignee) continue;
 
       const val = this.values[field.name];
       const displayName = field.label || field.name;
@@ -249,7 +387,15 @@ export class FormManager {
   // ---- Serialization & Import/Export -------------------------------------------------------
 
   exportFieldsJson(): string {
-    return JSON.stringify(this.fields, null, 2);
+    return JSON.stringify(
+      {
+        version: '1.9.0',
+        fields: this.fields,
+        assignees: this.assignees,
+      },
+      null,
+      2
+    );
   }
 
   importFieldsJson(json: string): boolean {
@@ -257,6 +403,13 @@ export class FormManager {
       const parsed = JSON.parse(json);
       if (Array.isArray(parsed)) {
         this.setFields(parsed);
+        return true;
+      }
+      if (typeof parsed === 'object' && parsed !== null && Array.isArray(parsed.fields)) {
+        this.setFields(parsed.fields);
+        if (Array.isArray(parsed.assignees) && parsed.assignees.length > 0) {
+          this.setAssignees(parsed.assignees);
+        }
         return true;
       }
       return false;

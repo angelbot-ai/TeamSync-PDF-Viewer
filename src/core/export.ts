@@ -399,15 +399,24 @@ export async function buildPdfBytes(input: ExportInput, options: ExportOptions =
         if (field.type === 'text' || (field.type as string) === 'textbox') {
           const tf = form.createTextField(field.name);
           tf.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
+          if (field.fontSize) {
+            try { tf.setFontSize(field.fontSize); } catch {}
+          }
           if (filledVal !== undefined && filledVal !== null && filledVal !== '') tf.setText(String(filledVal));
         } else if (field.type === 'textarea') {
           const tf = form.createTextField(field.name);
           tf.enableMultiline();
           tf.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
+          if (field.fontSize) {
+            try { tf.setFontSize(field.fontSize); } catch {}
+          }
           if (filledVal !== undefined && filledVal !== null && filledVal !== '') tf.setText(String(filledVal));
         } else if (field.type === 'datetime') {
           const tf = form.createTextField(field.name);
           tf.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
+          if (field.fontSize) {
+            try { tf.setFontSize(field.fontSize); } catch {}
+          }
           if (filledVal !== undefined && filledVal !== null && filledVal !== '') tf.setText(String(filledVal));
         } else if (field.type === 'checkbox') {
           const cb = form.createCheckBox(field.name);

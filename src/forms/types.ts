@@ -48,6 +48,39 @@ export interface FormField {
   dateFormat?: DateTimeFormat;
   /** Whether the field is locked against user input in filler mode */
   readOnly?: boolean;
+  /** Foreground text color (hex or CSS color string, e.g. '#0f172a') */
+  textColor?: string;
+  /** Background fill color (hex, rgba, or 'transparent') */
+  backgroundColor?: string;
+  /** Custom border color (defaults to assignee color or neutral #94a3b8) */
+  borderColor?: string;
+  /** Border stroke width in pixels (1, 2, or 3) */
+  borderWidth?: number;
+  /** Corner border radius in pixels (0, 3, 6, 12) */
+  borderRadius?: number;
+  /** Font family for inputs, labels and choices (e.g. 'sans-serif', 'serif', 'monospace', 'cursive') */
+  fontFamily?: string;
+  /** Base font size in unscaled points (e.g. 10, 12, 14, 16, 18, 20) */
+  fontSize?: number;
+  /** Font weight */
+  fontWeight?: 'normal' | 'bold';
+  /** Font style */
+  fontStyle?: 'normal' | 'italic';
+  /** Text alignment */
+  textAlign?: 'left' | 'center' | 'right';
+  /** Assignee identifier responsible for filling this field (references FormAssignee.id) */
+  assigneeId?: string;
+  /** Explicit step order in the form filling sequence (1, 2, 3...) */
+  flowOrder?: number;
+}
+
+export interface FormAssignee {
+  /** Unique assignee/role identifier (e.g. 'user_a', 'user_b') */
+  id: string;
+  /** Display label for this assignee (e.g. 'User A (Buyer)', 'User B (Reviewer)') */
+  name: string;
+  /** Hex color code for badges, borders and accents (e.g. '#2563eb') */
+  color: string;
 }
 
 export type FormDataRecord = Record<string, any>;

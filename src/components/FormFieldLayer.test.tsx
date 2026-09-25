@@ -227,4 +227,180 @@ describe('FormFieldLayer', () => {
     expect(textInput).not.toBeNull();
     expect(textInput.placeholder).toBe('Type your message...');
   });
+
+  it('renders custom typography, colors, and borders in View mode', async () => {
+    const styledField: FormField = {
+      id: 'styled1',
+      name: 'custom_notes',
+      type: 'text',
+      pageIndex: 1,
+      x: 30,
+      y: 40,
+      width: 200,
+      height: 36,
+      textColor: '#dc2626',
+      backgroundColor: '#fef2f2',
+      borderColor: '#ef4444',
+      borderWidth: 2,
+      borderRadius: 8,
+      fontSize: 18,
+      fontWeight: 'bold',
+      fontStyle: 'italic',
+      textAlign: 'center',
+    };
+    const formManager = new FormManager([styledField]);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <FormFieldLayer
+          pageNum={1}
+          scale={1}
+          rotation={0}
+          basePageWidth={600}
+          basePageHeight={800}
+          activeTab="View"
+          activeTool="select"
+          setActiveTool={vi.fn()}
+          formManager={formManager}
+        />
+      );
+    });
+
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(input.style.color).toBe('rgb(220, 38, 38)'); // #dc2626
+    expect(input.style.backgroundColor).toBe('rgb(254, 242, 242)'); // #fef2f2
+    expect(input.style.borderColor).toBe('rgb(239, 68, 68)');
+    expect(input.style.borderWidth).toBe('2px');
+    expect(input.style.borderRadius).toBe('8px');
+    expect(input.style.fontSize).toBe('18px');
+    expect(input.style.fontWeight).toBe('bold');
+    expect(input.style.fontStyle).toBe('italic');
+    expect(input.style.textAlign).toBe('center');
+  });
+
+  it('locks fields assigned to other users and displays lock badge in View mode', async () => {
+    const userAField: FormField = {
+      id: 'field_a',
+      name: 'user_a_field',
+      type: 'text',
+      pageIndex: 1,
+      x: 20,
+      y: 20,
+      width: 150,
+      height: 35,
+      assigneeId: 'user_a',
+    };
+    const userBField: FormField = {
+      id: 'field_b',
+      name: 'user_b_field',
+      type: 'text',
+      pageIndex: 1,
+      x: 20,
+      y: 70,
+      width: 150,
+      height: 35,
+      assigneeId: 'user_b',
+    };
+
+    const formManager = new FormManager([userAField, userBField]);
+    // Set current active filler to User A
+    formManager.setCurrentAssignee('user_a');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <FormFieldLayer
+          pageNum={1}
+          scale={1}
+          rotation={0}
+          basePageWidth={600}
+          basePageHeight={800}
+          activeTab="View"
+          activeTool="select"
+          setActiveTool={vi.fn()}
+          formManager={formManager}
+        />
+      );
+    });
+
+    const inputA = container.querySelector('#tspdf-field-field_a') as HTMLInputElement;
+    const inputB = container.querySelector('#tspdf-field-field_b') as HTMLInputElement;
+
+    expect(inputA).not.toBeNull();
+    expect(inputB).not.toBeNull();
+
+    // User A field is editable
+    expect(inputA.disabled).toBe(false);
+
+    // User B field is locked/disabled for User A
+    expect(inputB.disabled).toBe(true);
+    // Lock indicator text is present
+    expect(container.textContent).toContain('User B');
+  });
+
+  it('navigates next and previous fields on Tab and Shift+Tab keydown', async () => {
+    const field1: FormField = {
+      id: 'f1',
+      name: 'first_name',
+      type: 'text',
+      pageIndex: 1,
+      x: 10,
+      y: 10,
+      width: 100,
+      height: 30,
+      flowOrder: 1,
+    };
+    const field2: FormField = {
+      id: 'f2',
+      name: 'last_name',
+      type: 'text',
+      pageIndex: 1,
+      x: 10,
+      y: 50,
+      width: 100,
+      height: 30,
+      flowOrder: 2,
+    };
+
+    const formManager = new FormManager([field1, field2]);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <FormFieldLayer
+          pageNum={1}
+          scale={1}
+          rotation={0}
+          basePageWidth={600}
+          basePageHeight={800}
+          activeTab="View"
+          activeTool="select"
+          setActiveTool={vi.fn()}
+          formManager={formManager}
+        />
+      );
+    });
+
+    const input1 = container.querySelector('#tspdf-field-f1') as HTMLInputElement;
+    expect(input1).not.toBeNull();
+
+    // Trigger focus and Tab keydown on input 1
+    await act(async () => {
+      input1.focus();
+      input1.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    });
+
+    expect(formManager.getActiveFieldId()).toBe('f2');
+
+    // Trigger Shift+Tab to go back to f1
+    const input2 = container.querySelector('#tspdf-field-f2') as HTMLInputElement;
+    await act(async () => {
+      input2.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
+    });
+
+    expect(formManager.getActiveFieldId()).toBe('f1');
+  });
 });
+

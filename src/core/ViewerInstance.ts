@@ -14,7 +14,7 @@ import type { Redaction, WatermarkOptions, ViewerEventMap, ViewerEventType, Tran
 import { searchPdfText, type SearchResult } from '../hooks/usePdfSearch';
 import { copyTextToClipboard } from '../utils/clipboardUtils';
 import { FormManager } from '../forms/FormManager';
-import type { FormField, FormDataRecord, FormValidationResult } from '../forms/types';
+import type { FormField, FormDataRecord, FormValidationResult, FormAssignee } from '../forms/types';
 
 /** Callbacks the React component installs so the instance can reach live state. */
 export interface ViewerBinding {
@@ -448,9 +448,9 @@ export class WebViewerInstance {
     this.formManager.clearValues();
   }
 
-  /** Validates all required form fields. */
-  validateForm(): FormValidationResult {
-    return this.formManager.validate();
+  /** Validates all required form fields (or only those assigned to the specified user). */
+  validateForm(assigneeId?: string | null): FormValidationResult {
+    return this.formManager.validate(assigneeId);
   }
 
   /** Exports filled form data as a JSON string. */
@@ -465,6 +465,41 @@ export class WebViewerInstance {
     } else {
       this.formManager.setValues(data);
     }
+  }
+
+  /** Returns all configured form assignees. */
+  getFormAssignees(): FormAssignee[] {
+    return this.formManager.getAssignees();
+  }
+
+  /** Sets the list of form assignees. */
+  setFormAssignees(assignees: FormAssignee[]): void {
+    this.formManager.setAssignees(assignees);
+  }
+
+  /** Returns the active form assignee ID (or null for all). */
+  getCurrentFormAssignee(): string | null {
+    return this.formManager.getCurrentAssignee();
+  }
+
+  /** Sets the active form assignee ID (or null for all). */
+  setCurrentFormAssignee(assigneeId: string | null): void {
+    this.formManager.setCurrentAssignee(assigneeId);
+  }
+
+  /** Advances focus to the next form field in the sequence. */
+  nextFormField(assigneeId?: string | null): FormField | null {
+    return this.formManager.goToNextField(assigneeId);
+  }
+
+  /** Moves focus to the previous form field in the sequence. */
+  previousFormField(assigneeId?: string | null): FormField | null {
+    return this.formManager.goToPreviousField(assigneeId);
+  }
+
+  /** Focuses a specific form field by ID. */
+  focusFormField(fieldId: string): void {
+    this.formManager.setActiveFieldId(fieldId);
   }
 
   /**

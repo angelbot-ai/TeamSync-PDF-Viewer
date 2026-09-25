@@ -11,6 +11,7 @@ import { DEFAULT_ASSIGNEES } from '../forms/FormManager';
 interface FormFieldEditorModalProps {
   field: FormField;
   assignees?: FormAssignee[];
+  onAddAssignee?: (assignee: FormAssignee) => void;
   onSave: (updated: Partial<FormField>) => void;
   onClose: () => void;
 }
@@ -40,10 +41,19 @@ const PRESET_BG_COLORS = [
 export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
   field,
   assignees = DEFAULT_ASSIGNEES,
+  onAddAssignee,
   onSave,
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'style'>('general');
+  const [localAssignees, setLocalAssignees] = useState<FormAssignee[]>(assignees);
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserColor, setNewUserColor] = useState('#2563eb');
+
+  React.useEffect(() => {
+    setLocalAssignees(assignees);
+  }, [assignees]);
 
   // General state
   const [name, setName] = useState(field.name || '');
@@ -92,6 +102,23 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
     copy[index] = copy[targetIdx];
     copy[targetIdx] = item;
     setOptions(copy);
+  };
+
+  const handleQuickAddUser = () => {
+    const trimmed = newUserName.trim();
+    if (!trimmed) return;
+    const id = `user_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const newAssignee: FormAssignee = {
+      id,
+      name: trimmed,
+      color: newUserColor,
+    };
+    onAddAssignee?.(newAssignee);
+    setLocalAssignees((prev) => [...prev, newAssignee]);
+    setAssigneeId(id);
+    setBorderColor(newUserColor);
+    setNewUserName('');
+    setIsAddingUser(false);
   };
 
   const handleSave = () => {
@@ -286,12 +313,103 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
 
               {/* Multi-User Assignee Selection */}
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '4px' }}>
-                  <User size={14} color="#0284c7" /> Assign To (Multi-User Role)
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500, color: '#374151', margin: 0 }}>
+                    <User size={14} color="#0284c7" /> Assign To (Multi-User Role)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingUser(!isAddingUser)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#0284c7',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                      padding: 0,
+                    }}
+                  >
+                    {isAddingUser ? 'Cancel' : '+ New User'}
+                  </button>
+                </div>
+
+                {isAddingUser && (
+                  <div
+                    style={{
+                      backgroundColor: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '6px',
+                      padding: '8px 10px',
+                      marginBottom: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <input
+                      type="color"
+                      value={newUserColor}
+                      onChange={(e) => setNewUserColor(e.target.value)}
+                      style={{
+                        width: '24px',
+                        height: '24px',
+                        padding: 0,
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                      }}
+                      title="Choose user color"
+                    />
+                    <input
+                      type="text"
+                      value={newUserName}
+                      onChange={(e) => setNewUserName(e.target.value)}
+                      placeholder="e.g. Tenant, Inspector..."
+                      style={{
+                        flex: 1,
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '12px',
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleQuickAddUser();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleQuickAddUser}
+                      style={{
+                        padding: '4px 10px',
+                        backgroundColor: '#0284c7',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Assign Role
+                    </button>
+                  </div>
+                )}
+
                 <select
                   value={assigneeId}
-                  onChange={(e) => setAssigneeId(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAssigneeId(val);
+                    const selected = localAssignees.find((a) => a.id === val);
+                    if (selected) {
+                      setBorderColor(selected.color);
+                    }
+                  }}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -303,7 +421,7 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
                   }}
                 >
                   <option value="">-- Anyone / Unassigned --</option>
-                  {assignees.map((a) => (
+                  {localAssignees.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name} ({a.color})
                     </option>

@@ -963,6 +963,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
         <FormFieldEditorModal
           field={editingField}
           assignees={assignees}
+          onAddAssignee={(user) => formManager.addAssignee(user)}
           onSave={(updates) => {
             formManager.updateField(editingField.id, updates);
             setEditingField(null);

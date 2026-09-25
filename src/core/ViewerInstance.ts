@@ -477,6 +477,21 @@ export class WebViewerInstance {
     this.formManager.setAssignees(assignees);
   }
 
+  /** Adds a new form assignee/user. */
+  addFormAssignee(assignee: FormAssignee): void {
+    this.formManager.addAssignee(assignee);
+  }
+
+  /** Updates an existing form assignee. */
+  updateFormAssignee(id: string, updates: Partial<Omit<FormAssignee, 'id'>>): void {
+    this.formManager.updateAssignee(id, updates);
+  }
+
+  /** Removes a form assignee and unassigns any fields bound to them. */
+  removeFormAssignee(id: string): void {
+    this.formManager.removeAssignee(id);
+  }
+
   /** Returns the active form assignee ID (or null for all). */
   getCurrentFormAssignee(): string | null {
     return this.formManager.getCurrentAssignee();

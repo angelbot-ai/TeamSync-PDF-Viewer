@@ -256,6 +256,41 @@ export class FormManager {
     for (const l of this.assigneesListeners) l(this.getAssignees());
   }
 
+  updateAssignee(id: string, updates: Partial<Omit<FormAssignee, 'id'>>): void {
+    const idx = this.assignees.findIndex((a) => a.id === id);
+    if (idx === -1) return;
+    this.assignees[idx] = { ...this.assignees[idx], ...updates };
+    for (const l of this.assigneesListeners) l(this.getAssignees());
+  }
+
+  removeAssignee(id: string): void {
+    this.assignees = this.assignees.filter((a) => a.id !== id);
+    // Unassign any fields that were assigned to this user
+    let fieldsChanged = false;
+    this.fields = this.fields.map((f) => {
+      if (f.assigneeId === id) {
+        fieldsChanged = true;
+        return { ...f, assigneeId: undefined };
+      }
+      return f;
+    });
+
+    if (this.currentAssigneeId === id) {
+      this.currentAssigneeId = null;
+      for (const l of this.activeAssigneeListeners) l(null);
+    }
+
+    for (const l of this.assigneesListeners) l(this.getAssignees());
+    if (fieldsChanged) {
+      for (const l of this.fieldsListeners) {
+        l({
+          fields: this.getFields(),
+          action: 'update',
+        });
+      }
+    }
+  }
+
   getAssignee(id?: string): FormAssignee | undefined {
     if (!id) return undefined;
     return this.assignees.find((a) => a.id === id);

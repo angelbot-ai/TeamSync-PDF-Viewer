@@ -3,7 +3,7 @@
  * FormsToolbar — sub-toolbar rendered when the 'Forms' builder tab is active.
  */
 
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   Undo2,
   Redo2,
@@ -20,9 +20,11 @@ import {
   Eye,
   ListOrdered,
   Users,
+  UserPlus,
 } from 'lucide-react';
-import type { FormToolType } from '../forms/types';
+import type { FormToolType, FormAssignee } from '../forms/types';
 import type { FormManager } from '../forms/FormManager';
+import { FormUsersModal } from './FormUsersModal';
 
 interface FormsToolbarProps {
   activeTool: FormToolType;
@@ -46,6 +48,13 @@ export const FormsToolbar: React.FC<FormsToolbarProps> = ({
   setSelectedAssigneeFilter,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUsersModalOpen, setIsUsersModalOpen] = useState(false);
+  const [assignees, setAssignees] = useState<FormAssignee[]>(() => formManager.getAssignees());
+
+  useEffect(() => {
+    const unsub = formManager.onAssigneesChange((updated) => setAssignees(updated));
+    return unsub;
+  }, [formManager]);
 
   const handleExportSchema = () => {
     const json = formManager.exportFieldsJson();
@@ -173,6 +182,30 @@ export const FormsToolbar: React.FC<FormsToolbarProps> = ({
           />
         )}
 
+        {/* Manage / Add Form Users Button */}
+        <button
+          type="button"
+          onClick={() => setIsUsersModalOpen(true)}
+          title="Add or manage form users and roles"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '3px 8px',
+            backgroundColor: isUsersModalOpen ? '#e0f2fe' : '#f8fafc',
+            border: isUsersModalOpen ? '1px solid #7dd3fc' : '1px solid #cbd5e1',
+            borderRadius: '4px',
+            color: '#1e293b',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontWeight: 500,
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <UserPlus size={14} color="#0284c7" />
+          <span>Users ({assignees.length})</span>
+        </button>
+
         {/* Assignee View Filter */}
         {setSelectedAssigneeFilter && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '2px' }}>
@@ -192,7 +225,7 @@ export const FormsToolbar: React.FC<FormsToolbarProps> = ({
               title="Filter fields by user assignment"
             >
               <option value="">All Users</option>
-              {formManager.getAssignees().map((a) => (
+              {assignees.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
@@ -295,6 +328,14 @@ export const FormsToolbar: React.FC<FormsToolbarProps> = ({
           </button>
         )}
       </div>
+
+      {/* Form Users & Roles Management Modal */}
+      {isUsersModalOpen && (
+        <FormUsersModal
+          formManager={formManager}
+          onClose={() => setIsUsersModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

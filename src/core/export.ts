@@ -441,6 +441,50 @@ export async function buildPdfBytes(input: ExportInput, options: ExportOptions =
             });
             if (selectedList.includes(opt)) cb.check();
           });
+        } else if (field.type === 'signature') {
+          const dataUrl = typeof filledVal === 'object' && filledVal ? (filledVal.dataUrl || (filledVal as any).imageUrl) : (typeof filledVal === 'string' && filledVal.startsWith('data:') ? filledVal : undefined);
+          if (dataUrl) {
+            const imageBytes = await fetch(dataUrl).then((res) => res.arrayBuffer());
+            const image = dataUrl.startsWith('data:image/jpeg') || dataUrl.startsWith('data:image/jpg')
+              ? await pdfDoc.embedJpg(imageBytes)
+              : await pdfDoc.embedPng(imageBytes);
+            targetPage.drawImage(image, { x: llx, y: lly, width: w, height: h });
+            if (typeof filledVal === 'object' && filledVal?.signerName) {
+              try {
+                targetPage.drawText(`Digitally signed by ${filledVal.signerName}`, {
+                  x: llx,
+                  y: Math.max(0, lly - 10),
+                  size: 8,
+                  color: rgb(100 / 255, 116 / 255, 139 / 255),
+                });
+              } catch {}
+            }
+          } else {
+            // Unsigned signature placeholder box with baseline
+            targetPage.drawRectangle({ x: llx, y: lly, width: w, height: h, color: rgb(1, 1, 1), borderColor: rgb(148 / 255, 163 / 255, 184 / 255), borderWidth: 1 });
+            targetPage.drawLine({ start: { x: llx + 8, y: lly + 14 }, end: { x: llx + w - 8, y: lly + 14 }, color: rgb(148 / 255, 163 / 255, 184 / 255), thickness: 1 });
+            targetPage.drawText('X', { x: llx + 10, y: lly + 17, size: 10, color: rgb(100 / 255, 116 / 255, 139 / 255) });
+            targetPage.drawText(field.label || 'Signature', { x: llx + 24, y: lly + 17, size: 8.5, color: rgb(100 / 255, 116 / 255, 139 / 255) });
+          }
+        } else if (field.type === 'digital_signature') {
+          const isSigned = Boolean(typeof filledVal === 'object' && filledVal && (filledVal.signerName || filledVal.certificateHash));
+          const signer = (typeof filledVal === 'object' && filledVal?.signerName) || (typeof filledVal === 'string' ? filledVal : input.signerName) || 'Authorized Signer';
+          const dateStr = (typeof filledVal === 'object' && filledVal?.timestamp) ? new Date(filledVal.timestamp).toLocaleString('en-GB') : new Date().toLocaleString('en-GB');
+          const reason = (typeof filledVal === 'object' && filledVal?.reason) || 'Document Approval';
+          const iconW = Math.min(w * 0.16, 40);
+
+          targetPage.drawRectangle({ x: llx, y: lly, width: w, height: h, color: rgb(1, 1, 1), borderColor: rgb(148 / 255, 163 / 255, 184 / 255), borderWidth: 1 });
+          targetPage.drawLine({ start: { x: llx + iconW, y: lly }, end: { x: llx + iconW, y: lly + h }, color: rgb(226 / 255, 232 / 255, 240 / 255), thickness: 1 });
+          targetPage.drawSvgPath('M22 6 L22 14 Q22 20 12 24 Q2 20 2 14 L2 6 L12 2 Z', { x: llx + iconW / 2 - 12, y: lly + h / 2 + 12, borderColor: rgb(2 / 255, 132 / 255, 199 / 255), borderWidth: 2, scale: 1 });
+
+          if (isSigned) {
+            targetPage.drawSvgPath('M7 13 L10 16 L17 8', { x: llx + iconW / 2 - 12, y: lly + h / 2 + 12, borderColor: rgb(2 / 255, 132 / 255, 199 / 255), borderWidth: 2, scale: 1 });
+            targetPage.drawText(`Digitally signed by ${signer}`, { x: llx + iconW + 8, y: lly + h - 16, size: 9.5, color: rgb(15 / 255, 23 / 255, 42 / 255) });
+            targetPage.drawText(`Date: ${dateStr}`, { x: llx + iconW + 8, y: lly + h - 28, size: 8.5, color: rgb(51 / 255, 65 / 255, 85 / 255) });
+            targetPage.drawText(`Reason: ${reason}`, { x: llx + iconW + 8, y: lly + h - 40, size: 8.5, color: rgb(51 / 255, 65 / 255, 85 / 255) });
+          } else {
+            targetPage.drawText(field.label || 'Digital Signature Placeholder', { x: llx + iconW + 8, y: lly + h / 2 - 4, size: 9.5, color: rgb(100 / 255, 116 / 255, 139 / 255) });
+          }
         }
       } catch (e) {
         console.warn(`[teamsync-pdf-viewer] Could not bake form field ${field.name}:`, e);

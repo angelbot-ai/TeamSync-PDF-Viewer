@@ -4,10 +4,11 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Settings, Trash2, Copy, Lock } from 'lucide-react';
-import type { FormField, FormToolType, FormDataRecord, FormAssignee } from '../forms/types';
+import { Settings, Trash2, Copy, Lock, PenTool, ShieldCheck, Check } from 'lucide-react';
+import type { FormField, FormToolType, FormDataRecord, FormAssignee, FormSignatureValue } from '../forms/types';
 import type { FormManager } from '../forms/FormManager';
 import { FormFieldEditorModal } from './FormFieldEditorModal';
+import { FormSignatureModal } from './FormSignatureModal';
 import { convertToRotatedRect, convertToUnrotated } from '../utils/rotationUtils';
 
 interface FormFieldLayerProps {
@@ -51,6 +52,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
   const [activeFieldId, setActiveFieldId] = useState<string | null>(() => formManager.getActiveFieldId());
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<FormField | null>(null);
+  const [signingField, setSigningField] = useState<FormField | null>(null);
 
   // Drag creation state
   const [creationRect, setCreationRect] = useState<{ startX: number; startY: number; curX: number; curY: number } | null>(null);
@@ -214,10 +216,14 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
           checklist: 'Checklist',
           dropdown: 'Dropdown',
           radio: 'Radio Group',
+          signature: 'E-Signature',
+          digital_signature: 'Digital Signature',
         };
 
         const existingCount = formManager.getFields().length;
         const targetAssigneeId = selectedAssigneeFilter || (assignees.length > 0 ? assignees[0].id : undefined);
+        const isSig = activeTool === 'signature';
+        const isDigitalSig = activeTool === 'digital_signature';
 
         const newField: FormField = {
           id: newId(),
@@ -241,6 +247,8 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
             ? ['Option 1', 'Option 2', 'Option 3']
             : undefined,
           dateFormat: activeTool === 'datetime' ? 'datetime' : undefined,
+          signatureType: isDigitalSig ? 'digital' : isSig ? 'electronic' : undefined,
+          signTagText: isDigitalSig ? 'DIGITAL SIGN' : isSig ? 'SIGN HERE' : undefined,
         };
 
         formManager.addField(newField);
@@ -498,6 +506,82 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 </div>
               </div>
 
+              {/* 'Sign Here' Arrow Flag Tag on Signature Placeholders (Builder Mode) */}
+              {(field.type === 'signature' || field.type === 'digital_signature') && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '-20px',
+                    left: '0px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    zIndex: 32,
+                    userSelect: 'none',
+                    pointerEvents: 'none',
+                    filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.15))',
+                  }}
+                >
+                  <div
+                    style={{
+                      backgroundColor: fieldColor,
+                      color: '#ffffff',
+                      fontSize: `${Math.max(9, 9.5 * scale)}px`,
+                      fontWeight: 700,
+                      padding: '2px 7px',
+                      borderRadius: '3px 0 0 0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      letterSpacing: '0.3px',
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    <span>
+                      ✍️ {field.signTagText || (field.type === 'digital_signature' ? 'DIGITAL SIGN' : 'SIGN HERE')}
+                      {assignee ? ` (${assignee.name.split(' ')[0]})` : ''}
+                    </span>
+                  </div>
+                  {/* Arrow pointing into the signature box */}
+                  <div
+                    style={{
+                      width: 0,
+                      height: 0,
+                      borderTop: '9px solid transparent',
+                      borderBottom: '9px solid transparent',
+                      borderLeft: `7px solid ${fieldColor}`,
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Signature Baseline inside Builder Box */}
+              {(field.type === 'signature' || field.type === 'digital_signature') && (
+                <div
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'flex-end',
+                    padding: '2px 4px 4px 4px',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      borderBottom: `1.5px dashed ${fieldColor}88`,
+                      paddingBottom: '2px',
+                    }}
+                  >
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: fieldColor }}>✕</span>
+                    <span style={{ fontSize: `${Math.max(9, 10 * scale)}px`, color: '#64748b' }}>
+                      {field.type === 'digital_signature' ? 'Digital Signature Placeholder' : 'E-Signature Placeholder'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Quick floating action bar when selected */}
               {isSelected && (
                 <div
@@ -642,6 +726,19 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
         const effectiveBorderWidth = field.borderWidth ?? 1.5;
         const effectiveBorderRadius = field.borderRadius ?? 3;
 
+        const isSignature = field.type === 'signature' || field.type === 'digital_signature';
+        const sigVal: FormSignatureValue | null =
+          typeof fieldValue === 'object' && fieldValue !== null
+            ? fieldValue
+            : fieldValue
+            ? {
+                type: field.type === 'digital_signature' ? 'digital' : 'electronic',
+                dataUrl: typeof fieldValue === 'string' && fieldValue.startsWith('data:') ? fieldValue : undefined,
+                signerName: typeof fieldValue === 'string' ? fieldValue : undefined,
+              }
+            : null;
+        const isSigned = Boolean(sigVal && (sigVal.dataUrl || sigVal.signerName || (sigVal as any).imageUrl));
+
         const baseInputStyle: React.CSSProperties = {
           width: '100%',
           height: '100%',
@@ -683,7 +780,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
               pointerEvents: 'auto',
             }}
           >
-            {/* Top Multi-User Badge / Lock indicator */}
+            {/* Top Multi-User Badge, Lock indicator, or 'Sign Here' Flag Tag */}
             {isAssignedToOther ? (
               <div
                 style={{
@@ -708,6 +805,59 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
               >
                 <Lock size={10} />
                 <span>{assignee ? assignee.name : 'Other User'}</span>
+              </div>
+            ) : isSignature ? (
+              /* 'Sign Here' Flag Tag with arrow pointing directly into signature box */
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '-20px',
+                  left: '0px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  zIndex: 26,
+                  userSelect: 'none',
+                  pointerEvents: 'none',
+                  filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.15))',
+                }}
+              >
+                <div
+                  style={{
+                    backgroundColor: isSigned ? '#16a34a' : fieldColor,
+                    color: '#ffffff',
+                    fontSize: `${Math.max(9, 9.5 * scale)}px`,
+                    fontWeight: 700,
+                    padding: '2px 7px',
+                    borderRadius: '3px 0 0 0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    letterSpacing: '0.3px',
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {isSigned ? (
+                    <>
+                      <Check size={11} strokeWidth={3} />
+                      <span>SIGNED</span>
+                    </>
+                  ) : (
+                    <span>
+                      ✍️ {field.signTagText || (field.type === 'digital_signature' ? 'DIGITAL SIGN' : 'SIGN HERE')}
+                      {assignee ? ` (${assignee.name.split(' ')[0]})` : ''}
+                    </span>
+                  )}
+                </div>
+                {/* Arrow pointing into the signature box */}
+                <div
+                  style={{
+                    width: 0,
+                    height: 0,
+                    borderTop: '9px solid transparent',
+                    borderBottom: '9px solid transparent',
+                    borderLeft: `7px solid ${isSigned ? '#16a34a' : fieldColor}`,
+                  }}
+                />
               </div>
             ) : assignee ? (
               <div
@@ -954,6 +1104,215 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 ))}
               </div>
             )}
+
+            {/* Signature & Digital Signature Interactive Field */}
+            {isSignature && (
+              <div
+                id={`tspdf-field-${field.id}`}
+                tabIndex={isReadOnly ? -1 : 0}
+                onFocus={handleFocus}
+                onKeyDown={(e) => {
+                  handleInputKeyDown(e);
+                  if (!isReadOnly && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    setSigningField(field);
+                  }
+                }}
+                onClick={() => {
+                  if (!isReadOnly) {
+                    setSigningField(field);
+                  }
+                }}
+                style={{
+                  ...baseInputStyle,
+                  cursor: isReadOnly ? 'not-allowed' : 'pointer',
+                  border: isSigned
+                    ? `1.5px solid ${isActive ? fieldColor : '#cbd5e1'}`
+                    : `1.5px dashed ${isActive ? fieldColor : fieldColor}`,
+                  backgroundColor: isSigned
+                    ? (effectiveBgColor || '#ffffff')
+                    : isAssignedToOther
+                    ? 'rgba(241, 245, 249, 0.8)'
+                    : 'rgba(240, 249, 255, 0.5)',
+                  padding: `${2 * scale}px ${4 * scale}px`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  userSelect: 'none',
+                }}
+                title={isReadOnly ? 'Field is locked' : isSigned ? 'Click to view or change signature' : 'Click to sign'}
+              >
+                {isSigned && sigVal ? (
+                  /* SIGNED STATE */
+                  sigVal.type === 'digital' || field.type === 'digital_signature' ? (
+                    /* Digital Certificate Seal */
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: `${6 * scale}px`,
+                        width: '100%',
+                        height: '100%',
+                        padding: '1px 2px',
+                        boxSizing: 'border-box',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${26 * scale}px`,
+                          height: `${26 * scale}px`,
+                          borderRadius: '50%',
+                          backgroundColor: '#0284c7',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#ffffff',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <ShieldCheck size={Math.max(13, 15 * scale)} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', lineHeight: 1.25 }}>
+                        <div
+                          style={{
+                            fontSize: `${Math.max(9.5, 11 * scale)}px`,
+                            fontWeight: 700,
+                            color: '#0f172a',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          Digitally signed by {sigVal.signerName || 'Authorized Signer'}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: `${Math.max(8, 9 * scale)}px`,
+                            color: '#475569',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {sigVal.timestamp ? new Date(sigVal.timestamp).toLocaleString('en-GB') : 'Verified'}{' '}
+                          {sigVal.reason ? `· ${sigVal.reason}` : ''}
+                        </div>
+                        {sigVal.certificateHash && (
+                          <div
+                            style={{
+                              fontSize: `${Math.max(7, 8 * scale)}px`,
+                              color: '#0369a1',
+                              fontFamily: 'monospace',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                          >
+                            SHA-256: {sigVal.certificateHash.slice(0, 16)}...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Electronic Signature Image */
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '100%',
+                        height: '100%',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {sigVal.dataUrl || (sigVal as any).imageUrl ? (
+                        <img
+                          src={sigVal.dataUrl || (sigVal as any).imageUrl}
+                          alt="Signature"
+                          style={{
+                            maxHeight: '75%',
+                            maxWidth: '92%',
+                            objectFit: 'contain',
+                            display: 'block',
+                          }}
+                        />
+                      ) : (
+                        <span style={{ fontSize: `${Math.max(12, 15 * scale)}px`, fontFamily: 'cursive', color: effectiveTextColor }}>
+                          {sigVal.signerName || 'Signed'}
+                        </span>
+                      )}
+                      {sigVal.signerName && (
+                        <span
+                          style={{
+                            fontSize: `${Math.max(7.5, 8.5 * scale)}px`,
+                            color: '#64748b',
+                            lineHeight: 1,
+                            whiteSpace: 'nowrap',
+                            marginTop: '2px',
+                          }}
+                        >
+                          Digitally signed by {sigVal.signerName}
+                        </span>
+                      )}
+                    </div>
+                  )
+                ) : (
+                  /* UNSIGNED PLACEHOLDER STATE */
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      position: 'relative',
+                    }}
+                  >
+                    {/* Baseline indicator */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: '6px',
+                        right: '6px',
+                        bottom: `${5 * scale}px`,
+                        borderBottom: `1.5px dashed ${fieldColor}66`,
+                        display: 'flex',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span style={{ fontSize: `${Math.max(9, 11 * scale)}px`, color: fieldColor, fontWeight: 'bold' }}>✕</span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: `${5 * scale}px`,
+                        color: isAssignedToOther ? '#94a3b8' : fieldColor,
+                        fontSize: `${Math.max(9.5, 11 * scale)}px`,
+                        fontWeight: 600,
+                        zIndex: 2,
+                      }}
+                    >
+                      {field.type === 'digital_signature' ? (
+                        <ShieldCheck size={Math.max(12, 14 * scale)} />
+                      ) : (
+                        <PenTool size={Math.max(12, 14 * scale)} />
+                      )}
+                      <span>
+                        {isAssignedToOther
+                          ? `Assigned to ${assignee ? assignee.name : 'other user'}`
+                          : `Click to sign ${field.type === 'digital_signature' ? 'digitally' : 'electronically'}`}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
       })}
@@ -969,6 +1328,25 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
             setEditingField(null);
           }}
           onClose={() => setEditingField(null)}
+        />
+      )}
+
+      {/* Signature Capture Modal */}
+      {signingField && (
+        <FormSignatureModal
+          field={signingField}
+          assignee={assignees.find((a) => a.id === signingField.assigneeId)}
+          currentValue={values[signingField.name]}
+          defaultSignerName={formManager.getAssignee(currentAssigneeId || undefined)?.name || ''}
+          onSave={(val) => {
+            formManager.setValue(signingField.name, val);
+            setSigningField(null);
+          }}
+          onClear={() => {
+            formManager.setValue(signingField.name, null);
+            setSigningField(null);
+          }}
+          onClose={() => setSigningField(null)}
         />
       )}
     </div>

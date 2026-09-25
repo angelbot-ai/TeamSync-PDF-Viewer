@@ -410,6 +410,11 @@ export class FormManager {
         errors[field.name] = `${displayName} is required`;
       } else if (field.type === 'checklist' && Array.isArray(val) && val.length === 0) {
         errors[field.name] = `${displayName} requires at least one selection`;
+      } else if ((field.type === 'signature' || field.type === 'digital_signature') && typeof val === 'object') {
+        const hasSig = Boolean(val.dataUrl || val.signerName || val.imageUrl);
+        if (!hasSig) {
+          errors[field.name] = `${displayName} signature is required`;
+        }
       }
     }
 

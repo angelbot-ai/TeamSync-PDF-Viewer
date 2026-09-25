@@ -4,8 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { X, Plus, Trash2, ArrowUp, ArrowDown, User, Palette, Sliders, Type, AlignLeft, AlignCenter, AlignRight, Bold, Italic } from 'lucide-react';
-import type { FormField, DateTimeFormat, FormAssignee } from '../forms/types';
+import { X, Plus, Trash2, ArrowUp, ArrowDown, User, Palette, Sliders, Type, AlignLeft, AlignCenter, AlignRight, Bold, Italic, PenTool, ShieldCheck } from 'lucide-react';
+import type { FormField, DateTimeFormat, FormAssignee, SignatureType } from '../forms/types';
 import { DEFAULT_ASSIGNEES } from '../forms/FormManager';
 
 interface FormFieldEditorModalProps {
@@ -68,6 +68,15 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
   // Multi-user & Flow state
   const [assigneeId, setAssigneeId] = useState(field.assigneeId || '');
   const [flowOrder, setFlowOrder] = useState<string>(field.flowOrder !== undefined ? String(field.flowOrder) : '');
+
+  // Signature state
+  const isSignatureField = field.type === 'signature' || field.type === 'digital_signature';
+  const [signatureType, setSignatureType] = useState<SignatureType>(
+    field.signatureType || (field.type === 'digital_signature' ? 'digital' : 'electronic')
+  );
+  const [signTagText, setSignTagText] = useState(
+    field.signTagText || (field.type === 'digital_signature' ? 'DIGITAL SIGN' : 'SIGN HERE')
+  );
 
   // Styling state
   const [textColor, setTextColor] = useState(field.textColor || '#0f172a');
@@ -135,6 +144,9 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
       options: hasOptions ? options : undefined,
       assigneeId: assigneeId || undefined,
       flowOrder: Number.isFinite(parsedFlowOrder) ? parsedFlowOrder : undefined,
+      type: isSignatureField ? (signatureType === 'digital' ? 'digital_signature' : 'signature') : field.type,
+      signatureType: isSignatureField ? signatureType : undefined,
+      signTagText: isSignatureField ? (signTagText.trim() || undefined) : undefined,
       textColor,
       backgroundColor,
       borderColor,
@@ -310,6 +322,112 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
                   }}
                 />
               </div>
+
+              {/* Signature Field Settings & 'Sign Here' Tag */}
+              {isSignatureField && (
+                <div
+                  style={{
+                    backgroundColor: '#f0f9ff',
+                    border: '1px solid #bae6fd',
+                    borderRadius: '8px',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <PenTool size={15} color="#0284c7" />
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#0369a1' }}>
+                      Signature & "Sign Here" Tag Configuration
+                    </span>
+                  </div>
+
+                  {/* Signature Type Switch */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>
+                      Signature Mode
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSignatureType('electronic');
+                          if (signTagText === 'DIGITAL SIGN') setSignTagText('SIGN HERE');
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '6px 10px',
+                          borderRadius: '5px',
+                          border: '1px solid',
+                          borderColor: signatureType === 'electronic' ? '#0284c7' : '#cbd5e1',
+                          backgroundColor: signatureType === 'electronic' ? '#ffffff' : '#f8fafc',
+                          color: signatureType === 'electronic' ? '#0284c7' : '#64748b',
+                          fontWeight: signatureType === 'electronic' ? 600 : 400,
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '5px',
+                        }}
+                      >
+                        <PenTool size={13} /> Electronic Signature
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSignatureType('digital');
+                          if (signTagText === 'SIGN HERE') setSignTagText('DIGITAL SIGN');
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '6px 10px',
+                          borderRadius: '5px',
+                          border: '1px solid',
+                          borderColor: signatureType === 'digital' ? '#0284c7' : '#cbd5e1',
+                          backgroundColor: signatureType === 'digital' ? '#ffffff' : '#f8fafc',
+                          color: signatureType === 'digital' ? '#0284c7' : '#64748b',
+                          fontWeight: signatureType === 'digital' ? 600 : 400,
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '5px',
+                        }}
+                      >
+                        <ShieldCheck size={13} /> Digital Certificate
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* "Sign Here" Tag Text */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>
+                      "Sign Here" Flag Tag Text
+                    </label>
+                    <input
+                      type="text"
+                      value={signTagText}
+                      onChange={(e) => setSignTagText(e.target.value)}
+                      placeholder="e.g. SIGN HERE, INITIALS, WITNESS..."
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px',
+                        borderRadius: '5px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '12.5px',
+                        boxSizing: 'border-box',
+                        backgroundColor: '#ffffff',
+                      }}
+                    />
+                    <span style={{ fontSize: '11px', color: '#64748b', marginTop: '3px', display: 'block' }}>
+                      Prominent visual arrow flag displayed on the signature box to guide respondents where to sign.
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Multi-User Assignee Selection */}
               <div>

@@ -11,9 +11,27 @@ export type FormFieldType =
   | 'checklist'
   | 'checkbox'
   | 'dropdown'
-  | 'radio';
+  | 'radio'
+  | 'signature'
+  | 'digital_signature';
 
 export type DateTimeFormat = 'date' | 'time' | 'datetime';
+
+export type SignatureType = 'electronic' | 'digital';
+
+export interface FormSignatureValue {
+  type: SignatureType;
+  /** PNG data URL for drawn, typed, or uploaded electronic signatures */
+  dataUrl?: string;
+  /** Name of the signer */
+  signerName?: string;
+  /** Signing epoch timestamp */
+  timestamp?: number;
+  /** Purpose/reason for digital signing */
+  reason?: string;
+  /** Cryptographic thumbprint/hash preview for digital signature */
+  certificateHash?: string;
+}
 
 export interface FormField {
   /** Unique identifier for the form field element */
@@ -72,6 +90,10 @@ export interface FormField {
   assigneeId?: string;
   /** Explicit step order in the form filling sequence (1, 2, 3...) */
   flowOrder?: number;
+  /** Specific signature mode: electronic or digital */
+  signatureType?: SignatureType;
+  /** Custom tag text displayed on the 'Sign Here' flag badge (e.g. 'Sign Here', 'Authorized Signature') */
+  signTagText?: string;
 }
 
 export interface FormAssignee {
@@ -98,4 +120,6 @@ export type FormToolType =
   | 'checklist'
   | 'dropdown'
   | 'radio'
+  | 'signature'
+  | 'digital_signature'
   | null;

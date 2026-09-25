@@ -21,6 +21,8 @@ import {
   ListOrdered,
   Users,
   UserPlus,
+  PenLine,
+  ShieldCheck,
 } from 'lucide-react';
 import type { FormToolType, FormAssignee } from '../forms/types';
 import type { FormManager } from '../forms/FormManager';
@@ -168,6 +170,18 @@ export const FormsToolbar: React.FC<FormsToolbarProps> = ({
           label="Radio Group"
           active={activeTool === 'radio'}
           onClick={() => setActiveTool('radio')}
+        />
+        <ToolButton
+          icon={<PenLine size={16} />}
+          label="E-Signature"
+          active={activeTool === 'signature'}
+          onClick={() => setActiveTool('signature')}
+        />
+        <ToolButton
+          icon={<ShieldCheck size={16} />}
+          label="Digital Signature"
+          active={activeTool === 'digital_signature'}
+          onClick={() => setActiveTool('digital_signature')}
         />
 
         <div style={{ width: '1px', height: '20px', backgroundColor: '#e5e7eb', margin: '0 6px' }} />

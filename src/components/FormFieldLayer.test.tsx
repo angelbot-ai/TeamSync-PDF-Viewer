@@ -402,5 +402,141 @@ describe('FormFieldLayer', () => {
 
     expect(formManager.getActiveFieldId()).toBe('f1');
   });
+
+  it('renders "Sign Here" flag tags and handles signing flow in Filler mode', async () => {
+    const sigField: FormField = {
+      id: 'sig_1',
+      name: 'applicant_sig',
+      label: 'Applicant Signature',
+      type: 'signature',
+      signatureType: 'electronic',
+      signTagText: 'SIGN HERE',
+      pageIndex: 1,
+      x: 10,
+      y: 10,
+      width: 220,
+      height: 60,
+      assigneeId: 'user_a',
+    };
+
+    const formManager = new FormManager([sigField]);
+    const root = createRoot(container);
+
+    // 1. In Builder mode, verify "Sign Here" tag renders
+    await act(async () => {
+      root.render(
+        <FormFieldLayer
+          pageNum={1}
+          scale={1}
+          rotation={0}
+          basePageWidth={600}
+          basePageHeight={800}
+          activeTab="Forms"
+          activeTool="select"
+          setActiveTool={vi.fn()}
+          formManager={formManager}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('SIGN HERE');
+    expect(container.textContent).toContain('E-Signature Placeholder');
+
+    // 2. In Filler mode, verify interactive "Sign Here" tag and click opens signature modal
+    await act(async () => {
+      root.render(
+        <FormFieldLayer
+          pageNum={1}
+          scale={1}
+          rotation={0}
+          basePageWidth={600}
+          basePageHeight={800}
+          activeTab="View"
+          activeTool="select"
+          setActiveTool={vi.fn()}
+          formManager={formManager}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('SIGN HERE');
+    expect(container.textContent).toContain('Click to sign electronically');
+
+    // Click signature field to open modal
+    const sigBox = container.querySelector('#tspdf-field-sig_1') as HTMLDivElement;
+    expect(sigBox).not.toBeNull();
+    await act(async () => {
+      sigBox.click();
+    });
+
+    // Verify modal appeared with adopt button
+    expect(document.body.textContent).toContain('Adopt Electronic Signature');
+    const adoptBtn = Array.from(document.body.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Adopt & Sign')
+    );
+    expect(adoptBtn).toBeDefined();
+
+    // Now set signed value directly and check rendered signed state
+    await act(async () => {
+      formManager.setValue('applicant_sig', {
+        type: 'electronic',
+        dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        signerName: 'Jane Smith',
+        timestamp: 1700000000000,
+      });
+    });
+
+    // Check signed badge and signer text
+    expect(container.textContent).toContain('SIGNED');
+    expect(container.textContent).toContain('Digitally signed by Jane Smith');
+  });
+
+  it('shows lock badge on signature fields assigned to other users', async () => {
+    const sigField: FormField = {
+      id: 'sig_b',
+      name: 'executive_sig',
+      label: 'Executive Signature',
+      type: 'digital_signature',
+      signatureType: 'digital',
+      pageIndex: 1,
+      x: 10,
+      y: 10,
+      width: 250,
+      height: 60,
+      assigneeId: 'user_b',
+    };
+
+    const formManager = new FormManager([sigField]);
+    // Filling context is User A
+    formManager.setCurrentAssignee('user_a');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <FormFieldLayer
+          pageNum={1}
+          scale={1}
+          rotation={0}
+          basePageWidth={600}
+          basePageHeight={800}
+          activeTab="View"
+          activeTool="select"
+          setActiveTool={vi.fn()}
+          formManager={formManager}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('User B');
+    expect(container.textContent).toContain('Assigned to User B');
+
+    // Click shouldn't open modal because it's locked for User A
+    const sigBox = container.querySelector('#tspdf-field-sig_b') as HTMLDivElement;
+    await act(async () => {
+      sigBox?.click();
+    });
+
+    expect(document.body.textContent).not.toContain('Apply Digital Signature');
+  });
 });
 

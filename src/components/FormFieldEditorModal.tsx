@@ -174,6 +174,7 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 9999,
+        pointerEvents: 'auto',
       }}
       onClick={onClose}
     >
@@ -526,6 +527,8 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
                     const selected = localAssignees.find((a) => a.id === val);
                     if (selected) {
                       setBorderColor(selected.color);
+                    } else {
+                      setBorderColor('#94a3b8');
                     }
                   }}
                   style={{

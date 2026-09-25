@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Settings, Trash2, Copy, Lock, PenTool, ShieldCheck, Check } from 'lucide-react';
+import { Settings, Trash2, Copy, Lock, PenTool, ShieldCheck, Check, User } from 'lucide-react';
 import type { FormField, FormToolType, FormDataRecord, FormAssignee, FormSignatureValue } from '../forms/types';
 import type { FormManager } from '../forms/FormManager';
 import { FormFieldEditorModal } from './FormFieldEditorModal';
@@ -221,7 +221,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
         };
 
         const existingCount = formManager.getFields().length;
-        const targetAssigneeId = selectedAssigneeFilter || (assignees.length > 0 ? assignees[0].id : undefined);
+        const targetAssigneeId = selectedAssigneeFilter || undefined;
         const isSig = activeTool === 'signature';
         const isDigitalSig = activeTool === 'digital_signature';
 
@@ -258,7 +258,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
 
       setCreationRect(null);
     }
-  }, [creationRect, activeTool, pageNum, formManager, setActiveTool, selectedAssigneeFilter, assignees]);
+  }, [creationRect, activeTool, pageNum, formManager, setActiveTool, selectedAssigneeFilter]);
 
   useEffect(() => {
     window.addEventListener('mousemove', handleMouseMove);
@@ -357,6 +357,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
   return (
     <div
       ref={containerRef}
+      className="tspdf-form-field-layer"
       onMouseDown={handleMouseDown}
       style={{
         position: 'absolute',
@@ -378,7 +379,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
         const fieldValue = values[field.name] !== undefined ? values[field.name] : (field.defaultValue ?? '');
 
         const assignee = assignees.find((a) => a.id === field.assigneeId);
-        const fieldColor = assignee?.color || '#0284c7';
+        const fieldColor = assignee?.color || '#64748b';
         const isFilteredOut = Boolean(selectedAssigneeFilter && field.assigneeId !== selectedAssigneeFilter);
 
         // --------------------------------------------------------------------------------------
@@ -601,6 +602,51 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
                 >
+                  {/* Quick User Assignment Dropdown */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      paddingRight: '6px',
+                      borderRight: '1px solid #e5e7eb',
+                    }}
+                  >
+                    <User size={13} color={fieldColor} />
+                    <select
+                      value={field.assigneeId || ''}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        const nextId = e.target.value || undefined;
+                        const nextAssignee = assignees.find((a) => a.id === nextId);
+                        formManager.updateField(field.id, {
+                          assigneeId: nextId,
+                          borderColor: nextAssignee ? nextAssignee.color : undefined,
+                        });
+                      }}
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '1px 4px',
+                        borderRadius: '3px',
+                        border: `1px solid ${fieldColor}66`,
+                        backgroundColor: '#f8fafc',
+                        color: fieldColor,
+                        cursor: 'pointer',
+                        outline: 'none',
+                        height: '22px',
+                      }}
+                      title="Assign this field to a user"
+                    >
+                      <option value="">Anyone</option>
+                      {assignees.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <button
                     type="button"
                     title="Edit Field Properties"
@@ -721,7 +767,9 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
 
         const effectiveBorderColor = isAssignedToOther
           ? '#cbd5e1'
-          : field.borderColor || (assignee ? assignee.color : '#94a3b8');
+          : assignee
+          ? (field.borderColor || assignee.color)
+          : (field.borderColor && !assignees.some((a) => a.color === field.borderColor) ? field.borderColor : '#94a3b8');
 
         const effectiveBorderWidth = field.borderWidth ?? 1.5;
         const effectiveBorderRadius = field.borderRadius ?? 3;
@@ -1319,35 +1367,39 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
 
       {/* Field Properties Configuration Modal */}
       {editingField && (
-        <FormFieldEditorModal
-          field={editingField}
-          assignees={assignees}
-          onAddAssignee={(user) => formManager.addAssignee(user)}
-          onSave={(updates) => {
-            formManager.updateField(editingField.id, updates);
-            setEditingField(null);
-          }}
-          onClose={() => setEditingField(null)}
-        />
+        <div style={{ pointerEvents: 'auto' }}>
+          <FormFieldEditorModal
+            field={editingField}
+            assignees={assignees}
+            onAddAssignee={(user) => formManager.addAssignee(user)}
+            onSave={(updates) => {
+              formManager.updateField(editingField.id, updates);
+              setEditingField(null);
+            }}
+            onClose={() => setEditingField(null)}
+          />
+        </div>
       )}
 
       {/* Signature Capture Modal */}
       {signingField && (
-        <FormSignatureModal
-          field={signingField}
-          assignee={assignees.find((a) => a.id === signingField.assigneeId)}
-          currentValue={values[signingField.name]}
-          defaultSignerName={formManager.getAssignee(currentAssigneeId || undefined)?.name || ''}
-          onSave={(val) => {
-            formManager.setValue(signingField.name, val);
-            setSigningField(null);
-          }}
-          onClear={() => {
-            formManager.setValue(signingField.name, null);
-            setSigningField(null);
-          }}
-          onClose={() => setSigningField(null)}
-        />
+        <div style={{ pointerEvents: 'auto' }}>
+          <FormSignatureModal
+            field={signingField}
+            assignee={assignees.find((a) => a.id === signingField.assigneeId)}
+            currentValue={values[signingField.name]}
+            defaultSignerName={formManager.getAssignee(currentAssigneeId || undefined)?.name || ''}
+            onSave={(val) => {
+              formManager.setValue(signingField.name, val);
+              setSigningField(null);
+            }}
+            onClear={() => {
+              formManager.setValue(signingField.name, null);
+              setSigningField(null);
+            }}
+            onClose={() => setSigningField(null)}
+          />
+        </div>
       )}
     </div>
   );

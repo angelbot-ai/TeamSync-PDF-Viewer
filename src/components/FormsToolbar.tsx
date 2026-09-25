@@ -236,12 +236,12 @@ export const FormsToolbar: React.FC<FormsToolbarProps> = ({
                 color: '#334155',
                 cursor: 'pointer',
               }}
-              title="Filter fields by user assignment"
+              title="Filter visible fields by user assignment"
             >
-              <option value="">All Users</option>
+              <option value="">Filter: All Fields</option>
               {assignees.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name}
+                  Filter: {a.name}
                 </option>
               ))}
             </select>

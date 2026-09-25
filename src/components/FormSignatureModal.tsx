@@ -59,9 +59,12 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
 
   // Canvas drawing state
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const isDrawingRef = useRef(false);
+  const strokesRef = useRef<Array<{ points: { x: number; y: number }[]; color: string; width: number }>>([]);
   const [hasDrawn, setHasDrawn] = useState(false);
   const [penColor, setPenColor] = useState('#0f172a');
+  const penColorRef = useRef(penColor);
+  penColorRef.current = penColor;
 
   // Generate SHA-256 style fingerprint for digital signature preview
   const [certFingerprint] = useState(() => {
@@ -76,35 +79,89 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
     return hash;
   });
 
-  // Setup canvas high-DPI
-  useEffect(() => {
-    if (signatureType !== 'electronic' || electronicTab !== 'draw') return;
+  // Redraw all stored strokes cleanly on high-DPI canvas
+  const redrawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
+    const w = rect.width > 0 ? rect.width : (canvas.clientWidth || 480);
+    const h = rect.height > 0 ? rect.height : (canvas.clientHeight || 150);
+
+    const targetWidth = Math.round(w * dpr);
+    const targetHeight = Math.round(h * dpr);
+
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+    }
+
+    ctx.resetTransform?.();
     ctx.scale(dpr, dpr);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = penColor;
-    ctx.lineWidth = 2.5;
 
-    // If existing signature dataUrl exists, draw it
-    if (typeof currentValue === 'object' && currentValue?.dataUrl && !hasDrawn) {
-      const img = new Image();
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0, rect.width, rect.height);
-        setHasDrawn(true);
-      };
-      img.src = currentValue.dataUrl;
+    ctx.clearRect(0, 0, w, h);
+
+    for (const stroke of strokesRef.current) {
+      if (stroke.points.length === 0) continue;
+      ctx.beginPath();
+      ctx.strokeStyle = stroke.color;
+      ctx.lineWidth = stroke.width || 2.5;
+      ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+      for (let i = 1; i < stroke.points.length; i++) {
+        ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+      }
+      if (stroke.points.length === 1) {
+        ctx.lineTo(stroke.points[0].x + 0.1, stroke.points[0].y + 0.1);
+      }
+      ctx.stroke();
     }
-  }, [signatureType, electronicTab, penColor]);
+  }, []);
+
+  // Setup canvas high-DPI on mount / tab switch (without resetting on penColor change)
+  useEffect(() => {
+    if (signatureType !== 'electronic' || electronicTab !== 'draw') return;
+    const timer = setTimeout(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      redrawCanvas();
+
+      // If existing signature dataUrl exists and no strokes yet, draw it
+      if (typeof currentValue === 'object' && currentValue?.dataUrl && strokesRef.current.length === 0 && !hasDrawn) {
+        const img = new Image();
+        img.onload = () => {
+          const rect = canvas.getBoundingClientRect();
+          const w = rect.width > 0 ? rect.width : (canvas.clientWidth || 480);
+          const h = rect.height > 0 ? rect.height : (canvas.clientHeight || 150);
+          ctx.drawImage(img, 0, 0, w, h);
+          setHasDrawn(true);
+        };
+        img.src = currentValue.dataUrl;
+      }
+    }, 20);
+
+    return () => clearTimeout(timer);
+  }, [signatureType, electronicTab, redrawCanvas]);
+
+  // Window-level mouseup / touchend listeners so strokes end cleanly if pointer leaves canvas
+  useEffect(() => {
+    const handleGlobalEnd = () => {
+      isDrawingRef.current = false;
+    };
+    window.addEventListener('mouseup', handleGlobalEnd);
+    window.addEventListener('touchend', handleGlobalEnd);
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalEnd);
+      window.removeEventListener('touchend', handleGlobalEnd);
+    };
+  }, []);
 
   // Canvas drawing handlers
   const getCanvasPos = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -119,55 +176,94 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
   };
 
   const handleStartDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if ('touches' in e && e.touches.length === 1 && e.cancelable) {
+      e.preventDefault();
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    setIsDrawing(true);
+
+    isDrawingRef.current = true;
     setHasDrawn(true);
+
     const pos = getCanvasPos(e);
+    strokesRef.current.push({
+      points: [pos],
+      color: penColorRef.current,
+      width: 2.5,
+    });
+
     ctx.beginPath();
+    ctx.strokeStyle = penColorRef.current;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.moveTo(pos.x, pos.y);
+    ctx.lineTo(pos.x + 0.1, pos.y + 0.1);
+    ctx.stroke();
   };
 
   const handleDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
+    if (!isDrawingRef.current) return;
+    if ('touches' in e && e.cancelable) {
+      e.preventDefault();
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
     const pos = getCanvasPos(e);
+    const activeStroke = strokesRef.current[strokesRef.current.length - 1];
+    if (activeStroke) {
+      activeStroke.points.push(pos);
+    }
+
     ctx.lineTo(pos.x, pos.y);
     ctx.stroke();
   };
 
   const handleEndDraw = () => {
-    setIsDrawing(false);
+    isDrawingRef.current = false;
   };
 
   const handleClearCanvas = () => {
+    strokesRef.current = [];
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const dpr = window.devicePixelRatio || 1;
+    ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
     setHasDrawn(false);
   };
 
-  // Convert typed cursive text to PNG dataUrl using offscreen canvas
+  // Convert typed cursive text to PNG dataUrl using offscreen canvas (with SVG fallback)
   const renderTypedToDataUrl = useCallback((nameText: string, fontObj: typeof cursiveFonts[0]): string => {
-    const offscreen = document.createElement('canvas');
-    offscreen.width = 600;
-    offscreen.height = 180;
-    const ctx = offscreen.getContext('2d');
-    if (!ctx) return '';
+    try {
+      const offscreen = document.createElement('canvas');
+      offscreen.width = 600;
+      offscreen.height = 180;
+      const ctx = offscreen.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = penColor;
+        ctx.font = `${fontObj.style} 52px ${fontObj.family}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(nameText || 'Signature', 300, 90);
+        const data = offscreen.toDataURL('image/png');
+        if (data && data.length > 30 && data !== 'data:,') {
+          return data;
+        }
+      }
+    } catch {
+      // Fallback to SVG below
+    }
 
-    ctx.fillStyle = penColor;
-    ctx.font = `${fontObj.style} 52px ${fontObj.family}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(nameText || 'Signature', 300, 90);
-    return offscreen.toDataURL('image/png');
+    // High quality vector SVG data URL fallback
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="180"><text x="300" y="90" font-family="${fontObj.name}, cursive" font-size="52" font-style="${fontObj.style}" fill="${penColor}" text-anchor="middle" dominant-baseline="middle">${nameText || 'Signature'}</text></svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
   }, [penColor]);
 
   // Handle uploaded image file
@@ -209,15 +305,22 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
       if (canvas && hasDrawn) {
         finalDataUrl = canvas.toDataURL('image/png');
       }
+      if (!finalDataUrl || !hasDrawn) {
+        alert('Please draw your signature before adopting.');
+        return;
+      }
     } else if (electronicTab === 'type') {
       finalDataUrl = renderTypedToDataUrl(signerName.trim() || 'Signature', cursiveFonts[typedFontIndex]);
+      if (!finalDataUrl) {
+        alert('Please enter your name for the signature.');
+        return;
+      }
     } else if (electronicTab === 'upload') {
       finalDataUrl = uploadedDataUrl || '';
-    }
-
-    if (!finalDataUrl && !hasDrawn && electronicTab === 'draw') {
-      alert('Please provide a signature before adopting.');
-      return;
+      if (!finalDataUrl) {
+        alert('Please upload a signature image before adopting.');
+        return;
+      }
     }
 
     const sigVal: FormSignatureValue = {
@@ -248,6 +351,7 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
         justifyContent: 'center',
         padding: '16px',
         animation: 'fadeIn 0.15s ease-out',
+        pointerEvents: 'auto',
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -264,6 +368,7 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
           display: 'flex',
           flexDirection: 'column',
           maxHeight: '90vh',
+          pointerEvents: 'auto',
         }}
       >
         {/* Header */}

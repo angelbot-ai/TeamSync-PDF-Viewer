@@ -538,5 +538,67 @@ describe('FormFieldLayer', () => {
 
     expect(document.body.textContent).not.toContain('Apply Digital Signature');
   });
+
+  it('defaults newly drawn fields to unassigned and allows 1-click assignment via floating action bar', async () => {
+    const formManager = new FormManager([]);
+    const setActiveTool = vi.fn();
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <FormFieldLayer
+          pageNum={1}
+          scale={1}
+          rotation={0}
+          basePageWidth={600}
+          basePageHeight={800}
+          activeTab="Forms"
+          activeTool="textbox"
+          setActiveTool={setActiveTool}
+          formManager={formManager}
+        />
+      );
+    });
+
+    const layerDiv = container.querySelector('.tspdf-form-field-layer') as HTMLDivElement;
+    expect(layerDiv).not.toBeNull();
+
+    // Simulate drag to create field with state flushing between steps
+    await act(async () => {
+      layerDiv.dispatchEvent(new MouseEvent('mousedown', { clientX: 50, clientY: 50, bubbles: true }));
+    });
+    await act(async () => {
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 200, clientY: 110, bubbles: true }));
+    });
+    await act(async () => {
+      window.dispatchEvent(new MouseEvent('mouseup', { clientX: 200, clientY: 110, bubbles: true }));
+    });
+
+    // Check newly created field
+    const fields = formManager.getFields();
+    expect(fields).toHaveLength(1);
+    expect(fields[0].assigneeId).toBeUndefined(); // Must NOT forcibly assign to User A!
+
+    // Field should display "Anyone" badge
+    expect(container.textContent).toContain('Anyone');
+
+    // Field should be selected, so floating action bar should show the quick assign select
+    const quickAssignSelect = container.querySelector('select[title="Assign this field to a user"]') as HTMLSelectElement;
+    expect(quickAssignSelect).not.toBeNull();
+    expect(quickAssignSelect.value).toBe('');
+
+    // Change assignment to User B
+    await act(async () => {
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set;
+      nativeSetter?.call(quickAssignSelect, 'user_b');
+      quickAssignSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // Verify field is now assigned to user_b and has User B's purple color
+    const updatedFields = formManager.getFields();
+    expect(updatedFields[0].assigneeId).toBe('user_b');
+    expect(updatedFields[0].borderColor).toBe('#9333ea');
+  });
 });
+
 

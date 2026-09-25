@@ -832,38 +832,112 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
               pointerEvents: 'auto',
             }}
           >
-            {/* Top Multi-User Badge, Lock indicator, or 'Sign Here' Flag Tag */}
-            {isAssignedToOther ? (
+            {/* Field Header Badge for View (Filler) Mode */}
+            {!isSignature ? (
               <div
                 style={{
                   position: 'absolute',
-                  top: '-18px',
+                  top: rot.y * scale < 22 ? `${rot.height * scale + 2}px` : '-19px',
                   left: '0px',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '3px',
-                  backgroundColor: fieldColor,
-                  color: '#ffffff',
-                  fontSize: `${Math.max(9, 10 * scale)}px`,
-                  fontWeight: 600,
-                  padding: '1px 5px',
+                  gap: '4px',
+                  backgroundColor: '#ffffff',
+                  color: isAssignedToOther ? '#64748b' : fieldColor,
+                  border: `1px solid ${isAssignedToOther ? '#cbd5e1' : `${fieldColor}99`}`,
+                  fontSize: `${Math.max(8.5, 9.5 * scale)}px`,
+                  padding: '1px 6px',
                   borderRadius: '3px',
                   pointerEvents: 'none',
                   zIndex: 25,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+                  lineHeight: 1.3,
                   whiteSpace: 'nowrap',
-                  lineHeight: 1.2,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                  maxWidth: `${Math.max(220, rot.width * scale * 1.5)}px`,
                 }}
               >
-                <Lock size={10} />
-                <span>{assignee ? assignee.name : 'Other User'}</span>
+                {isAssignedToOther && (
+                  <Lock size={10} style={{ flexShrink: 0, color: '#64748b' }} />
+                )}
+
+                {showFlowOrder && field.flowOrder !== undefined && (
+                  <span
+                    style={{
+                      backgroundColor: isAssignedToOther ? '#94a3b8' : fieldColor,
+                      color: '#ffffff',
+                      fontSize: `${Math.max(7.5, 8.5 * scale)}px`,
+                      fontWeight: 700,
+                      padding: '0 4px',
+                      borderRadius: '8px',
+                      lineHeight: 1.2,
+                      flexShrink: 0,
+                    }}
+                    title={`Step #${field.flowOrder}`}
+                  >
+                    #{field.flowOrder}
+                  </span>
+                )}
+
+                {/* Field Label / Name */}
+                <span
+                  style={{
+                    fontWeight: 700,
+                    color: isAssignedToOther ? '#64748b' : '#0f172a',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={field.label || field.name}
+                >
+                  {field.label || field.name}
+                  {field.required && <span style={{ color: '#ef4444' }}> *</span>}
+                </span>
+
+                {/* Assignee Badge */}
+                {assignee ? (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      backgroundColor: `${fieldColor}18`,
+                      color: fieldColor,
+                      fontSize: `${Math.max(7.5, 8.5 * scale)}px`,
+                      fontWeight: 600,
+                      padding: '0 4px',
+                      borderRadius: '10px',
+                      flexShrink: 0,
+                      marginLeft: '2px',
+                    }}
+                    title={`Assigned to ${assignee.name}`}
+                  >
+                    <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: fieldColor }} />
+                    {assignee.name}
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      backgroundColor: '#f1f5f9',
+                      color: '#64748b',
+                      fontSize: `${Math.max(7.5, 8.5 * scale)}px`,
+                      fontWeight: 500,
+                      padding: '0 3px',
+                      borderRadius: '3px',
+                      flexShrink: 0,
+                      marginLeft: '2px',
+                    }}
+                    title="Anyone can fill this field"
+                  >
+                    Anyone
+                  </span>
+                )}
               </div>
-            ) : isSignature ? (
-              /* 'Sign Here' Flag Tag with arrow pointing directly into signature box */
+            ) : (
+              /* Signature Flag Tag with arrow pointing directly into signature box */
               <div
                 style={{
                   position: 'absolute',
-                  top: '-20px',
+                  top: rot.y * scale < 22 ? `${rot.height * scale + 2}px` : '-20px',
                   left: '0px',
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -875,7 +949,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
               >
                 <div
                   style={{
-                    backgroundColor: isSigned ? '#16a34a' : fieldColor,
+                    backgroundColor: isSigned ? '#16a34a' : isAssignedToOther ? '#64748b' : fieldColor,
                     color: '#ffffff',
                     fontSize: `${Math.max(9, 9.5 * scale)}px`,
                     fontWeight: 700,
@@ -886,17 +960,41 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                     gap: '4px',
                     letterSpacing: '0.3px',
                     lineHeight: 1.2,
+                    maxWidth: `${Math.max(220, rot.width * scale * 1.5)}px`,
                   }}
                 >
+                  {isAssignedToOther && <Lock size={10} style={{ flexShrink: 0 }} />}
+                  {showFlowOrder && field.flowOrder !== undefined && (
+                    <span
+                      style={{
+                        backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                        color: '#ffffff',
+                        fontSize: `${Math.max(7.5, 8.5 * scale)}px`,
+                        fontWeight: 800,
+                        padding: '0 4px',
+                        borderRadius: '6px',
+                        lineHeight: 1.2,
+                        marginRight: '2px',
+                        flexShrink: 0,
+                      }}
+                      title={`Step #${field.flowOrder}`}
+                    >
+                      #{field.flowOrder}
+                    </span>
+                  )}
                   {isSigned ? (
                     <>
-                      <Check size={11} strokeWidth={3} />
-                      <span>SIGNED</span>
+                      <Check size={11} strokeWidth={3} style={{ flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        SIGNED{field.label ? `: ${field.label}` : ''}
+                      </span>
                     </>
                   ) : (
-                    <span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       ✍️ {field.signTagText || (field.type === 'digital_signature' ? 'DIGITAL SIGN' : 'SIGN HERE')}
+                      {field.label && field.label !== field.signTagText ? ` · ${field.label}` : ''}
                       {assignee ? ` (${assignee.name})` : ''}
+                      {field.required && <span style={{ color: '#fca5a5' }}> *</span>}
                     </span>
                   )}
                 </div>
@@ -907,37 +1005,11 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                     height: 0,
                     borderTop: '9px solid transparent',
                     borderBottom: '9px solid transparent',
-                    borderLeft: `7px solid ${isSigned ? '#16a34a' : fieldColor}`,
+                    borderLeft: `7px solid ${isSigned ? '#16a34a' : isAssignedToOther ? '#64748b' : fieldColor}`,
                   }}
                 />
               </div>
-            ) : assignee ? (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '-16px',
-                  left: '0px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '3px',
-                  backgroundColor: '#ffffff',
-                  color: fieldColor,
-                  border: `1px solid ${fieldColor}`,
-                  fontSize: `${Math.max(8, 9 * scale)}px`,
-                  fontWeight: 600,
-                  padding: '0 4px',
-                  borderRadius: '3px',
-                  pointerEvents: 'none',
-                  zIndex: 25,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
-                  lineHeight: 1.3,
-                }}
-              >
-                <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: fieldColor }} />
-                <span>{assignee.name}</span>
-                {field.flowOrder !== undefined && <span style={{ opacity: 0.7 }}>#{field.flowOrder}</span>}
-              </div>
-            ) : null}
+            )}
 
             {/* Textbox Input */}
             {(field.type === 'text' || (field.type as string) === 'textbox') && (
@@ -1106,7 +1178,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                   cursor: isReadOnly ? 'not-allowed' : 'pointer',
                 }}
               >
-                <option value="">{field.placeholder || '-- Select --'}</option>
+                <option value="">{field.placeholder || (field.label ? `-- Select ${field.label} --` : '-- Select --')}</option>
                 {(field.options || []).map((opt, oIdx) => (
                   <option key={oIdx} value={opt}>
                     {opt}
@@ -1243,7 +1315,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                             textOverflow: 'ellipsis',
                           }}
                         >
-                          Digitally signed by {sigVal.signerName || 'Authorized Signer'}
+                          {field.label ? `${field.label}: ` : ''}Digitally signed by {sigVal.signerName || 'Authorized Signer'}
                         </div>
                         <div
                           style={{
@@ -1312,7 +1384,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                             marginTop: '2px',
                           }}
                         >
-                          Digitally signed by {sigVal.signerName}
+                          Digitally signed by {sigVal.signerName}{field.label ? ` · ${field.label}` : ''}
                         </span>
                       )}
                     </div>
@@ -1365,6 +1437,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                         {isAssignedToOther
                           ? `Assigned to ${assignee ? assignee.name : 'other user'}`
                           : `Click to sign ${field.type === 'digital_signature' ? 'digitally' : 'electronically'}`}
+                        {field.label && <span style={{ opacity: 0.85, fontWeight: 500 }}> ({field.label})</span>}
                       </span>
                     </div>
                   </div>

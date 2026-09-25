@@ -653,7 +653,87 @@ describe('FormFieldLayer', () => {
     // Must NOT be truncated to just "User"
     expect(container.textContent).not.toMatch(/DIGITAL SIGN \(User\)/);
   });
+
+  it('prominently displays field names, flow orders, and assignees in View mode', async () => {
+    const field1: FormField = {
+      id: 'f1',
+      name: 'applicant_name',
+      label: 'Applicant Full Name',
+      type: 'text',
+      pageIndex: 1,
+      x: 10,
+      y: 30,
+      width: 200,
+      height: 35,
+      required: true,
+      flowOrder: 1,
+      assigneeId: 'user_a',
+    };
+    const field2: FormField = {
+      id: 'f2',
+      name: 'department',
+      label: 'Department',
+      type: 'dropdown',
+      pageIndex: 1,
+      x: 10,
+      y: 80,
+      width: 150,
+      height: 35,
+      options: ['Engineering', 'Design', 'Marketing'],
+      // unassigned (anyone can fill)
+    };
+    const field3: FormField = {
+      id: 'f3',
+      name: 'applicant_signature',
+      label: 'Applicant Signature',
+      type: 'signature',
+      pageIndex: 1,
+      x: 10,
+      y: 130,
+      width: 220,
+      height: 60,
+      flowOrder: 2,
+      assigneeId: 'user_a',
+    };
+
+    const formManager = new FormManager([field1, field2, field3]);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <FormFieldLayer
+          pageNum={1}
+          scale={1}
+          rotation={0}
+          basePageWidth={600}
+          basePageHeight={800}
+          activeTab="View"
+          activeTool="select"
+          setActiveTool={vi.fn()}
+          formManager={formManager}
+          showFlowOrder={true}
+        />
+      );
+    });
+
+    // In View mode, field labels should be prominently visible
+    expect(container.textContent).toContain('Applicant Full Name');
+    expect(container.textContent).toContain('#1');
+    expect(container.textContent).toContain('User A');
+
+    // Unassigned field should show its label and "Anyone" badge
+    expect(container.textContent).toContain('Department');
+    expect(container.textContent).toContain('Anyone');
+
+    // Signature tag should show Applicant Signature with assignee
+    expect(container.textContent).toContain('Applicant Signature (User A)');
+    expect(container.textContent).toContain('#2');
+
+    // Check that required asterisk is rendered
+    expect(container.textContent).toContain('*');
+  });
 });
+
 
 
 

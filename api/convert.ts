@@ -300,12 +300,12 @@ export default async function handler(request: Request): Promise<Response> {
         }
       }
 
-      const fileBlob = await fileResp.blob();
-      if (fileBlob.size > MAX_DOCUMENT_SIZE) {
+      const fileBuffer = await fileResp.arrayBuffer();
+      if (fileBuffer.byteLength > MAX_DOCUMENT_SIZE) {
         return new Response(
           JSON.stringify({
             error: 'Payload Too Large',
-            message: `Source document exceeds maximum allowed size of 25MB (${fileBlob.size} bytes)`,
+            message: `Source document exceeds maximum allowed size of 25MB (${fileBuffer.byteLength} bytes)`,
           }),
           {
             status: 413,
@@ -318,6 +318,7 @@ export default async function handler(request: Request): Promise<Response> {
         targetUrl.split('#')[0].split('?')[0].split('/').pop() || 'document.docx';
 
       // Forward to Gotenberg for conversion
+      const fileBlob = new Blob([fileBuffer]);
       const formData = new FormData();
       formData.append('files', fileBlob, cleanName);
 

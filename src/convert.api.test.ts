@@ -6,16 +6,19 @@ import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import handler, { isSafeTargetUrl, MAX_DOCUMENT_SIZE } from '../api/convert';
 
 describe('api/convert edge function security', () => {
+  const originalEnvAuth = process.env.GOTENBERG_BASIC_AUTH;
+
   beforeEach(() => {
-    (globalThis as any).process = {
-      env: {
-        GOTENBERG_BASIC_AUTH: 'Basic dGVzdDp0ZXN0',
-      },
-    };
+    process.env.GOTENBERG_BASIC_AUTH = 'Basic dGVzdDp0ZXN0';
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    if (originalEnvAuth !== undefined) {
+      process.env.GOTENBERG_BASIC_AUTH = originalEnvAuth;
+    } else {
+      delete process.env.GOTENBERG_BASIC_AUTH;
+    }
   });
 
   describe('isSafeTargetUrl (SEC-01 SSRF Defenses)', () => {

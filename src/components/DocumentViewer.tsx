@@ -33,6 +33,7 @@ import type { CompareState, TextDiffSegment, DiffItem, DiffBoundingBox } from '.
 import { computeTextDiff, computePageDiffBoxes } from '../utils/pdfDiffEngine';
 import { FormsToolbar } from './FormsToolbar';
 import { FormFillerActions } from './FormFillerActions';
+import { SignatureIndexFlags } from './SignatureIndexFlags';
 import type { FormManager } from '../forms/FormManager';
 import type { FormToolType } from '../forms/types';
 
@@ -2553,6 +2554,14 @@ export default function DocumentViewer({
               />
             )}
           </div>
+
+          {/* Signature Sticky / Index Flags attached to the side of the viewer */}
+          {formManager && (
+            <SignatureIndexFlags
+              formManager={formManager}
+              activeTab={activeTab}
+            />
+          )}
         </>
       )}
 

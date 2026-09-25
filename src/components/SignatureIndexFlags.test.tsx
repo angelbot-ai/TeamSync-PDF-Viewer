@@ -24,22 +24,22 @@ describe('SignatureIndexFlags', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders nothing when no user is selected', async () => {
-    const sigA: FormField = {
-      id: 'sig_a',
+  it('renders sticky index flags on the side so signatures on page 2 are visible while viewing page 1', async () => {
+    const sigOnPage2: FormField = {
+      id: 'sig_p2',
       name: 'applicant_sig',
       label: 'Applicant Signature',
       type: 'signature',
-      pageIndex: 1,
-      x: 50,
-      y: 100,
-      width: 200,
-      height: 50,
+      pageIndex: 2,
+      x: 60,
+      y: 400,
+      width: 220,
+      height: 60,
       assigneeId: 'user_a',
+      flowOrder: 1,
     };
 
-    const formManager = new FormManager([sigA]);
-    // No current assignee set — dock should not render
+    const formManager = new FormManager([sigOnPage2]);
     const root = createRoot(container);
 
     await act(async () => {
@@ -51,12 +51,14 @@ describe('SignatureIndexFlags', () => {
       );
     });
 
-    // Nothing should render because no user is selected
-    expect(container.textContent).toBe('');
-    expect(container.querySelector('.tspdf-signature-index-flags')).toBeNull();
+    // The sticky index flag for the Page 2 signature must be rendered on the side
+    expect(container.querySelector('.tspdf-signature-index-flags')).not.toBeNull();
+    expect(container.textContent).toContain('Applicant Signature');
+    expect(container.textContent).toContain('P.2');
+    expect(container.textContent).toContain('1 due');
   });
 
-  it('shows only the current user\'s signature flags when a user is selected', async () => {
+  it('shows only the current user\'s signature flags when a specific user is selected', async () => {
     const sigA: FormField = {
       id: 'sig_a',
       name: 'applicant_sig',
@@ -98,12 +100,12 @@ describe('SignatureIndexFlags', () => {
       );
     });
 
-    // Should show User A's name in the header and their signature
+    // Should show User A's name in the header and their signature on Page 1
     expect(container.textContent).toContain('User A');
     expect(container.textContent).toContain('Applicant Signature');
-    expect(container.textContent).toContain('Page 1');
+    expect(container.textContent).toContain('P.1');
 
-    // User B's signature should NOT be visible
+    // User B's signature on Page 2 should NOT be visible when viewing as User A
     expect(container.textContent).not.toContain('Executive Signature');
 
     // Switch to User B
@@ -113,6 +115,7 @@ describe('SignatureIndexFlags', () => {
 
     expect(container.textContent).toContain('User B');
     expect(container.textContent).toContain('Executive Signature');
+    expect(container.textContent).toContain('P.2');
     expect(container.textContent).not.toContain('Applicant Signature');
   });
 
@@ -122,7 +125,7 @@ describe('SignatureIndexFlags', () => {
       name: 'applicant_sig',
       label: 'Applicant Signature',
       type: 'signature',
-      pageIndex: 1,
+      pageIndex: 2,
       x: 50,
       y: 100,
       width: 200,
@@ -143,8 +146,8 @@ describe('SignatureIndexFlags', () => {
       );
     });
 
-    // Should show "0/1" progress (pending)
-    expect(container.textContent).toContain('0/1');
+    // 1 pending due
+    expect(container.textContent).toContain('1 due');
 
     // Sign the field
     await act(async () => {
@@ -155,9 +158,9 @@ describe('SignatureIndexFlags', () => {
       });
     });
 
-    // Should update to "All done"
-    expect(container.textContent).toContain('All done');
-    expect(container.textContent).toContain('✓');
+    // Should update to completed status
+    expect(container.textContent).toContain('All signed');
+    expect(container.textContent).toContain('SIGNED');
   });
 
   it('navigates and triggers active field change when a flag is clicked', async () => {
@@ -166,7 +169,7 @@ describe('SignatureIndexFlags', () => {
       name: 'applicant_sig',
       label: 'Applicant Signature',
       type: 'signature',
-      pageIndex: 1,
+      pageIndex: 2,
       x: 50,
       y: 100,
       width: 200,
@@ -203,7 +206,7 @@ describe('SignatureIndexFlags', () => {
       name: 'applicant_sig',
       label: 'Applicant Signature',
       type: 'signature',
-      pageIndex: 1,
+      pageIndex: 2,
       x: 50,
       y: 100,
       width: 200,
@@ -225,7 +228,7 @@ describe('SignatureIndexFlags', () => {
     });
 
     // Find collapse button
-    const collapseBtn = container.querySelector('button[title="Minimize"]') as HTMLButtonElement;
+    const collapseBtn = container.querySelector('button[title="Minimize signature flags dock"]') as HTMLButtonElement;
     expect(collapseBtn).not.toBeNull();
 
     await act(async () => {

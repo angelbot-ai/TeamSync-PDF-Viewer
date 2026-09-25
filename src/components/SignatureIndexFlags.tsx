@@ -1,11 +1,12 @@
 /**
  * © 2026 AngelBot Ai Pvt Ltd. All rights reserved.
- * SignatureIndexFlags — Clean sidebar flags on the right edge of the viewer
- * showing only the current user's pending and completed signature fields
- * with 1-click jump & sign navigation.
+ * SignatureIndexFlags — Sticky / Index Flags docked to the right edge of the viewer.
+ * Modeled after physical Post-it "Sign Here" arrow index flags, ensuring that even if a
+ * signature field is located on Page 2 (or beyond), the user sees the sticky flag on the
+ * side while viewing Page 1 and can jump & sign with a single click.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   PenTool,
   Check,
@@ -57,72 +58,91 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
     };
   }, [formManager]);
 
-  // All signature fields
+  // All signature fields in the document
   const signatureFields = useMemo(() => {
     return fields.filter(
       (f) => f.type === 'signature' || f.type === 'digital_signature'
     );
   }, [fields]);
 
-  // ONLY show the current user's signatures (strict filter — no other users, no "anyone" overflow)
-  const mySignatures = useMemo(() => {
-    if (!currentAssigneeId) {
-      return []; // No user selected → don't show the dock at all
+  // Filter signatures based on the current user:
+  // - If a user is selected (currentAssigneeId): ONLY show their signature flags (and unassigned ones)
+  // - If "All Users / Anyone" (currentAssigneeId is null): show all signature flags in the document
+  const relevantSignatures = useMemo(() => {
+    if (currentAssigneeId) {
+      return signatureFields.filter(
+        (f) => f.assigneeId === currentAssigneeId || !f.assigneeId
+      );
     }
-    return signatureFields.filter(
-      (f) => f.assigneeId === currentAssigneeId
-    );
+    return signatureFields;
   }, [signatureFields, currentAssigneeId]);
 
-  // Only display in View mode
+  const currentAssignee = useMemo(() => {
+    if (!currentAssigneeId) return null;
+    return assignees.find((a) => a.id === currentAssigneeId) || null;
+  }, [assignees, currentAssigneeId]);
+
+  const checkIsSigned = useCallback(
+    (field: FormField): boolean => {
+      const val = values[field.name];
+      if (!val) return false;
+      if (typeof val === 'string' && val.trim().length > 0) return true;
+      if (typeof val === 'object' && val !== null) {
+        const sig = val as FormSignatureValue;
+        return Boolean(sig.dataUrl || sig.signerName || (sig as any).imageUrl);
+      }
+      return false;
+    },
+    [values]
+  );
+
+  const pendingSignatures = useMemo(() => {
+    return relevantSignatures.filter((f) => !checkIsSigned(f));
+  }, [relevantSignatures, checkIsSigned]);
+
+  const totalPending = pendingSignatures.length;
+
+  const handleJumpToSignature = useCallback(
+    (field: FormField) => {
+      formManager.setActiveFieldId(field.id);
+
+      // Function to focus, click, and trigger visual highlight on the field DOM element
+      const tryFocusAndOpen = (retries = 8, delay = 150) => {
+        const fieldEl = document.getElementById(`tspdf-field-${field.id}`);
+        if (fieldEl) {
+          fieldEl.focus();
+          fieldEl.click();
+
+          // High-visibility glowing pulse animation
+          fieldEl.style.transition = 'box-shadow 0.3s ease, border-color 0.3s ease';
+          const originalBoxShadow = fieldEl.style.boxShadow;
+          fieldEl.style.boxShadow = '0 0 0 4px #f59e0b, 0 0 25px rgba(245, 158, 11, 0.7)';
+          setTimeout(() => {
+            fieldEl.style.boxShadow = originalBoxShadow;
+          }, 1500);
+        } else if (retries > 0) {
+          setTimeout(() => tryFocusAndOpen(retries - 1, delay), delay);
+        }
+      };
+
+      tryFocusAndOpen();
+    },
+    [formManager]
+  );
+
+  // Only display in View or Forms modes
   if (activeTab !== 'View' && activeTab !== 'Forms') {
     return null;
   }
 
-  // Don't render if no user is selected or no signatures for this user
-  if (!currentAssigneeId || mySignatures.length === 0) {
+  // If there are no signature fields for this role/document, do not render
+  if (relevantSignatures.length === 0) {
     return null;
   }
 
-  const currentAssignee = assignees.find((a) => a.id === currentAssigneeId);
-  const userColor = currentAssignee?.color || '#3b82f6';
-
-  const checkIsSigned = (field: FormField): boolean => {
-    const val = values[field.name];
-    if (!val) return false;
-    if (typeof val === 'string' && val.trim().length > 0) return true;
-    if (typeof val === 'object' && val !== null) {
-      const sig = val as FormSignatureValue;
-      return Boolean(sig.dataUrl || sig.signerName || (sig as any).imageUrl);
-    }
-    return false;
-  };
-
-  const pendingCount = mySignatures.filter((f) => !checkIsSigned(f)).length;
-  const signedCount = mySignatures.length - pendingCount;
-
-  const handleJumpToSignature = (field: FormField) => {
-    formManager.setActiveFieldId(field.id);
-
-    setTimeout(() => {
-      const fieldEl = document.getElementById(`tspdf-field-${field.id}`);
-      if (fieldEl) {
-        fieldEl.focus();
-        fieldEl.click();
-
-        // Brief amber highlight flash
-        fieldEl.style.transition = 'box-shadow 0.3s ease';
-        const originalBoxShadow = fieldEl.style.boxShadow;
-        fieldEl.style.boxShadow = '0 0 0 4px #f59e0b, 0 0 20px rgba(245, 158, 11, 0.5)';
-        setTimeout(() => {
-          fieldEl.style.boxShadow = originalBoxShadow;
-        }, 1000);
-      }
-    }, 250);
-  };
-
-  // Collapsed: show a compact pill
+  // Collapsed State: A sleek, recognizable floating Post-it flag tab
   if (isCollapsed) {
+    const accentColor = totalPending > 0 ? (currentAssignee?.color || '#f59e0b') : '#16a34a';
     return (
       <div
         className="tspdf-sticky-flags-collapsed"
@@ -130,43 +150,47 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
           position: 'absolute',
           right: 0,
           top: '90px',
-          zIndex: 40,
+          zIndex: 45,
           pointerEvents: 'auto',
           userSelect: 'none',
         }}
       >
         <button
           onClick={() => setIsCollapsed(false)}
-          title={`${currentAssignee?.name || 'User'}: ${pendingCount} signature${pendingCount !== 1 ? 's' : ''} pending`}
+          title={`Expand Signature Flags (${totalPending} pending)`}
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '5px',
-            backgroundColor: pendingCount > 0 ? userColor : '#16a34a',
+            gap: '6px',
+            backgroundColor: accentColor,
             color: '#ffffff',
             border: 'none',
-            borderRadius: '20px 0 0 20px',
-            padding: '7px 10px 7px 12px',
+            borderRadius: '8px 0 0 8px',
+            padding: '8px 12px 8px 8px',
             cursor: 'pointer',
-            boxShadow: '-2px 2px 10px rgba(0, 0, 0, 0.2)',
+            boxShadow: '-3px 4px 14px rgba(0, 0, 0, 0.25)',
             fontSize: '12px',
-            fontWeight: 600,
+            fontWeight: 700,
+            letterSpacing: '0.3px',
             transition: 'transform 0.15s ease',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateX(-3px)';
+            e.currentTarget.style.transform = 'translateX(-4px)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'translateX(0)';
           }}
         >
-          <ChevronLeft size={14} />
-          {pendingCount > 0 ? (
-            <span>{pendingCount} to sign</span>
+          <ChevronLeft size={16} />
+          {totalPending > 0 ? (
+            <>
+              <span>✍️</span>
+              <span>{totalPending} to sign</span>
+            </>
           ) : (
             <>
-              <Check size={14} strokeWidth={3} />
-              <span>Done</span>
+              <Check size={15} strokeWidth={3} />
+              <span>All Signed</span>
             </>
           )}
         </button>
@@ -177,100 +201,100 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
   return (
     <aside
       className="tspdf-signature-index-flags"
-      aria-label="Signature Index Flags"
+      aria-label="Signature Sticky Flags"
       style={{
         position: 'absolute',
         right: '0px',
         top: '80px',
-        maxHeight: 'calc(100% - 110px)',
-        zIndex: 40,
+        maxHeight: 'calc(100% - 100px)',
+        zIndex: 45,
         pointerEvents: 'auto',
         userSelect: 'none',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'flex-end',
-        gap: '0px',
+        gap: '6px',
       }}
     >
-      {/* Header */}
+      {/* Top Dock Header */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
-          backgroundColor: userColor,
-          color: '#ffffff',
-          padding: '6px 8px 6px 12px',
-          borderRadius: '12px 0 0 0',
-          fontSize: '12px',
-          fontWeight: 600,
-          letterSpacing: '0.2px',
+          backgroundColor: '#0f172a',
+          color: '#f8fafc',
+          padding: '6px 10px 6px 12px',
+          borderRadius: '8px 0 0 8px',
+          boxShadow: '-2px 3px 10px rgba(0,0,0,0.22)',
+          fontSize: '11px',
+          fontWeight: 700,
         }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <PenTool size={13} />
-          {currentAssignee?.name || 'User'}
-        </span>
-
-        {/* Progress pill */}
-        <span
-          style={{
-            backgroundColor: 'rgba(255,255,255,0.25)',
-            fontSize: '10px',
-            fontWeight: 700,
-            padding: '2px 7px',
-            borderRadius: '10px',
-          }}
-        >
-          {pendingCount > 0
-            ? `${signedCount}/${mySignatures.length}`
-            : '✓ All done'}
-        </span>
-
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <PenTool size={13} style={{ color: currentAssignee?.color || '#f59e0b' }} />
+          <span>
+            {currentAssignee ? `${currentAssignee.name}'s Signatures` : 'Signature Flags'}
+          </span>
+          <span
+            style={{
+              backgroundColor: totalPending > 0 ? '#ef4444' : '#16a34a',
+              color: '#ffffff',
+              fontSize: '10px',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              fontWeight: 800,
+            }}
+          >
+            {totalPending > 0 ? `${totalPending} due` : '✓ All signed'}
+          </span>
+        </div>
         <button
           onClick={() => setIsCollapsed(true)}
-          title="Minimize"
+          title="Minimize signature flags dock"
           style={{
             background: 'none',
             border: 'none',
-            color: 'rgba(255,255,255,0.7)',
+            color: '#94a3b8',
             cursor: 'pointer',
             padding: '2px',
             display: 'flex',
             alignItems: 'center',
             borderRadius: '4px',
+            marginLeft: '2px',
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.color = '#ffffff';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
+            e.currentTarget.style.color = '#94a3b8';
           }}
         >
           <ChevronRight size={14} />
         </button>
       </div>
 
-      {/* Signature list */}
+      {/* List of Physical Post-it Style Arrow Flags */}
       <div
         style={{
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'stretch',
+          alignItems: 'flex-end',
+          gap: '8px',
           overflowY: 'auto',
-          maxHeight: 'calc(100vh - 240px)',
-          backgroundColor: '#ffffff',
-          borderRadius: '0 0 0 12px',
-          borderLeft: `2px solid ${userColor}`,
-          borderBottom: `1px solid ${userColor}33`,
-          boxShadow: '-2px 4px 14px rgba(0,0,0,0.12)',
+          maxHeight: 'calc(100vh - 220px)',
+          paddingRight: '0px',
+          paddingBottom: '8px',
         }}
       >
-        {mySignatures.map((field, idx) => {
+        {relevantSignatures.map((field) => {
           const isSigned = checkIsSigned(field);
+          const assignee = assignees.find((a) => a.id === field.assigneeId);
+          // Color coding: green when signed; otherwise user's color or warm Post-it amber
+          const flagColor = isSigned ? '#16a34a' : assignee?.color || '#f59e0b';
           const isHovered = hoveredFieldId === field.id;
           const isActive = activeFieldId === field.id;
-          const fieldLabel = field.label || field.name || `Signature ${idx + 1}`;
+          const fieldLabel = field.label || field.name || 'Signature';
 
           return (
             <div
@@ -280,84 +304,132 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
               onMouseEnter={() => setHoveredFieldId(field.id)}
               onMouseLeave={() => setHoveredFieldId(null)}
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '8px',
-                padding: '8px 12px',
                 cursor: 'pointer',
-                backgroundColor: isActive
-                  ? `${userColor}12`
-                  : isHovered
-                  ? '#f8fafc'
-                  : '#ffffff',
-                borderBottom: '1px solid #f1f5f9',
-                transition: 'background-color 0.12s ease',
-                minWidth: '160px',
+                filter: isHovered || isActive
+                  ? 'drop-shadow(-4px 4px 12px rgba(0, 0, 0, 0.3))'
+                  : 'drop-shadow(-2px 3px 6px rgba(0, 0, 0, 0.18))',
+                transform: isHovered || isActive ? 'translateX(-8px)' : 'translateX(0)',
+                transition: 'transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), filter 0.18s ease',
               }}
-              title={`Page ${field.pageIndex} · ${fieldLabel}${isSigned ? ' (Signed)' : ' — Click to sign'}`}
+              title={`Page ${field.pageIndex}: ${fieldLabel} (${
+                isSigned ? 'Signed' : 'Click to jump to page and sign'
+              })`}
             >
-              {/* Status icon */}
+              {/* Arrow chevron pointing left directly toward the PDF document canvas */}
               <div
                 style={{
-                  width: '22px',
-                  height: '22px',
-                  borderRadius: '50%',
-                  backgroundColor: isSigned ? '#dcfce7' : `${userColor}15`,
-                  border: `2px solid ${isSigned ? '#16a34a' : userColor}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  width: 0,
+                  height: 0,
+                  borderTop: '16px solid transparent',
+                  borderBottom: '16px solid transparent',
+                  borderRight: `13px solid ${flagColor}`,
                   flexShrink: 0,
                 }}
-              >
-                {isSigned ? (
-                  <Check size={12} strokeWidth={3} color="#16a34a" />
-                ) : field.type === 'digital_signature' ? (
-                  <ShieldCheck size={12} color={userColor} />
-                ) : (
-                  <PenTool size={11} color={userColor} />
-                )}
-              </div>
+              />
 
-              {/* Field info */}
-              <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
-                <div
-                  style={{
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: isSigned ? '#16a34a' : '#1e293b',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    lineHeight: 1.3,
-                  }}
-                >
+              {/* Sticky Flag Body */}
+              <div
+                style={{
+                  backgroundColor: flagColor,
+                  color: '#ffffff',
+                  padding: '6px 14px 6px 8px',
+                  borderRadius: '0 6px 6px 0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  letterSpacing: '0.3px',
+                  whiteSpace: 'nowrap',
+                  boxShadow: 'inset 2px 0 3px rgba(0,0,0,0.12)',
+                  minWidth: isHovered ? '170px' : '130px',
+                  maxWidth: '260px',
+                  justifyContent: 'space-between',
+                  transition: 'min-width 0.2s ease',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
                   {isSigned ? (
-                    <>{fieldLabel} ✓</>
+                    <Check size={14} strokeWidth={3} style={{ flexShrink: 0 }} />
+                  ) : field.type === 'digital_signature' ? (
+                    <ShieldCheck size={14} style={{ flexShrink: 0 }} />
                   ) : (
-                    fieldLabel
+                    <PenTool size={13} style={{ flexShrink: 0 }} />
+                  )}
+
+                  {/* Prominent Page Badge */}
+                  <span
+                    style={{
+                      backgroundColor: 'rgba(0,0,0,0.25)',
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      flexShrink: 0,
+                    }}
+                  >
+                    P.{field.pageIndex}
+                  </span>
+
+                  {/* Flow order step if set */}
+                  {field.flowOrder !== undefined && (
+                    <span
+                      style={{
+                        backgroundColor: 'rgba(255,255,255,0.25)',
+                        padding: '1px 5px',
+                        borderRadius: '6px',
+                        fontSize: '9.5px',
+                        fontWeight: 800,
+                        flexShrink: 0,
+                      }}
+                    >
+                      #{field.flowOrder}
+                    </span>
+                  )}
+
+                  {/* Action & Label text */}
+                  <span
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {isSigned ? 'SIGNED' : field.signTagText || fieldLabel || 'SIGN HERE'}
+                  </span>
+                </div>
+
+                {/* Assignee / Anyone pill */}
+                <div style={{ flexShrink: 0, marginLeft: '6px' }}>
+                  {assignee ? (
+                    <span
+                      style={{
+                        backgroundColor: 'rgba(255,255,255,0.22)',
+                        padding: '2px 6px',
+                        borderRadius: '10px',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {assignee.name}
+                    </span>
+                  ) : (
+                    <span
+                      style={{
+                        backgroundColor: 'rgba(255,255,255,0.22)',
+                        padding: '2px 6px',
+                        borderRadius: '10px',
+                        fontSize: '9px',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Anyone
+                    </span>
                   )}
                 </div>
-                <div
-                  style={{
-                    fontSize: '10px',
-                    color: '#94a3b8',
-                    fontWeight: 500,
-                    marginTop: '1px',
-                  }}
-                >
-                  Page {field.pageIndex}
-                  {field.flowOrder !== undefined && ` · Step ${field.flowOrder}`}
-                  {field.type === 'digital_signature' && ' · Digital'}
-                </div>
               </div>
-
-              {/* Jump arrow (visible on hover) */}
-              <ChevronRight
-                size={14}
-                color={isHovered || isActive ? userColor : '#cbd5e1'}
-                style={{ flexShrink: 0, transition: 'color 0.12s ease' }}
-              />
             </div>
           );
         })}

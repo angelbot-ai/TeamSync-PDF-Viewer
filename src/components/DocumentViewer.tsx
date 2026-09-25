@@ -2553,15 +2553,15 @@ export default function DocumentViewer({
                 onAnnotateSelection={handleAnnotateSelection}
               />
             )}
-          </div>
 
-          {/* Signature Sticky / Index Flags attached to the side of the viewer */}
-          {formManager && (
-            <SignatureIndexFlags
-              formManager={formManager}
-              activeTab={activeTab}
-            />
-          )}
+            {/* Signature Sticky / Index Flags attached to the side of the viewer */}
+            {formManager && (
+              <SignatureIndexFlags
+                formManager={formManager}
+                activeTab={activeTab}
+              />
+            )}
+          </div>
         </>
       )}
 

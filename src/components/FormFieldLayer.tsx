@@ -1012,7 +1012,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
             )}
 
             {/* Page Margin Sticky / Index Flag for Signature — only for current user's fields */}
-            {isSignature && activeTab === 'View' && currentAssigneeId && field.assigneeId === currentAssigneeId && (
+            {isSignature && activeTab === 'View' && (!currentAssigneeId || !field.assigneeId || field.assigneeId === currentAssigneeId) && (
               <div
                 className="tspdf-page-sticky-flag"
                 onClick={(e) => {

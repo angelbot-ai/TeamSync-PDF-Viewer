@@ -466,15 +466,18 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                         backgroundColor: `${fieldColor}22`,
                         color: fieldColor,
                         border: `1px solid ${fieldColor}44`,
-                        padding: '1px 4px',
+                        padding: '1px 5px',
                         borderRadius: '10px',
                         fontWeight: 600,
                         whiteSpace: 'nowrap',
+                        maxWidth: `${140 * scale}px`,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
                       }}
                       title={`Assigned to ${assignee.name}`}
                     >
-                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: fieldColor }} />
-                      {assignee.name.split(' ')[0]}
+                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: fieldColor, flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{assignee.name}</span>
                     </span>
                   ) : (
                     <span
@@ -482,10 +485,11 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                         fontSize: `${Math.max(8, 9 * scale)}px`,
                         backgroundColor: '#f1f5f9',
                         color: '#64748b',
-                        padding: '1px 4px',
+                        padding: '1px 5px',
                         borderRadius: '3px',
                         fontWeight: 500,
                       }}
+                      title="Open for anyone to fill"
                     >
                       Anyone
                     </span>
@@ -539,7 +543,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                   >
                     <span>
                       ✍️ {field.signTagText || (field.type === 'digital_signature' ? 'DIGITAL SIGN' : 'SIGN HERE')}
-                      {assignee ? ` (${assignee.name.split(' ')[0]})` : ''}
+                      {assignee ? ` (${assignee.name})` : ''}
                     </span>
                   </div>
                   {/* Arrow pointing into the signature box */}
@@ -892,7 +896,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                   ) : (
                     <span>
                       ✍️ {field.signTagText || (field.type === 'digital_signature' ? 'DIGITAL SIGN' : 'SIGN HERE')}
-                      {assignee ? ` (${assignee.name.split(' ')[0]})` : ''}
+                      {assignee ? ` (${assignee.name})` : ''}
                     </span>
                   )}
                 </div>
@@ -943,6 +947,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 disabled={isReadOnly}
                 value={fieldValue}
                 placeholder={field.placeholder || field.label || ''}
+                title={isAssignedToOther ? `Locked: Assigned to ${assignee?.name || 'another user'}` : assignee ? `Assigned to: ${assignee.name}` : undefined}
                 onChange={(e) => formManager.setValue(field.name, e.target.value)}
                 onFocus={handleFocus}
                 onKeyDown={handleInputKeyDown}
@@ -960,6 +965,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 disabled={isReadOnly}
                 value={fieldValue}
                 placeholder={field.placeholder || field.label || ''}
+                title={isAssignedToOther ? `Locked: Assigned to ${assignee?.name || 'another user'}` : assignee ? `Assigned to: ${assignee.name}` : undefined}
                 onChange={(e) => formManager.setValue(field.name, e.target.value)}
                 onFocus={handleFocus}
                 onKeyDown={handleInputKeyDown}
@@ -978,6 +984,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 type={field.dateFormat === 'date' ? 'date' : field.dateFormat === 'time' ? 'time' : 'datetime-local'}
                 disabled={isReadOnly}
                 value={fieldValue}
+                title={isAssignedToOther ? `Locked: Assigned to ${assignee?.name || 'another user'}` : assignee ? `Assigned to: ${assignee.name}` : undefined}
                 onChange={(e) => formManager.setValue(field.name, e.target.value)}
                 onFocus={handleFocus}
                 onKeyDown={handleInputKeyDown}
@@ -995,6 +1002,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 tabIndex={isReadOnly ? -1 : 0}
                 onFocus={handleFocus}
                 onKeyDown={handleInputKeyDown}
+                title={isAssignedToOther ? `Locked: Assigned to ${assignee?.name || 'another user'}` : assignee ? `Assigned to: ${assignee.name}` : undefined}
                 style={{
                   ...baseInputStyle,
                   padding: `${4 * scale}px ${6 * scale}px`,
@@ -1053,6 +1061,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 tabIndex={isReadOnly ? -1 : 0}
                 onFocus={handleFocus}
                 onKeyDown={handleInputKeyDown}
+                title={isAssignedToOther ? `Locked: Assigned to ${assignee?.name || 'another user'}` : assignee ? `Assigned to: ${assignee.name}` : undefined}
                 style={{
                   ...baseInputStyle,
                   display: 'flex',
@@ -1087,6 +1096,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 id={`tspdf-field-${field.id}`}
                 disabled={isReadOnly}
                 value={fieldValue}
+                title={isAssignedToOther ? `Locked: Assigned to ${assignee?.name || 'another user'}` : assignee ? `Assigned to: ${assignee.name}` : undefined}
                 onChange={(e) => formManager.setValue(field.name, e.target.value)}
                 onFocus={handleFocus}
                 onKeyDown={handleInputKeyDown}

@@ -599,6 +599,61 @@ describe('FormFieldLayer', () => {
     expect(updatedFields[0].assigneeId).toBe('user_b');
     expect(updatedFields[0].borderColor).toBe('#9333ea');
   });
+
+  it('displays full assignee names without truncating them to User', async () => {
+    const fieldA: FormField = {
+      id: 'fa',
+      name: 'name_a',
+      label: 'Applicant Name',
+      type: 'text',
+      pageIndex: 1,
+      x: 10,
+      y: 10,
+      width: 150,
+      height: 40,
+      assigneeId: 'user_a',
+    };
+    const fieldB: FormField = {
+      id: 'fb',
+      name: 'sig_b',
+      label: 'Approver Signature',
+      type: 'digital_signature',
+      signatureType: 'digital',
+      pageIndex: 1,
+      x: 10,
+      y: 60,
+      width: 250,
+      height: 60,
+      assigneeId: 'user_b',
+    };
+
+    const formManager = new FormManager([fieldA, fieldB]);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <FormFieldLayer
+          pageNum={1}
+          scale={1}
+          rotation={0}
+          basePageWidth={600}
+          basePageHeight={800}
+          activeTab="Forms"
+          activeTool="select"
+          setActiveTool={vi.fn()}
+          formManager={formManager}
+        />
+      );
+    });
+
+    // In Builder mode, fieldA should display "User A" and fieldB tag should display "(User B)"
+    expect(container.textContent).toContain('User A');
+    expect(container.textContent).toContain('User B');
+    expect(container.textContent).toContain('(User B)');
+    // Must NOT be truncated to just "User"
+    expect(container.textContent).not.toMatch(/DIGITAL SIGN \(User\)/);
+  });
 });
+
 
 

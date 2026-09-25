@@ -115,6 +115,13 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     enableTextSelection = true, defaultTool = 'select', showSelectionTooltip = true,
     id, targetViewer, resolveLinkUrl, onLinkClick,
     officeConverter, onOfficeConverting, onOfficeConverted, onOfficeConversionError,
+    currentUser,
+    formManager: propFormManager,
+    formOptions,
+    currentFormAssignee,
+    formAssignees,
+    formFields,
+    formData,
   } = props;
 
   // Latest props for callbacks/bindings that must not re-subscribe on every render.
@@ -124,11 +131,61 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   const rootRef = useRef<HTMLDivElement>(null);
   const bus = useMemo(() => new ViewerBus(), []);
   const annotationManager = useMemo(() => new AnnotationManager(), []);
-  const formManager = useMemo(() => props.formManager || new FormManager(), [props.formManager]);
+  const formManager = useMemo(
+    () => propFormManager || new FormManager(formFields, formData, formAssignees, formOptions),
+    [propFormManager, formFields, formData, formAssignees, formOptions]
+  );
   const instanceRef = useRef<WebViewerInstance | null>(null);
   if (!instanceRef.current) instanceRef.current = new WebViewerInstance(bus, annotationManager, id, formManager);
   const instance = instanceRef.current;
   useImperativeHandle(ref, () => instance, [instance]);
+
+  // Sync formFields when passed as prop
+  useEffect(() => {
+    if (formFields) {
+      formManager.setFields(formFields);
+    }
+  }, [formManager, formFields]);
+
+  // Sync formData when passed as prop
+  useEffect(() => {
+    if (formData) {
+      formManager.setValues(formData);
+    }
+  }, [formManager, formData]);
+
+  // Sync formAssignees when passed as prop
+  useEffect(() => {
+    if (formAssignees) {
+      formManager.setAssignees(formAssignees);
+    }
+  }, [formManager, formAssignees]);
+
+  // Sync formOptions when passed as prop
+  useEffect(() => {
+    if (formOptions) {
+      formManager.setOptions(formOptions);
+    }
+  }, [formManager, formOptions]);
+
+  // Sync active user when currentFormAssignee or currentUser is passed
+  useEffect(() => {
+    if (currentFormAssignee !== undefined) {
+      formManager.setCurrentAssignee(currentFormAssignee);
+    } else if (currentUser) {
+      formManager.setUser(currentUser);
+    }
+  }, [formManager, currentFormAssignee, currentUser]);
+
+  // Sync SDK permissions for forms (canCreateForms, canFillForms)
+  useEffect(() => {
+    const updates: { canCreateForms?: boolean; canFillForms?: boolean } = {};
+    if (permissions?.canCreateForms !== undefined) updates.canCreateForms = permissions.canCreateForms;
+    if (permissions?.canFillForms !== undefined) updates.canFillForms = permissions.canFillForms;
+    if (Object.keys(updates).length > 0) {
+      formManager.setOptions(updates);
+    }
+  }, [formManager, permissions?.canCreateForms, permissions?.canFillForms]);
 
   useEffect(() => {
     if (id) {

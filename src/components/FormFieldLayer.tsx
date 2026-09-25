@@ -5,7 +5,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Settings, Trash2, Copy, Lock, PenTool, ShieldCheck, Check, User } from 'lucide-react';
-import type { FormField, FormToolType, FormDataRecord, FormAssignee, FormSignatureValue } from '../forms/types';
+import type { FormField, FormToolType, FormDataRecord, FormAssignee, FormSignatureValue, FormFeatureOptions } from '../forms/types';
 import type { FormManager } from '../forms/FormManager';
 import { FormFieldEditorModal } from './FormFieldEditorModal';
 import { FormSignatureModal } from './FormSignatureModal';
@@ -50,6 +50,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
   const [assignees, setAssignees] = useState<FormAssignee[]>(() => formManager.getAssignees());
   const [currentAssigneeId, setCurrentAssigneeId] = useState<string | null>(() => formManager.getCurrentAssignee());
   const [activeFieldId, setActiveFieldId] = useState<string | null>(() => formManager.getActiveFieldId());
+  const [options, setOptions] = useState<FormFeatureOptions>(() => formManager.getOptions());
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<FormField | null>(null);
   const [signingField, setSigningField] = useState<FormField | null>(null);
@@ -89,12 +90,16 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
     const unsubActive = formManager.onActiveFieldChange((actId) => {
       setActiveFieldId(actId);
     });
+    const unsubOptions = formManager.onOptionsChange((opts) => {
+      setOptions(opts);
+    });
     return () => {
       unsubFields();
       unsubData();
       unsubAssignees();
       unsubCurrent();
       unsubActive();
+      unsubOptions();
     };
   }, [formManager, pageNum]);
 
@@ -749,7 +754,13 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
         // FILLER MODE PRESENTATION (View Tab)
         // --------------------------------------------------------------------------------------
         const isAssignedToOther = currentAssigneeId !== null && !!field.assigneeId && field.assigneeId !== currentAssigneeId;
-        const isReadOnly = !canFillForms || field.readOnly || isAssignedToOther;
+        // If otherUserFieldsMode is 'hidden', do not render other users' fields
+        if (isAssignedToOther && options.otherUserFieldsMode === 'hidden') {
+          return null;
+        }
+
+        const effectiveCanFill = canFillForms && options.canFillForms !== false;
+        const isReadOnly = !effectiveCanFill || field.readOnly || isAssignedToOther;
         const isActive = activeFieldId === field.id;
 
         // Custom styled dimensions and appearance
@@ -856,7 +867,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                   maxWidth: `${Math.max(220, rot.width * scale * 1.5)}px`,
                 }}
               >
-                {isAssignedToOther && (
+                {isAssignedToOther && options.otherUserFieldsMode !== 'view-only' && (
                   <Lock size={10} style={{ flexShrink: 0, color: '#64748b' }} />
                 )}
 
@@ -963,7 +974,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                     maxWidth: `${Math.max(220, rot.width * scale * 1.5)}px`,
                   }}
                 >
-                  {isAssignedToOther && <Lock size={10} style={{ flexShrink: 0 }} />}
+                  {isAssignedToOther && options.otherUserFieldsMode !== 'view-only' && <Lock size={10} style={{ flexShrink: 0 }} />}
                   {showFlowOrder && field.flowOrder !== undefined && (
                     <span
                       style={{
@@ -1012,7 +1023,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
             )}
 
             {/* Page Margin Sticky / Index Flag for Signature — only for current user's fields */}
-            {isSignature && activeTab === 'View' && (!currentAssigneeId || !field.assigneeId || field.assigneeId === currentAssigneeId) && (
+            {isSignature && activeTab === 'View' && options.showSignatureFlags !== false && (!currentAssigneeId || !field.assigneeId || field.assigneeId === currentAssigneeId) && (
               <div
                 className="tspdf-page-sticky-flag"
                 onClick={(e) => {

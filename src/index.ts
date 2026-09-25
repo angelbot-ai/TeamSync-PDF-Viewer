@@ -93,14 +93,18 @@ export type {
   OfficeDocumentInfo,
 } from './office/types';
 export { VERSION } from './version';
-export { FormManager } from './forms/FormManager';
+export { FormManager, DEFAULT_FORM_OPTIONS, DEFAULT_ASSIGNEES } from './forms/FormManager';
 export type { FormFieldsChangeEvent, FormFieldsChangeListener, FormDataChangeListener } from './forms/FormManager';
 export type {
   FormField,
   FormFieldType,
   DateTimeFormat,
+  SignatureType,
+  FormSignatureValue,
+  FormAssignee,
   FormDataRecord,
   FormValidationResult,
   FormToolType,
+  FormFeatureOptions,
 } from './forms/types';
 

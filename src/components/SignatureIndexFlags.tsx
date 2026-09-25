@@ -15,7 +15,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import type { FormManager } from '../forms/FormManager';
-import type { FormField, FormDataRecord, FormAssignee, FormSignatureValue } from '../forms/types';
+import type { FormField, FormDataRecord, FormAssignee, FormSignatureValue, FormFeatureOptions } from '../forms/types';
 
 interface SignatureIndexFlagsProps {
   formManager: FormManager;
@@ -35,6 +35,7 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
   const [activeFieldId, setActiveFieldId] = useState<string | null>(() =>
     formManager.getActiveFieldId()
   );
+  const [options, setOptions] = useState<FormFeatureOptions>(() => formManager.getOptions());
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
   const [hoveredFieldId, setHoveredFieldId] = useState<string | null>(null);
 
@@ -48,6 +49,7 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
       setCurrentAssigneeId(curr)
     );
     const unsubActive = formManager.onActiveFieldChange((act) => setActiveFieldId(act));
+    const unsubOptions = formManager.onOptionsChange((opts) => setOptions(opts));
 
     return () => {
       unsubFields();
@@ -55,6 +57,7 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
       unsubAssignees();
       unsubCurrent();
       unsubActive();
+      unsubOptions();
     };
   }, [formManager]);
 
@@ -132,6 +135,11 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
 
   // Only display in View or Forms modes
   if (activeTab !== 'View' && activeTab !== 'Forms') {
+    return null;
+  }
+
+  // Respect programmatic option to hide signature flags
+  if (options.showSignatureFlags === false) {
     return null;
   }
 

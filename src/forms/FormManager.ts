@@ -3,7 +3,27 @@
  * FormManager — central state manager for PDF forms builder schema and form filler data.
  */
 
-import type { FormField, FormDataRecord, FormValidationResult, FormAssignee } from './types';
+import type {
+  FormField,
+  FormDataRecord,
+  FormValidationResult,
+  FormAssignee,
+  FormFeatureOptions,
+} from './types';
+
+export const DEFAULT_FORM_OPTIONS: FormFeatureOptions = {
+  canCreateForms: true,
+  canFillForms: true,
+  allowUserSwitching: true,
+  showUserSelector: true,
+  showSignatureFlags: true,
+  showFlowNavigation: true,
+  showValidation: true,
+  showReset: true,
+  showExport: true,
+  otherUserFieldsMode: 'locked',
+  hideToolbar: false,
+};
 
 export const DEFAULT_ASSIGNEES: FormAssignee[] = [
   { id: 'user_a', name: 'User A', color: '#2563eb' },
@@ -31,6 +51,7 @@ export class FormManager {
   private assignees: FormAssignee[] = [...DEFAULT_ASSIGNEES];
   private currentAssigneeId: string | null = null;
   private activeFieldId: string | null = null;
+  private options: FormFeatureOptions = { ...DEFAULT_FORM_OPTIONS };
   private past: HistorySnapshot[] = [];
   private future: HistorySnapshot[] = [];
   private fieldsListeners = new Set<FormFieldsChangeListener>();
@@ -38,16 +59,19 @@ export class FormManager {
   private assigneesListeners = new Set<(assignees: FormAssignee[]) => void>();
   private activeAssigneeListeners = new Set<(assigneeId: string | null) => void>();
   private activeFieldListeners = new Set<(fieldId: string | null) => void>();
+  private optionsListeners = new Set<(options: FormFeatureOptions) => void>();
   private readOnly = false;
 
   constructor(
     initialFields: FormField[] = [],
     initialValues: FormDataRecord = {},
-    initialAssignees: FormAssignee[] = DEFAULT_ASSIGNEES
+    initialAssignees: FormAssignee[] = DEFAULT_ASSIGNEES,
+    initialOptions: Partial<FormFeatureOptions> = {}
   ) {
     this.fields = [...initialFields];
     this.values = { ...initialValues };
     this.assignees = initialAssignees && initialAssignees.length > 0 ? [...initialAssignees] : [...DEFAULT_ASSIGNEES];
+    this.options = { ...DEFAULT_FORM_OPTIONS, ...initialOptions };
   }
 
   // ---- Subscriptions -----------------------------------------------------------------------
@@ -313,6 +337,69 @@ export class FormManager {
   onCurrentAssigneeChange(listener: (assigneeId: string | null) => void): () => void {
     this.activeAssigneeListeners.add(listener);
     return () => this.activeAssigneeListeners.delete(listener);
+  }
+
+  // ---- Form Feature Visibility & Permissions ----------------------------------------------
+
+  /** Returns the current form feature configuration options. */
+  getOptions(): FormFeatureOptions {
+    return { ...this.options };
+  }
+
+  /**
+   * Updates form feature options and notifies active listeners.
+   * Allows dynamically controlling feature visibility, user selector, persona locking, and other features.
+   */
+  setOptions(opts: Partial<FormFeatureOptions>): void {
+    this.options = { ...this.options, ...opts };
+    for (const listener of this.optionsListeners) {
+      try {
+        listener(this.getOptions());
+      } catch (err) {
+        console.error('Error in FormManager options listener:', err);
+      }
+    }
+  }
+
+  /** Subscribes to changes in form feature options. */
+  onOptionsChange(listener: (options: FormFeatureOptions) => void): () => void {
+    this.optionsListeners.add(listener);
+    return () => this.optionsListeners.delete(listener);
+  }
+
+  /**
+   * Sets the active form user. If a user object with id/name/color is passed and not already
+   * in the assignees list, it is automatically registered as a recognized assignee.
+   */
+  setUser(user: { id: string; name?: string; color?: string } | string | null): void {
+    if (!user) {
+      this.setCurrentAssignee(null);
+      return;
+    }
+
+    if (typeof user === 'string') {
+      this.setCurrentAssignee(user);
+      return;
+    }
+
+    // Object provided: ensure user is in the assignees list
+    const existing = this.assignees.find((a) => a.id === user.id);
+    if (!existing) {
+      this.addAssignee({
+        id: user.id,
+        name: user.name || user.id,
+        color: user.color || '#2563eb',
+      });
+    } else if (user.name && existing.name !== user.name) {
+      this.updateAssignee(user.id, { name: user.name, ...(user.color ? { color: user.color } : {}) });
+    }
+
+    this.setCurrentAssignee(user.id);
+  }
+
+  /** Returns the current active form user assignee record, if set. */
+  getUser(): FormAssignee | undefined {
+    return this.getAssignee(this.currentAssigneeId || undefined);
   }
 
   // ---- Active Field & Form Flow -----------------------------------------------------------

@@ -16,7 +16,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import type { FormManager } from '../forms/FormManager';
-import type { FormField, FormDataRecord, FormAssignee } from '../forms/types';
+import type { FormField, FormDataRecord, FormAssignee, FormFeatureOptions } from '../forms/types';
 
 interface FormFillerActionsProps {
   formManager: FormManager;
@@ -32,6 +32,7 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
   const [assignees, setAssignees] = useState<FormAssignee[]>(() => formManager.getAssignees());
   const [currentAssigneeId, setCurrentAssigneeId] = useState<string | null>(() => formManager.getCurrentAssignee());
   const [activeFieldId, setActiveFieldId] = useState<string | null>(() => formManager.getActiveFieldId());
+  const [options, setOptions] = useState<FormFeatureOptions>(() => formManager.getOptions());
   const [validationMsg, setValidationMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -40,6 +41,7 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
     const unsubAssignees = formManager.onAssigneesChange((newAssignees) => setAssignees(newAssignees));
     const unsubCurrent = formManager.onCurrentAssigneeChange((curr) => setCurrentAssigneeId(curr));
     const unsubActive = formManager.onActiveFieldChange((act) => setActiveFieldId(act));
+    const unsubOptions = formManager.onOptionsChange((opts) => setOptions(opts));
 
     return () => {
       unsubFields();
@@ -47,10 +49,11 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
       unsubAssignees();
       unsubCurrent();
       unsubActive();
+      unsubOptions();
     };
   }, [formManager]);
 
-  if (fields.length === 0) return null;
+  if (options.hideToolbar || fields.length === 0) return null;
 
   const currentAssignee = assignees.find((a) => a.id === currentAssigneeId);
   const flowFields = formManager.getFlowFields(currentAssigneeId);
@@ -132,109 +135,127 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
         </span>
 
         {/* Multi-user "Filling as:" selector */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-            backgroundColor: '#ffffff',
-            border: '1px solid #cbd5e1',
-            borderRadius: '5px',
-            padding: '2px 8px',
-          }}
-        >
-          <Users size={13} color={currentAssignee?.color || '#64748b'} />
-          <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>Filling as:</span>
-          <select
-            value={currentAssigneeId || ''}
-            onChange={(e) => formManager.setCurrentAssignee(e.target.value || null)}
+        {options.showUserSelector !== false && (
+          <div
             style={{
-              fontSize: '11px',
-              fontWeight: 600,
-              border: 'none',
-              backgroundColor: 'transparent',
-              color: currentAssignee?.color || '#334155',
-              cursor: 'pointer',
-              outline: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              backgroundColor: '#ffffff',
+              border: '1px solid #cbd5e1',
+              borderRadius: '5px',
+              padding: '2px 8px',
             }}
           >
-            <option value="">All Users / Anyone</option>
-            {assignees.map((a) => {
-              const userFieldCount = fields.filter((f) => f.assigneeId === a.id).length;
-              return (
-                <option key={a.id} value={a.id}>
-                  {a.name} ({userFieldCount} {userFieldCount === 1 ? 'field' : 'fields'})
-                </option>
-              );
-            })}
-          </select>
-        </div>
+            <Users size={13} color={currentAssignee?.color || '#64748b'} />
+            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>Filling as:</span>
+            {options.allowUserSwitching === false ? (
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: currentAssignee?.color || '#334155',
+                  padding: '1px 4px',
+                }}
+                title="Assigned user role is locked by host application"
+              >
+                {currentAssignee?.name || 'Current User'}
+              </span>
+            ) : (
+              <select
+                value={currentAssigneeId || ''}
+                onChange={(e) => formManager.setCurrentAssignee(e.target.value || null)}
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  color: currentAssignee?.color || '#334155',
+                  cursor: 'pointer',
+                  outline: 'none',
+                }}
+              >
+                <option value="">All Users / Anyone</option>
+                {assignees.map((a) => {
+                  const userFieldCount = fields.filter((f) => f.assigneeId === a.id).length;
+                  return (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({userFieldCount} {userFieldCount === 1 ? 'field' : 'fields'})
+                    </option>
+                  );
+                })}
+              </select>
+            )}
+          </div>
+        )}
 
         {/* Step-by-Step Flow Navigation Buttons */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '2px',
-            backgroundColor: '#ffffff',
-            border: '1px solid #cbd5e1',
-            borderRadius: '5px',
-            padding: '1px 4px',
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => formManager.goToPreviousField()}
-            disabled={flowFields.length === 0}
-            title="Previous Field (Shift+Tab)"
+        {options.showFlowNavigation !== false && (
+          <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              background: 'none',
-              border: 'none',
-              padding: '3px 4px',
-              cursor: flowFields.length > 0 ? 'pointer' : 'not-allowed',
-              color: flowFields.length > 0 ? '#334155' : '#94a3b8',
-              borderRadius: '3px',
+              gap: '2px',
+              backgroundColor: '#ffffff',
+              border: '1px solid #cbd5e1',
+              borderRadius: '5px',
+              padding: '1px 4px',
             }}
           >
-            <ChevronLeft size={14} />
-          </button>
+            <button
+              type="button"
+              onClick={() => formManager.goToPreviousField()}
+              disabled={flowFields.length === 0}
+              title="Previous Field (Shift+Tab)"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'none',
+                border: 'none',
+                padding: '3px 4px',
+                cursor: flowFields.length > 0 ? 'pointer' : 'not-allowed',
+                color: flowFields.length > 0 ? '#334155' : '#94a3b8',
+                borderRadius: '3px',
+              }}
+            >
+              <ChevronLeft size={14} />
+            </button>
 
-          <span
-            style={{
-              fontSize: '11px',
-              fontWeight: 600,
-              color: currentAssignee?.color || '#334155',
-              padding: '0 6px',
-              minWidth: '70px',
-              textAlign: 'center',
-            }}
-          >
-            {currentFlowIndex >= 0 ? `Step ${currentFlowIndex + 1} of ${flowFields.length}` : `${flowFields.length} steps`}
-          </span>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                color: currentAssignee?.color || '#334155',
+                padding: '0 6px',
+                minWidth: '70px',
+                textAlign: 'center',
+              }}
+            >
+              {currentFlowIndex >= 0 ? `Step ${currentFlowIndex + 1} of ${flowFields.length}` : `${flowFields.length} steps`}
+            </span>
 
-          <button
-            type="button"
-            onClick={() => formManager.goToNextField()}
-            disabled={flowFields.length === 0}
-            title="Next Field (Tab)"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'none',
-              border: 'none',
-              padding: '3px 4px',
-              cursor: flowFields.length > 0 ? 'pointer' : 'not-allowed',
-              color: flowFields.length > 0 ? '#334155' : '#94a3b8',
-              borderRadius: '3px',
-            }}
-          >
-            <ChevronRight size={14} />
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => formManager.goToNextField()}
+              disabled={flowFields.length === 0}
+              title="Next Field (Tab)"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'none',
+                border: 'none',
+                padding: '3px 4px',
+                cursor: flowFields.length > 0 ? 'pointer' : 'not-allowed',
+                color: flowFields.length > 0 ? '#334155' : '#94a3b8',
+                borderRadius: '3px',
+              }}
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
 
         {/* Progress summary */}
         <span style={{ color: '#64748b', fontSize: '11px' }}>
@@ -264,49 +285,53 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
 
       {/* Right: Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <button
-          type="button"
-          onClick={handleValidate}
-          title="Validate form completion"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            padding: '4px 8px',
-            backgroundColor: '#ffffff',
-            border: '1px solid #cbd5e1',
-            borderRadius: '4px',
-            color: '#334155',
-            cursor: 'pointer',
-            fontSize: '11px',
-            fontWeight: 500,
-          }}
-        >
-          <CheckCircle2 size={13} color="#0284c7" /> Validate
-        </button>
+        {options.showValidation !== false && (
+          <button
+            type="button"
+            onClick={handleValidate}
+            title="Validate form completion"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 8px',
+              backgroundColor: '#ffffff',
+              border: '1px solid #cbd5e1',
+              borderRadius: '4px',
+              color: '#334155',
+              cursor: 'pointer',
+              fontSize: '11px',
+              fontWeight: 500,
+            }}
+          >
+            <CheckCircle2 size={13} color="#0284c7" /> Validate
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={handleExportData}
-          title="Export filled values as JSON"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            padding: '4px 8px',
-            backgroundColor: '#ffffff',
-            border: '1px solid #cbd5e1',
-            borderRadius: '4px',
-            color: '#334155',
-            cursor: 'pointer',
-            fontSize: '11px',
-            fontWeight: 500,
-          }}
-        >
-          <Download size={13} /> Export JSON
-        </button>
+        {options.showExport !== false && (
+          <button
+            type="button"
+            onClick={handleExportData}
+            title="Export filled values as JSON"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 8px',
+              backgroundColor: '#ffffff',
+              border: '1px solid #cbd5e1',
+              borderRadius: '4px',
+              color: '#334155',
+              cursor: 'pointer',
+              fontSize: '11px',
+              fontWeight: 500,
+            }}
+          >
+            <Download size={13} /> Export JSON
+          </button>
+        )}
 
-        {onDownloadFilledPdf && (
+        {options.showExport !== false && onDownloadFilledPdf && (
           <button
             type="button"
             onClick={onDownloadFilledPdf}
@@ -329,24 +354,26 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
           </button>
         )}
 
-        <button
-          type="button"
-          onClick={handleReset}
-          title="Reset form entries"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            padding: '4px 6px',
-            backgroundColor: 'transparent',
-            border: 'none',
-            color: '#64748b',
-            cursor: 'pointer',
-            fontSize: '11px',
-          }}
-        >
-          <RotateCcw size={13} /> Reset
-        </button>
+        {options.showReset !== false && (
+          <button
+            type="button"
+            onClick={handleReset}
+            title="Reset form entries"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 6px',
+              backgroundColor: 'transparent',
+              border: 'none',
+              color: '#64748b',
+              cursor: 'pointer',
+              fontSize: '11px',
+            }}
+          >
+            <RotateCcw size={13} /> Reset
+          </button>
+        )}
       </div>
     </div>
   );

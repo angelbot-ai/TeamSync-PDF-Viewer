@@ -14,7 +14,13 @@ import type { Redaction, WatermarkOptions, ViewerEventMap, ViewerEventType, Tran
 import { searchPdfText, type SearchResult } from '../hooks/usePdfSearch';
 import { copyTextToClipboard } from '../utils/clipboardUtils';
 import { FormManager } from '../forms/FormManager';
-import type { FormField, FormDataRecord, FormValidationResult, FormAssignee } from '../forms/types';
+import type {
+  FormField,
+  FormDataRecord,
+  FormValidationResult,
+  FormAssignee,
+  FormFeatureOptions,
+} from '../forms/types';
 
 /** Callbacks the React component installs so the instance can reach live state. */
 export interface ViewerBinding {
@@ -500,6 +506,34 @@ export class WebViewerInstance {
   /** Sets the active form assignee ID (or null for all). */
   setCurrentFormAssignee(assigneeId: string | null): void {
     this.formManager.setCurrentAssignee(assigneeId);
+  }
+
+  /**
+   * Programmatically sets the active form user for filler mode.
+   * Can be an assignee ID string, or a user object { id, name, color? }.
+   * Automatically adds the user to the form assignees list if not already present.
+   */
+  setFormUser(user: { id: string; name?: string; color?: string } | string | null): void {
+    this.formManager.setUser(user);
+  }
+
+  /** Returns the active form user record, if assigned. */
+  getFormUser(): FormAssignee | undefined {
+    return this.formManager.getUser();
+  }
+
+  /** Returns current form feature options and visibility rules. */
+  getFormOptions(): FormFeatureOptions {
+    return this.formManager.getOptions();
+  }
+
+  /**
+   * Programmatically sets form feature options.
+   * Controls what form features are visible and interactive for the user
+   * (e.g. allowUserSwitching, showSignatureFlags, showFlowNavigation, otherUserFieldsMode, etc.).
+   */
+  setFormOptions(options: Partial<FormFeatureOptions>): void {
+    this.formManager.setOptions(options);
   }
 
   /** Advances focus to the next form field in the sequence. */

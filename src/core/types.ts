@@ -10,9 +10,19 @@ import type { PdfAssetPaths } from './pdfAssets';
 import type { WebViewerInstance } from './ViewerInstance';
 import type { OfficeConverterConfig, OfficeFileType } from '../office/types';
 import type { FormManager } from '../forms/FormManager';
-import type { FormField, FormDataRecord } from '../forms/types';
+import type { FormField, FormDataRecord, FormAssignee, FormFeatureOptions } from '../forms/types';
 
-export type { PdfAssetPaths, WebViewerInstance, OfficeConverterConfig, OfficeFileType, FormManager, FormField, FormDataRecord };
+export type {
+  PdfAssetPaths,
+  WebViewerInstance,
+  OfficeConverterConfig,
+  OfficeFileType,
+  FormManager,
+  FormField,
+  FormDataRecord,
+  FormAssignee,
+  FormFeatureOptions,
+};
 
 export interface SearchBounds {
   x: number;
@@ -142,6 +152,21 @@ export interface WebViewerOptions {
   canDeleteAnnotations?: boolean;
   /** Custom or pre-populated FormManager instance. */
   formManager?: FormManager;
+  /**
+   * Form feature visibility and user interaction controls (e.g. allowUserSwitching, showSignatureFlags,
+   * showFlowNavigation, otherUserFieldsMode, etc.).
+   */
+  formOptions?: FormFeatureOptions;
+  /**
+   * The active form assignee ID or user. Controls which fields and signature flags are interactive/visible for this user.
+   */
+  currentFormAssignee?: string | null;
+  /** Custom list of form assignees/signers. */
+  formAssignees?: FormAssignee[];
+  /** Pre-populated form fields schema. */
+  formFields?: FormField[];
+  /** Pre-filled form values record. */
+  formData?: FormDataRecord;
   /** Shorthand for "no annotation/redaction editing at all". */
   readOnly?: boolean;
   /** Author attached to annotations created in this viewer. */

@@ -123,3 +123,81 @@ export type FormToolType =
   | 'signature'
   | 'digital_signature'
   | null;
+
+/**
+ * Options controlling which form features and UI controls are accessible to the user.
+ * Allows host applications to programmatically control form filling, design permissions,
+ * user persona switching, and feature visibility.
+ */
+export interface FormFeatureOptions {
+  /**
+   * Allow designing / creating form fields in the Forms builder tab.
+   * When false, the Forms tab is hidden or disabled.
+   * Default: true (or matches SDKPermissions.canCreateForms).
+   */
+  canCreateForms?: boolean;
+
+  /**
+   * Allow filling interactive form fields in the View tab.
+   * When false, all form inputs and signatures are read-only.
+   * Default: true (or matches SDKPermissions.canFillForms).
+   */
+  canFillForms?: boolean;
+
+  /**
+   * Whether the end-user can switch personas in the filler toolbar.
+   * When false, the user selector dropdown is locked to the assigned user.
+   * Default: true.
+   */
+  allowUserSwitching?: boolean;
+
+  /**
+   * Show or hide the "Filling as:" user selector in the filler toolbar.
+   * Default: true.
+   */
+  showUserSelector?: boolean;
+
+  /**
+   * Show or hide the persistent Post-it Signature Sticky / Index Flags on the side of the viewer.
+   * Default: true.
+   */
+  showSignatureFlags?: boolean;
+
+  /**
+   * Show or hide the step-by-step form flow navigation buttons (Previous / Step X of Y / Next).
+   * Default: true.
+   */
+  showFlowNavigation?: boolean;
+
+  /**
+   * Show or hide the "Validate" button and validation message in the filler toolbar.
+   * Default: true.
+   */
+  showValidation?: boolean;
+
+  /**
+   * Show or hide the "Reset" / clear form button in the filler toolbar.
+   * Default: true.
+   */
+  showReset?: boolean;
+
+  /**
+   * Show or hide the download / export filled PDF button in the filler toolbar.
+   * Default: true.
+   */
+  showExport?: boolean;
+
+  /**
+   * Controls how form fields assigned to OTHER users are presented:
+   * - 'locked': rendered with disabled styling and a lock indicator badge (default)
+   * - 'hidden': completely hidden from view for the current user
+   * - 'view-only': rendered cleanly as read-only values without lock styling
+   */
+  otherUserFieldsMode?: 'locked' | 'hidden' | 'view-only';
+
+  /**
+   * Hide the entire FormFillerActions toolbar in View mode.
+   * Default: false.
+   */
+  hideToolbar?: boolean;
+}

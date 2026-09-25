@@ -40,6 +40,7 @@ export default async function handler(request: Request): Promise<Response> {
           'User-Agent': 'TeamSync-PDF-Viewer',
           Accept: 'application/vnd.github.v3+json',
         },
+        signal: AbortSignal.timeout(5000),
       }
     );
 

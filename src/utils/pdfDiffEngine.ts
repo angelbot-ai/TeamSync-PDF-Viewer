@@ -95,10 +95,13 @@ export async function computePageDiffBoxes(
   // Myers diff on word tokens
   const n = textArrA.length;
   const m = textArrB.length;
-  const max = n + m;
+  // SEC-05: Bound edit distance to prevent memory exhaustion / UI freeze on massive or divergent pages
+  const MAX_DIFF_EDITS = 2500;
+  const max = Math.min(n + m, MAX_DIFF_EDITS);
   const v = new Int32Array(2 * max + 1);
   v[1] = 0;
   const trace: Int32Array[] = [];
+  let reachedEnd = false;
 
   for (let d = 0; d <= max; d++) {
     trace.push(v.slice());
@@ -116,10 +119,14 @@ export async function computePageDiffBoxes(
       }
       v[k + max] = x;
       if (x >= n && y >= m) {
+        reachedEnd = true;
         break;
       }
     }
-    if (v[n - m + max] >= n && (v[n - m + max] - (n - m)) >= m) break;
+    if (reachedEnd || (v[n - m + max] >= n && (v[n - m + max] - (n - m)) >= m)) {
+      reachedEnd = true;
+      break;
+    }
   }
 
   // Backtrack
@@ -128,32 +135,38 @@ export async function computePageDiffBoxes(
   const delIndicesA: number[] = [];
   const addIndicesB: number[] = [];
 
-  for (let d = trace.length - 1; d >= 0; d--) {
-    const vArr = trace[d];
-    const k = x - y;
-    let prevK: number;
-    if (k === -d || (k !== d && vArr[k - 1 + max] < vArr[k + 1 + max])) {
-      prevK = k + 1;
-    } else {
-      prevK = k - 1;
-    }
-    const prevX = vArr[prevK + max];
-    const prevY = prevX - prevK;
+  if (reachedEnd) {
+    for (let d = trace.length - 1; d >= 0; d--) {
+      const vArr = trace[d];
+      const k = x - y;
+      let prevK: number;
+      if (k === -d || (k !== d && vArr[k - 1 + max] < vArr[k + 1 + max])) {
+        prevK = k + 1;
+      } else {
+        prevK = k - 1;
+      }
+      const prevX = vArr[prevK + max];
+      const prevY = prevX - prevK;
 
-    while (x > prevX && y > prevY) {
-      x--;
-      y--;
-    }
-
-    if (d > 0) {
-      if (x === prevX) {
-        addIndicesB.push(y - 1);
-        y--;
-      } else if (y === prevY) {
-        delIndicesA.push(x - 1);
+      while (x > prevX && y > prevY) {
         x--;
+        y--;
+      }
+
+      if (d > 0) {
+        if (x === prevX) {
+          addIndicesB.push(y - 1);
+          y--;
+        } else if (y === prevY) {
+          delIndicesA.push(x - 1);
+          x--;
+        }
       }
     }
+  } else {
+    // Exceeded MAX_DIFF_EDITS: mark remaining unverified tokens as differences
+    for (let i = 0; i < n; i++) delIndicesA.push(i);
+    for (let j = 0; j < m; j++) addIndicesB.push(j);
   }
 
   delIndicesA.reverse();

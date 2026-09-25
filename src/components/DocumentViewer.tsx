@@ -31,6 +31,10 @@ import CompareCurtainSlider from './CompareCurtainSlider';
 import DiffHighlightOverlay from './DiffHighlightOverlay';
 import type { CompareState, TextDiffSegment, DiffItem, DiffBoundingBox } from '../types/compare';
 import { computeTextDiff, computePageDiffBoxes } from '../utils/pdfDiffEngine';
+import { FormsToolbar } from './FormsToolbar';
+import { FormFillerActions } from './FormFillerActions';
+import type { FormManager } from '../forms/FormManager';
+import type { FormToolType } from '../forms/types';
 
 export interface DocumentLoadErrorInfo {
   url: string;
@@ -100,6 +104,9 @@ interface DocumentViewerProps {
     context: { sourceViewer: WebViewerInstance; annotation?: Annotation }
   ) => string | { url: string; page?: number } | Promise<string | { url: string; page?: number } | null> | null;
   onLinkClick?: (event: LinkClickEvent) => boolean | void | Promise<void>;
+  formManager?: FormManager;
+  setActiveTab?: (tab: string) => void;
+  onDownloadFilledPdf?: () => void;
 }
 
 export default function DocumentViewer({
@@ -118,9 +125,13 @@ export default function DocumentViewer({
   targetViewer,
   resolveLinkUrl,
   onLinkClick,
+  formManager,
+  setActiveTab,
+  onDownloadFilledPdf,
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bus = useViewerBus();
+  const [activeFormTool, setActiveFormTool] = useState<FormToolType>('select');
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [pageNum, setPageNum] = useState(1);
@@ -1861,6 +1872,24 @@ export default function DocumentViewer({
         </div>
       )}
 
+      {/* Forms Builder Sub-toolbar */}
+      {activeTab === 'Forms' && formManager && (
+        <FormsToolbar
+          activeTool={activeFormTool}
+          setActiveTool={setActiveFormTool}
+          formManager={formManager}
+          onSwitchToView={() => setActiveTab?.('View')}
+        />
+      )}
+
+      {/* Forms View Filler Actions */}
+      {activeTab === 'View' && formManager && (
+        <FormFillerActions
+          formManager={formManager}
+          onDownloadFilledPdf={onDownloadFilledPdf}
+        />
+      )}
+
       {/* Commit Redactions Confirmation Modal */}
       {isCommitModalOpen && (
         <div style={{
@@ -2188,6 +2217,10 @@ export default function DocumentViewer({
                         onRendered={handlePageRendered}
                         hideAnnotationsUntilPageRendered={hideAnnotationsUntilPageRendered}
                         onLinkClick={handleLinkClick}
+                        formManager={formManager}
+                        activeFormTool={activeFormTool}
+                        setActiveFormTool={setActiveFormTool}
+                        canFillForms={permissions?.canFillForms !== false}
                       />
                       {compareState.isActive && compareState.mode === 'overlay' && pdfDocB && (
                         <div style={{

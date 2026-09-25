@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Trash2, MessageSquare, MessageCircle, Type, Search, X, Link as LinkIcon } from 'lucide-react';
 import { type SearchResult } from '../hooks/usePdfSearch';
 import { useBusEvent } from '../hooks/useViewerBus';
+import { sanitizeLinkUrl } from '../utils/linkUtils';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -232,7 +233,7 @@ export default function Sidebar({
             <div style={{ fontSize: '14px', color: 'var(--text-color)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
               {comment.type === 'link' ? (
                 <a
-                  href={comment.linkUrl}
+                  href={sanitizeLinkUrl(comment.linkUrl)}
                   onClick={(e) => {
                     if (onLinkClick && comment.linkUrl) {
                       e.preventDefault();

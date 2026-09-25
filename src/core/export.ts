@@ -16,7 +16,8 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { getDocumentParams } from './pdfAssets';
 import type { Annotation } from '../annotations/types';
 import type { Redaction, WatermarkOptions } from './types';
-import { createGeometryResolver, pathToPdf, rectToPdf, toPdfPoint, type GeometryResolver, type PageGeometry } from '../annotations/geometry';
+import type { FormField, FormDataRecord } from '../forms/types';
+import { createPageGeometry, createGeometryResolver, pathToPdf, rectToPdf, toPdfPoint, type GeometryResolver, type PageGeometry } from '../annotations/geometry';
 
 /** Refuse to build documents larger than this in the browser (memory safety). */
 export const MAX_EXPORT_BYTES = 500 * 1024 * 1024;
@@ -31,6 +32,8 @@ export interface ExportInput {
   watermark?: WatermarkOptions;
   /** Name printed on digital-signature placeholder blocks when the annotation has no signer. */
   signerName?: string;
+  formFields?: FormField[];
+  formData?: FormDataRecord;
 }
 
 export interface ExportOptions {
@@ -364,6 +367,76 @@ export async function buildPdfBytes(input: ExportInput, options: ExportOptions =
     }
   } finally {
     if (geometryTask) await geometryTask.destroy().catch(() => {});
+  }
+
+  // Bake form fields as AcroForms
+  if (input.formFields && input.formFields.length > 0) {
+    const form = pdfDoc.getForm();
+    const values = input.formData || {};
+
+    for (const field of input.formFields) {
+      const pageIdx = Math.max(0, Math.min((field.pageIndex || 1) - 1, pages.length - 1));
+      const targetPage = pages[pageIdx];
+
+      let g: PageGeometry | null = null;
+      if (resolveGeometry) {
+        try {
+          g = await resolveGeometry(pageIdx + 1);
+        } catch {}
+      }
+      if (!g) {
+        const { width, height } = targetPage.getSize();
+        g = createPageGeometry(pageIdx + 1, [0, 0, width, height], targetPage.getRotation().angle);
+      }
+
+      const rect = rectToPdf(g, { x: field.x, y: field.y, width: field.width, height: field.height });
+      const [llx, lly, urx, ury] = rect;
+      const w = Math.max(10, urx - llx);
+      const h = Math.max(10, ury - lly);
+      const filledVal = values[field.name] !== undefined ? values[field.name] : field.defaultValue;
+
+      try {
+        if (field.type === 'text') {
+          const tf = form.createTextField(field.name);
+          tf.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
+          if (filledVal !== undefined && filledVal !== null && filledVal !== '') tf.setText(String(filledVal));
+        } else if (field.type === 'textarea') {
+          const tf = form.createTextField(field.name);
+          tf.enableMultiline();
+          tf.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
+          if (filledVal !== undefined && filledVal !== null && filledVal !== '') tf.setText(String(filledVal));
+        } else if (field.type === 'datetime') {
+          const tf = form.createTextField(field.name);
+          tf.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
+          if (filledVal !== undefined && filledVal !== null && filledVal !== '') tf.setText(String(filledVal));
+        } else if (field.type === 'checkbox') {
+          const cb = form.createCheckBox(field.name);
+          cb.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
+          if (Boolean(filledVal)) cb.check();
+        } else if (field.type === 'dropdown') {
+          const dd = form.createDropdown(field.name);
+          if (field.options && field.options.length > 0) dd.setOptions(field.options);
+          dd.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
+          if (filledVal) dd.select(String(filledVal));
+        } else if (field.type === 'checklist') {
+          const opts = field.options && field.options.length > 0 ? field.options : ['Item 1'];
+          const itemH = h / opts.length;
+          const selectedList = Array.isArray(filledVal) ? filledVal : [];
+          opts.forEach((opt, idx) => {
+            const cb = form.createCheckBox(`${field.name}_${idx}`);
+            cb.addToPage(targetPage, {
+              x: llx,
+              y: lly + h - (idx + 1) * itemH + 2,
+              width: Math.min(itemH - 4, 16),
+              height: Math.min(itemH - 4, 16),
+            });
+            if (selectedList.includes(opt)) cb.check();
+          });
+        }
+      } catch (e) {
+        console.warn(`[teamsync-pdf-viewer] Could not bake form field ${field.name}:`, e);
+      }
+    }
   }
 
   if (input.watermark?.text) await bakeWatermark(pdfDoc, input.watermark);

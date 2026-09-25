@@ -13,6 +13,8 @@ import { createGeometryResolver } from '../annotations/geometry';
 import type { Redaction, WatermarkOptions, ViewerEventMap, ViewerEventType, TransientHighlight } from './types';
 import { searchPdfText, type SearchResult } from '../hooks/usePdfSearch';
 import { copyTextToClipboard } from '../utils/clipboardUtils';
+import { FormManager } from '../forms/FormManager';
+import type { FormField, FormDataRecord, FormValidationResult } from '../forms/types';
 
 /** Callbacks the React component installs so the instance can reach live state. */
 export interface ViewerBinding {
@@ -61,6 +63,8 @@ export class WebViewerInstance {
   readonly bus: ViewerBus;
   /** Annotation list, history, permissions and XFDF import/export. */
   readonly annotationManager: AnnotationManager;
+  /** Form fields schema, values, validation, and history. */
+  readonly formManager: FormManager;
   /** Root element of the viewer once mounted. */
   element: HTMLElement | null = null;
   /** Unique identifier for this instance. */
@@ -76,9 +80,15 @@ export class WebViewerInstance {
     | string
     | null = null;
 
-  constructor(bus: ViewerBus, annotationManager: AnnotationManager = new AnnotationManager(), id?: string) {
+  constructor(
+    bus: ViewerBus,
+    annotationManager: AnnotationManager = new AnnotationManager(),
+    id?: string,
+    formManager: FormManager = new FormManager()
+  ) {
     this.bus = bus;
     this.annotationManager = annotationManager;
+    this.formManager = formManager;
     if (id) {
       this.id = id;
       WebViewerInstance.registerInstance(id, this);
@@ -411,6 +421,52 @@ export class WebViewerInstance {
     this.bus.emit('action-print');
   }
 
+  // ---- Forms API ------------------------------------------------------------------------
+
+  /** Returns all defined form fields across all pages. */
+  getFormFields(): FormField[] {
+    return this.formManager.getFields();
+  }
+
+  /** Sets the form fields schema. */
+  setFormFields(fields: FormField[]): void {
+    this.formManager.setFields(fields);
+  }
+
+  /** Returns current filled form data values. */
+  getFormData(): FormDataRecord {
+    return this.formManager.getValues();
+  }
+
+  /** Sets current filled form data values. */
+  setFormData(data: FormDataRecord): void {
+    this.formManager.setValues(data);
+  }
+
+  /** Clears all filled form data values. */
+  clearFormData(): void {
+    this.formManager.clearValues();
+  }
+
+  /** Validates all required form fields. */
+  validateForm(): FormValidationResult {
+    return this.formManager.validate();
+  }
+
+  /** Exports filled form data as a JSON string. */
+  async exportFormData(_format: 'json' = 'json'): Promise<string> {
+    return this.formManager.exportDataJson();
+  }
+
+  /** Imports form data from a record object or JSON string. */
+  importFormData(data: FormDataRecord | string): void {
+    if (typeof data === 'string') {
+      this.formManager.importDataJson(data);
+    } else {
+      this.formManager.setValues(data);
+    }
+  }
+
   /**
    * Build the exported PDF (annotations + watermark baked, redacted pages rasterized).
    * Uses the bytes of the loaded document; never re-fetches the URL.
@@ -436,6 +492,8 @@ export class WebViewerInstance {
         redactions: b.getRedactions(),
         watermark: b.getWatermark(),
         signerName: b.getCurrentUserName(),
+        formFields: this.formManager.getFields(),
+        formData: this.formManager.getValues(),
       },
       options
     );
@@ -517,6 +575,10 @@ export class WebViewerInstance {
     /** The real AnnotationManager (XFDF import/export, granular events, permissions). */
     get annotationManager(): AnnotationManager {
       return self.annotationManager;
+    },
+    /** The FormManager (form schema, values, validation). */
+    get formManager(): FormManager {
+      return self.formManager;
     },
     documentViewer: {
       addEventListener: (event: string, callback: (detail: unknown) => void): (() => void) =>

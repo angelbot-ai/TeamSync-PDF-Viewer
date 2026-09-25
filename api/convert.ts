@@ -18,6 +18,10 @@ const RENDER_CONVERTER_URL =
 
 export const MAX_DOCUMENT_SIZE = 25 * 1024 * 1024; // 25 MB
 
+export const ALLOWED_OFFICE_EXTENSIONS = new Set([
+  'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'rtf', 'odt', 'ods', 'odp', 'csv'
+]);
+
 /**
  * Validates that a requested file URL is safe to fetch and not attempting
  * Server-Side Request Forgery (SSRF) against internal, loopback, or metadata services.
@@ -44,15 +48,17 @@ export function isSafeTargetUrl(
   }
 
   const hostname = parsed.hostname.toLowerCase().trim();
+  const unbracketed = hostname.replace(/^\[|\]$/g, '');
 
-  // Disallow loopback
+  // Disallow loopback (IPv4 & IPv6)
   if (
     hostname === 'localhost' ||
     hostname === '127.0.0.1' ||
-    hostname === '::1' ||
     hostname === '0.0.0.0' ||
-    hostname === '[::]' ||
-    hostname === '[::1]'
+    unbracketed === '::1' ||
+    unbracketed === '::' ||
+    unbracketed === '0:0:0:0:0:0:0:1' ||
+    unbracketed === '0:0:0:0:0:0:0:0'
   ) {
     return { safe: false, reason: 'Loopback addresses are forbidden' };
   }
@@ -78,14 +84,42 @@ export function isSafeTargetUrl(
     return { safe: false, reason: 'Private IP subnets are forbidden' };
   }
 
-  // Disallow IPv6 private / link-local / unique-local
+  // Disallow Carrier-Grade NAT (CGNAT) and cloud VPC private space (100.64.0.0/10, including Alibaba Cloud metadata 100.100.100.200)
+  if (/^100\.(6[4-9]|[7-9]\d|1[0-1]\d|12[0-7])\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+    return { safe: false, reason: 'Shared address space (CGNAT/cloud metadata) is forbidden' };
+  }
+
+  // Disallow IPv6-mapped IPv4 (RFC 4291 ::ffff:0:0/96) and IPv4-compatible IPv6 (::0:0/96)
   if (
-    hostname.startsWith('[fe80:') ||
-    hostname.startsWith('[fc') ||
-    hostname.startsWith('[fd') ||
-    hostname === '[0:0:0:0:0:0:0:1]'
+    unbracketed.startsWith('::ffff:') ||
+    unbracketed.includes('::ffff') ||
+    /^::([0-9a-f]{1,4}:)?[0-9a-f]{1,4}$/i.test(unbracketed)
   ) {
-    return { safe: false, reason: 'Private IPv6 addresses are forbidden' };
+    return { safe: false, reason: 'IPv6-mapped and IPv4-compatible IPv6 addresses are forbidden' };
+  }
+
+  // Disallow IPv6 private / link-local / unique-local / site-local
+  if (
+    unbracketed.startsWith('fe80:') ||
+    unbracketed.startsWith('fec0:') ||
+    unbracketed.startsWith('fc') ||
+    unbracketed.startsWith('fd')
+  ) {
+    return { safe: false, reason: 'Private/local IPv6 addresses are forbidden' };
+  }
+
+  // Disallow DNS rebinding domain services
+  if (
+    hostname === 'nip.io' ||
+    hostname.endsWith('.nip.io') ||
+    hostname === 'sslip.io' ||
+    hostname.endsWith('.sslip.io') ||
+    hostname === 'localtest.me' ||
+    hostname.endsWith('.localtest.me') ||
+    hostname === 'lvh.me' ||
+    hostname.endsWith('.lvh.me')
+  ) {
+    return { safe: false, reason: 'DNS rebinding domain services are forbidden' };
   }
 
   // Disallow internal domain suffixes
@@ -94,9 +128,32 @@ export function isSafeTargetUrl(
     hostname.endsWith('.local') ||
     hostname.endsWith('.localhost') ||
     hostname.endsWith('.corp') ||
-    hostname.endsWith('.lan')
+    hostname.endsWith('.lan') ||
+    hostname.endsWith('.home.arpa')
   ) {
     return { safe: false, reason: 'Internal domain names are forbidden' };
+  }
+
+  // Enforce supported Office document extensions
+  const path = parsed.pathname.toLowerCase();
+  const lastDot = path.lastIndexOf('.');
+  let ext = lastDot !== -1 ? path.slice(lastDot + 1) : null;
+  if (!ext || !ALLOWED_OFFICE_EXTENSIONS.has(ext)) {
+    for (const [, val] of parsed.searchParams.entries()) {
+      const v = val.toLowerCase();
+      const d = v.lastIndexOf('.');
+      if (d !== -1 && ALLOWED_OFFICE_EXTENSIONS.has(v.slice(d + 1))) {
+        ext = v.slice(d + 1);
+        break;
+      }
+    }
+  }
+
+  if (!ext || !ALLOWED_OFFICE_EXTENSIONS.has(ext)) {
+    return {
+      safe: false,
+      reason: `Target file must have a supported Office extension (.${Array.from(ALLOWED_OFFICE_EXTENSIONS).join(', .')})`,
+    };
   }
 
   return { safe: true, url: parsed };
@@ -171,8 +228,11 @@ export default async function handler(request: Request): Promise<Response> {
 
       const targetUrl = validation.url.toString();
 
-      // Fetch the source office document with manual redirect handling to prevent redirect SSRF
-      const fileResp = await fetch(targetUrl, { redirect: 'manual' });
+      // Fetch the source office document with manual redirect handling and timeout to prevent redirect SSRF & slowloris
+      const fileResp = await fetch(targetUrl, {
+        redirect: 'manual',
+        signal: AbortSignal.timeout(15000),
+      });
       if (fileResp.status >= 300 && fileResp.status < 400) {
         return new Response(
           JSON.stringify({
@@ -195,6 +255,28 @@ export default async function handler(request: Request): Promise<Response> {
           }),
           {
             status: 404,
+            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      // SEC-02: Disallow dangerous content types (e.g. HTML, scripts, executables)
+      const rawContentType = (fileResp.headers.get('content-type') || '').toLowerCase();
+      if (
+        rawContentType.includes('text/html') ||
+        rawContentType.includes('text/javascript') ||
+        rawContentType.includes('application/javascript') ||
+        rawContentType.includes('application/x-msdownload') ||
+        rawContentType.includes('application/x-sh') ||
+        rawContentType.includes('application/x-executable')
+      ) {
+        return new Response(
+          JSON.stringify({
+            error: 'Invalid content type',
+            message: `Upstream resource returned disallowed Content-Type: ${rawContentType}`,
+          }),
+          {
+            status: 400,
             headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
           }
         );
@@ -245,6 +327,7 @@ export default async function handler(request: Request): Promise<Response> {
           Authorization: basicAuth,
         },
         body: formData,
+        signal: AbortSignal.timeout(45000),
       });
 
       if (!convResp.ok) {
@@ -369,6 +452,7 @@ export default async function handler(request: Request): Promise<Response> {
           Authorization: basicAuth,
         },
         body: outFormData,
+        signal: AbortSignal.timeout(45000),
       });
 
       if (!convResp.ok) {

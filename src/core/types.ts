@@ -9,8 +9,10 @@ import type { AnnotationChangedEvent } from '../annotations/AnnotationManager';
 import type { PdfAssetPaths } from './pdfAssets';
 import type { WebViewerInstance } from './ViewerInstance';
 import type { OfficeConverterConfig, OfficeFileType } from '../office/types';
+import type { FormManager } from '../forms/FormManager';
+import type { FormField, FormDataRecord } from '../forms/types';
 
-export type { PdfAssetPaths, WebViewerInstance, OfficeConverterConfig, OfficeFileType };
+export type { PdfAssetPaths, WebViewerInstance, OfficeConverterConfig, OfficeFileType, FormManager, FormField, FormDataRecord };
 
 export interface SearchBounds {
   x: number;
@@ -61,6 +63,10 @@ export interface SDKPermissions {
   canRedact?: boolean;
   /** Allow editing/deleting annotations authored by other users (default false). */
   canEditOthers?: boolean;
+  /** Allow designing / creating form fields in the Forms builder tab (default true). */
+  canCreateForms?: boolean;
+  /** Allow filling interactive form fields in the View tab (default true). */
+  canFillForms?: boolean;
 }
 
 export interface ViewerUser {
@@ -134,6 +140,8 @@ export interface WebViewerOptions {
   canAddAnnotations?: boolean;
   canEditAnnotations?: boolean;
   canDeleteAnnotations?: boolean;
+  /** Custom or pre-populated FormManager instance. */
+  formManager?: FormManager;
   /** Shorthand for "no annotation/redaction editing at all". */
   readOnly?: boolean;
   /** Author attached to annotations created in this viewer. */

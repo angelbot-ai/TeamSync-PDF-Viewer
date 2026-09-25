@@ -49,7 +49,7 @@ interface HeaderProps {
 }
 
 const TABS = [
-  'View', 'Annotate'
+  'View', 'Annotate', 'Forms'
 ];
 
 export default function Header({ 
@@ -303,7 +303,11 @@ export default function Header({
 
         {/* Center Section: Tabs */}
         <div style={{ display: 'flex', alignItems: 'flex-end', height: '100%', gap: '16px' }}>
-          {TABS.filter(tab => !(tab === 'Annotate' && (enableAnnotations === false || permissions?.canAddAnnotations === false))).map(tab => (
+          {TABS.filter(tab => {
+            if (tab === 'Annotate' && (enableAnnotations === false || permissions?.canAddAnnotations === false)) return false;
+            if (tab === 'Forms' && permissions?.canCreateForms === false) return false;
+            return true;
+          }).map(tab => (
             <div 
               key={tab}
               onClick={() => setActiveTab(tab)}

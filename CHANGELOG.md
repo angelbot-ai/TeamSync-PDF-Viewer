@@ -2,6 +2,51 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [1.9.0] — 2026-09-25
+
+### Added
+- **Interactive PDF Forms Builder ("Forms" Tab)**:
+  - Added a dedicated 3rd navigation tab ("Forms") alongside "View" and "Annotate" for designing interactive forms directly over loaded PDF documents.
+  - **Comprehensive Form Field Controls**:
+    - **Textbox**: Single-line text input for short answers, names, codes, emails.
+    - **Text Area**: Multi-line expandable text area for comments, descriptions, notes.
+    - **Date and Time Picker**: Calendar and clock selector supporting `date`, `time`, or `datetime` format modes.
+    - **Check List**: Multi-item checklist allowing authors to configure selectable items and respondents to check/uncheck choices independently (plus single-checkbox mode).
+    - **Dropdown**: Single-select dropdown list with customizable choices.
+    - **Radio Group**: Mutually exclusive single-choice options.
+  - **Visual Form Field Canvas Layer**:
+    - Drag-to-create bounding box with live visual preview.
+    - Click-to-select with 8 interactive resize handles (`nw`, `n`, `ne`, `e`, `se`, `s`, `sw`, `w`) and drag-to-move repositioning.
+    - Floating field action bar with quick properties edit, duplicate, and delete actions.
+    - Keyboard delete support (`Delete` / `Backspace`).
+  - **Field Properties Editor**:
+    - Modal dialog to configure field key name, display label, placeholder text, mandatory/required toggle (`*`), date format, default value, and item options management (add, edit, remove, reorder).
+  - **Forms Toolbar**:
+    - Undo and Redo buttons for form layout modifications.
+    - One-click tool selection for Textbox, Text Area, Date & Time, Check List, Dropdown, and Radio Group.
+    - Form schema management: Export Schema (JSON), Import Schema (JSON), Clear All Fields, and quick toggle to test in View mode.
+
+- **Interactive Form Filler (View Tab)**:
+  - Form fields render directly on top of the PDF pages at their exact unscaled PDF coordinates, zooming and rotating with the canvas.
+  - Live interactive HTML inputs embedded directly over pages for single-line text, multi-line textareas, date-time pickers, checklist checkboxes, dropdowns, and radio groups.
+  - Real-time two-way data binding to central `FormManager` state.
+  - **Form Filler Actions Bar**: Utility header displayed in View mode showing completion progress, required field count, form validation with feedback, JSON data export, and form reset.
+
+- **Role & Permissions Architecture**:
+  - Added `canCreateForms?: boolean` (default: `true`) to `SDKPermissions` controlling access to the Forms builder tab. When set to `false`, the Forms tab is omitted and users are restricted to View/Annotate.
+  - Added `canFillForms?: boolean` (default: `true`) to `SDKPermissions` controlling whether fields in View mode can be edited or remain read-only.
+  - Automatic normalization to View tab if a restricted user attempts to switch to Forms tab.
+
+- **Native PDF AcroForm Baking & Export**:
+  - Integrated with `pdf-lib` to bake interactive form fields into native PDF AcroForms upon export (`createTextField`, `createCheckBox`, `createDropdown`, multiline text areas, and checklist items) preserving user-filled values.
+  - Exported public SDK methods on `WebViewerInstance`: `getFormFields()`, `setFormFields()`, `getFormData()`, `setFormData()`, `clearFormData()`, `validateForm()`, and `exportFormData()`.
+  - Exported `FormManager` and all related form types from the top-level package.
+
+### Security
+- **SSRF Prevention & Edge Converter Hardening**: Added strict content-type validation and upstream error sanitization to the edge conversion function.
+- **Protocol Sanitization for PDF Links**: Enforced URI sanitization rejecting `javascript:`, `vbscript:`, and `data:` schemes.
+- **Diff Engine Memory Bounds**: Added bounded edit distance to Myers diff to prevent memory exhaustion on divergent pages.
+
 ## [1.8.1] — 2026-09-19
 
 ### Added

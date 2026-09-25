@@ -8,6 +8,9 @@ import type { Redaction, WatermarkOptions, TransientHighlight } from '../core/ty
 import type { Annotation } from '../annotations/types';
 import { getRotationTransform, convertToRotatedRect, normalizeRotation } from '../utils/rotationUtils';
 import { calculateSafeRenderScale } from '../utils/zoomUtils';
+import { FormFieldLayer } from './FormFieldLayer';
+import type { FormManager } from '../forms/FormManager';
+import type { FormToolType } from '../forms/types';
 
 export type { Annotation };
 
@@ -52,6 +55,10 @@ interface PageRendererProps {
   /** Whether to hide annotations and transient highlights until the page canvas has finished rendering. Default: true. */
   hideAnnotationsUntilPageRendered?: boolean;
   onLinkClick?: (url: string, annotation?: Annotation, e?: React.MouseEvent) => void;
+  formManager?: FormManager;
+  activeFormTool?: FormToolType;
+  setActiveFormTool?: (tool: FormToolType) => void;
+  canFillForms?: boolean;
 }
 
 function PageRendererComponent({
@@ -61,7 +68,8 @@ function PageRendererComponent({
   onMouseDown, onMouseMove, onMouseUp, onAnnotationClick, onAnnotationDoubleClick, onStartResize, onStartMove,
   onAnnotationMouseEnter, onClearSelection,
   watermark, watermarkText, redactions, onDiscardRedaction, onRendered,
-  hideAnnotationsUntilPageRendered = true, onLinkClick
+  hideAnnotationsUntilPageRendered = true, onLinkClick,
+  formManager, activeFormTool = 'select', setActiveFormTool, canFillForms = true
 }: PageRendererProps) {
   const onRenderedRef = useRef(onRendered);
   useEffect(() => {
@@ -960,6 +968,22 @@ function PageRendererComponent({
           </svg>
         );
       })()}
+
+      {/* Form Fields Layer (Builder & Filler Modes) */}
+      {formManager && (
+        <FormFieldLayer
+          pageNum={pageNum}
+          scale={scale}
+          rotation={rotation}
+          basePageWidth={basePageWidth}
+          basePageHeight={basePageHeight}
+          activeTab={activeTab}
+          activeTool={activeFormTool || 'select'}
+          setActiveTool={setActiveFormTool || (() => {})}
+          formManager={formManager}
+          canFillForms={canFillForms}
+        />
+      )}
     </div>
   );
 }
@@ -975,6 +999,9 @@ const PageRenderer = React.memo(PageRendererComponent, (prevProps, nextProps) =>
          prevProps.pageLeft === nextProps.pageLeft &&
          prevProps.activeTab === nextProps.activeTab &&
          prevProps.activeTool === nextProps.activeTool &&
+         prevProps.activeFormTool === nextProps.activeFormTool &&
+         prevProps.formManager === nextProps.formManager &&
+         prevProps.canFillForms === nextProps.canFillForms &&
          prevProps.selectedAnnotationId === nextProps.selectedAnnotationId &&
          prevProps.activeSearchResult === nextProps.activeSearchResult &&
          prevProps.watermark === nextProps.watermark &&

@@ -109,3 +109,45 @@ export function parseLinkTarget(linkUrl: string): ParsedLinkTarget {
     isExternalWeb: isWeb
   };
 }
+
+/**
+ * Sanitizes a link URL to guarantee safe usage in anchor attributes (e.g. href).
+ * Rejects dangerous schemes like javascript:, vbscript:, and data:.
+ * Returns '#' if the scheme is unsafe or empty.
+ */
+export function sanitizeLinkUrl(url?: string): string {
+  if (!url) return '#';
+  const trimmed = url.trim();
+  if (!trimmed) return '#';
+
+  // Allow internal anchors e.g. '#page=2', '#5'
+  if (trimmed.startsWith('#')) return trimmed;
+
+  // Normalize protocol-relative URL
+  if (trimmed.startsWith('//')) {
+    return 'https:' + trimmed;
+  }
+
+  // Reject explicitly dangerous schemes
+  if (/^(javascript|vbscript|data|file):/i.test(trimmed)) {
+    return '#';
+  }
+
+  // If already absolute http/https/mailto/tel, return trimmed
+  if (/^(https?|mailto|tel):/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  // If relative path (/docs/sample.pdf, ./sample.pdf, ../sample.pdf)
+  if (trimmed.startsWith('/') || trimmed.startsWith('./') || trimmed.startsWith('../')) {
+    return trimmed;
+  }
+
+  // If no scheme, treat as relative
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  // Any other unknown custom scheme: reject
+  return '#';
+}

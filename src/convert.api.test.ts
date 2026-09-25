@@ -58,6 +58,23 @@ describe('api/convert edge function security', () => {
       expect(isSafeTargetUrl('http://192.168.1.100/admin.pptx', origin).safe).toBe(false);
     });
 
+    it('blocks IPv6-mapped IPv4 addresses and IPv4-compatible IPv6', () => {
+      expect(isSafeTargetUrl('http://[::ffff:127.0.0.1]/doc.docx', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://[::ffff:169.254.169.254]/doc.docx', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://[::ffff:10.0.0.1]/doc.docx', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://[::127.0.0.1]/doc.docx', origin).safe).toBe(false);
+    });
+
+    it('blocks Carrier-Grade NAT and cloud VPC private space', () => {
+      expect(isSafeTargetUrl('http://100.64.0.1/doc.docx', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://100.100.100.200/doc.docx', origin).safe).toBe(false);
+    });
+
+    it('blocks DNS rebinding domain services', () => {
+      expect(isSafeTargetUrl('http://127.0.0.1.nip.io/doc.docx', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('http://localtest.me/doc.docx', origin).safe).toBe(false);
+    });
+
     it('blocks non-HTTP/HTTPS protocols', () => {
       expect(isSafeTargetUrl('file:///etc/passwd', origin).safe).toBe(false);
       expect(isSafeTargetUrl('ftp://internal.server/doc.docx', origin).safe).toBe(false);
@@ -68,6 +85,16 @@ describe('api/convert edge function security', () => {
       expect(isSafeTargetUrl('http://example.com:6379/dump.rdb', origin).safe).toBe(false);
       expect(isSafeTargetUrl('http://example.com:22/banner', origin).safe).toBe(false);
       expect(isSafeTargetUrl('http://example.com:27017/test', origin).safe).toBe(false);
+    });
+
+    it('enforces supported Office document extensions', () => {
+      expect(isSafeTargetUrl('https://cdn.example.com/file.html', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('https://cdn.example.com/api/data.json', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('https://cdn.example.com/executable.exe', origin).safe).toBe(false);
+      expect(isSafeTargetUrl('https://cdn.example.com/file.docx', origin).safe).toBe(true);
+      expect(isSafeTargetUrl('https://cdn.example.com/sheet.xlsx', origin).safe).toBe(true);
+      expect(isSafeTargetUrl('https://cdn.example.com/slides.pptx', origin).safe).toBe(true);
+      expect(isSafeTargetUrl('https://cdn.example.com/data.csv', origin).safe).toBe(true);
     });
   });
 
@@ -166,6 +193,23 @@ describe('api/convert edge function security', () => {
       expect(json.error).toBe('Conversion failed');
       expect(json.message).toBe('The conversion microservice was unable to process the document.');
       expect(json.details).toBeUndefined();
+    });
+
+    it('rejects upstream file fetch when Content-Type is disallowed (e.g. text/html)', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response('<html><body>Fake Doc</body></html>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        })
+      );
+
+      const request = new Request('https://pdfviewer.teamsync.com/api/convert?file=https://cdn.example.com/fake.docx');
+      const response = await handler(request);
+      expect(response.status).toBe(400);
+
+      const json = await response.json();
+      expect(json.error).toBe('Invalid content type');
+      expect(json.message).toContain('text/html');
     });
   });
 });

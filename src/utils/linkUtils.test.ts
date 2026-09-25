@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseLinkTarget, isDocumentUrl } from './linkUtils';
+import { parseLinkTarget, isDocumentUrl, sanitizeLinkUrl } from './linkUtils';
 
 describe('linkUtils', () => {
   describe('isDocumentUrl', () => {
@@ -130,6 +130,43 @@ describe('linkUtils', () => {
         pageNumber: undefined,
         isExternalWeb: true
       });
+    });
+  });
+
+  describe('sanitizeLinkUrl (SEC-04)', () => {
+    it('rejects javascript: and script execution schemes', () => {
+      expect(sanitizeLinkUrl('javascript:alert(1)')).toBe('#');
+      expect(sanitizeLinkUrl('JAVASCRIPT:alert(document.cookie)')).toBe('#');
+      expect(sanitizeLinkUrl('  javascript:void(0)  ')).toBe('#');
+    });
+
+    it('rejects data: and vbscript: URIs', () => {
+      expect(sanitizeLinkUrl('data:text/html,<script>alert(1)</script>')).toBe('#');
+      expect(sanitizeLinkUrl('vbscript:msgbox(1)')).toBe('#');
+      expect(sanitizeLinkUrl('file:///etc/passwd')).toBe('#');
+    });
+
+    it('permits safe HTTP, HTTPS, mailto, tel, and relative links', () => {
+      expect(sanitizeLinkUrl('https://example.com')).toBe('https://example.com');
+      expect(sanitizeLinkUrl('http://example.com/doc.pdf')).toBe('http://example.com/doc.pdf');
+      expect(sanitizeLinkUrl('mailto:support@teamsync.com')).toBe('mailto:support@teamsync.com');
+      expect(sanitizeLinkUrl('tel:+1234567890')).toBe('tel:+1234567890');
+      expect(sanitizeLinkUrl('/docs/guide.pdf')).toBe('/docs/guide.pdf');
+      expect(sanitizeLinkUrl('./sample.pdf')).toBe('./sample.pdf');
+    });
+
+    it('permits internal page jump anchors', () => {
+      expect(sanitizeLinkUrl('#page=5')).toBe('#page=5');
+      expect(sanitizeLinkUrl('#3')).toBe('#3');
+    });
+
+    it('normalizes protocol-relative URLs safely to https', () => {
+      expect(sanitizeLinkUrl('//example.com/page')).toBe('https://example.com/page');
+    });
+
+    it('handles empty or undefined inputs safely', () => {
+      expect(sanitizeLinkUrl('')).toBe('#');
+      expect(sanitizeLinkUrl(undefined)).toBe('#');
     });
   });
 });

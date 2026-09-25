@@ -19,6 +19,7 @@ import { ViewerBus } from '../core/eventBus';
 import { ViewerBusContext } from '../core/busContext';
 import { WebViewerInstance } from '../core/ViewerInstance';
 import { AnnotationManager } from '../annotations/AnnotationManager';
+import { FormManager } from '../forms/FormManager';
 import { printPdfBytes } from '../core/print';
 import { useShortcuts, matchShortcut } from '../hooks/useShortcuts';
 import type { WebViewerOptions, SDKPermissions, Redaction, TransientHighlight, LinkClickEvent } from '../core/types';
@@ -123,8 +124,9 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   const rootRef = useRef<HTMLDivElement>(null);
   const bus = useMemo(() => new ViewerBus(), []);
   const annotationManager = useMemo(() => new AnnotationManager(), []);
+  const formManager = useMemo(() => props.formManager || new FormManager(), [props.formManager]);
   const instanceRef = useRef<WebViewerInstance | null>(null);
-  if (!instanceRef.current) instanceRef.current = new WebViewerInstance(bus, annotationManager, id);
+  if (!instanceRef.current) instanceRef.current = new WebViewerInstance(bus, annotationManager, id, formManager);
   const instance = instanceRef.current;
   useImperativeHandle(ref, () => instance, [instance]);
 
@@ -273,16 +275,29 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
 
   const effectivePermissions = useMemo<SDKPermissions>(() => {
     if (readOnly) {
-      return { canAddAnnotations: false, canEditAnnotations: false, canDeleteAnnotations: false, canRedact: false };
+      return {
+        canAddAnnotations: false,
+        canEditAnnotations: false,
+        canDeleteAnnotations: false,
+        canRedact: false,
+        canCreateForms: false,
+        canFillForms: false,
+      };
     }
     return {
       canAddAnnotations: permissions?.canAddAnnotations ?? canAddAnnotations ?? enableAnnotations !== false,
       canEditAnnotations: permissions?.canEditAnnotations ?? canEditAnnotations ?? enableAnnotations !== false,
       canDeleteAnnotations: permissions?.canDeleteAnnotations ?? canDeleteAnnotations ?? enableAnnotations !== false,
       canRedact: permissions?.canRedact ?? enableRedactions ?? true,
+      canCreateForms: permissions?.canCreateForms ?? true,
+      canFillForms: permissions?.canFillForms ?? true,
     };
   }, [readOnly, permissions, canAddAnnotations, canEditAnnotations, canDeleteAnnotations, enableAnnotations, enableRedactions]);
   const annotationsEnabled = !readOnly && enableAnnotations !== false;
+
+  useEffect(() => {
+    formManager.setReadOnly(effectivePermissions.canFillForms === false);
+  }, [formManager, effectivePermissions.canFillForms]);
 
   // Keep the manager's user / permission state in sync with props.
   const currentUserId = props.currentUser?.id;
@@ -308,7 +323,8 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
 
   useEffect(() => {
     if (effectivePermissions.canAddAnnotations === false && activeTab === 'Annotate') setActiveTab('View');
-  }, [effectivePermissions.canAddAnnotations, activeTab]);
+    if (effectivePermissions.canCreateForms === false && activeTab === 'Forms') setActiveTab('View');
+  }, [effectivePermissions.canAddAnnotations, effectivePermissions.canCreateForms, activeTab]);
 
   // ---- live state exposed to the instance ------------------------------------------------------
   const redactionsRef = useRef<Redaction[]>([]);
@@ -798,6 +814,9 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             targetViewer={targetViewer}
             resolveLinkUrl={resolveLinkUrl}
             onLinkClick={onLinkClick}
+            formManager={formManager}
+            setActiveTab={setActiveTab}
+            onDownloadFilledPdf={() => bus.emit('action-download')}
           />
         </div>
         {isSettingsOpen && (

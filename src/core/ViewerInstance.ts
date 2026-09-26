@@ -18,7 +18,6 @@ import type {
   FormField,
   FormDataRecord,
   FormValidationResult,
-  FormAssignee,
   FormRole,
   FormFeatureOptions,
 } from '../forms/types';
@@ -455,9 +454,9 @@ export class WebViewerInstance {
     this.formManager.clearValues();
   }
 
-  /** Validates all required form fields (or only those assigned to the specified user). */
-  validateForm(assigneeId?: string | null): FormValidationResult {
-    return this.formManager.validate(assigneeId);
+  /** Validates all required form fields (or only those assigned to the specified role). */
+  validateForm(roleId?: string | null): FormValidationResult {
+    return this.formManager.validate(roleId);
   }
 
   /** Exports filled form data as a JSON string. */
@@ -474,68 +473,6 @@ export class WebViewerInstance {
     }
   }
 
-  /** Returns all configured form assignees. */
-  getFormAssignees(): FormAssignee[] {
-    return this.formManager.getAssignees();
-  }
-
-  /** Sets the list of form assignees. */
-  setFormAssignees(assignees: FormAssignee[]): void {
-    this.formManager.setAssignees(assignees);
-  }
-
-  /** Adds a new form assignee/user. */
-  addFormAssignee(assignee: FormAssignee): void {
-    this.formManager.addAssignee(assignee);
-  }
-
-  /** Updates an existing form assignee. */
-  updateFormAssignee(id: string, updates: Partial<Omit<FormAssignee, 'id'>>): void {
-    this.formManager.updateAssignee(id, updates);
-  }
-
-  /** Removes a form assignee and unassigns any fields bound to them. */
-  removeFormAssignee(id: string): void {
-    this.formManager.removeAssignee(id);
-  }
-
-  /** Returns the active form assignee ID (or null for all). */
-  getCurrentFormAssignee(): string | null {
-    return this.formManager.getCurrentAssignee();
-  }
-
-  /** Sets the active form assignee ID (or null for all). */
-  setCurrentFormAssignee(assigneeId: string | null): void {
-    this.formManager.setCurrentAssignee(assigneeId);
-  }
-
-  /**
-   * Programmatically sets the active form user for filler mode.
-   * Can be an assignee ID string, or a user object { id, name, color? }.
-   * Automatically adds the user to the form assignees list if not already present.
-   */
-  setFormUser(user: { id: string; name?: string; color?: string } | string | null): void {
-    this.formManager.setUser(user);
-  }
-
-  /** Returns the active form user record, if assigned. */
-  getFormUser(): FormAssignee | undefined {
-    return this.formManager.getUser();
-  }
-
-  /** Returns the actual user details passed by the host application, if set. */
-  getActualUser(): ViewerUser | null {
-    return this.formManager.getActualUser();
-  }
-
-  /**
-   * Sets the actual user details passed by the host application.
-   * If the user specifies a role/roleId, that role is automatically activated.
-   */
-  setActualUser(user: ViewerUser | null): void {
-    this.formManager.setActualUser(user);
-  }
-
   /** Returns all configured form template roles. */
   getFormRoles(): FormRole[] {
     return this.formManager.getRoles();
@@ -546,14 +483,42 @@ export class WebViewerInstance {
     this.formManager.setRoles(roles);
   }
 
-  /** Returns the active form role ID. */
+  /** Adds a new form template role. */
+  addFormRole(role: FormRole): void {
+    this.formManager.addRole(role);
+  }
+
+  /** Updates an existing form template role. */
+  updateFormRole(id: string, updates: Partial<Omit<FormRole, 'id'>>): void {
+    this.formManager.updateRole(id, updates);
+  }
+
+  /** Removes a form template role and unbinds any fields associated with it. */
+  removeFormRole(id: string): void {
+    this.formManager.removeRole(id);
+  }
+
+  /** Returns the active form role ID (or null for all). */
   getCurrentRole(): string | null {
     return this.formManager.getCurrentRole();
   }
 
-  /** Sets the active form role ID. */
+  /** Sets the active form role ID (or null for all). */
   setCurrentRole(roleId: string | null): void {
     this.formManager.setCurrentRole(roleId);
+  }
+
+  /** Returns the current logged-in user details passed by the host application. */
+  getCurrentUser(): ViewerUser | null {
+    return this.formManager.getCurrentUser();
+  }
+
+  /**
+   * Sets the current logged-in user details passed by the host application.
+   * If the user specifies a role, that role is automatically activated in the viewer.
+   */
+  setCurrentUser(user: ViewerUser | null): void {
+    this.formManager.setCurrentUser(user);
   }
 
   /** Returns current form feature options and visibility rules. */
@@ -571,13 +536,13 @@ export class WebViewerInstance {
   }
 
   /** Advances focus to the next form field in the sequence. */
-  nextFormField(assigneeId?: string | null): FormField | null {
-    return this.formManager.goToNextField(assigneeId);
+  nextFormField(roleId?: string | null): FormField | null {
+    return this.formManager.goToNextField(roleId);
   }
 
   /** Moves focus to the previous form field in the sequence. */
-  previousFormField(assigneeId?: string | null): FormField | null {
-    return this.formManager.goToPreviousField(assigneeId);
+  previousFormField(roleId?: string | null): FormField | null {
+    return this.formManager.goToPreviousField(roleId);
   }
 
   /** Focuses a specific form field by ID. */

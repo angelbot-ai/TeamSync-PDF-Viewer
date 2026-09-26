@@ -6,13 +6,13 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, PenTool, Type, Upload, ShieldCheck, RefreshCw, Check } from 'lucide-react';
-import type { FormField, FormSignatureValue, SignatureType, FormAssignee, FormRole } from '../forms/types';
+import type { FormField, FormSignatureValue, SignatureType, FormRole } from '../forms/types';
 import type { ViewerUser } from '../core/types';
 
 interface FormSignatureModalProps {
   field: FormField;
-  assignee?: FormAssignee;
-  actualUser?: ViewerUser | null;
+  role?: FormRole;
+  currentUser?: ViewerUser | null;
   currentValue?: FormSignatureValue | any;
   defaultSignerName?: string;
   onSave: (value: FormSignatureValue) => void;
@@ -22,8 +22,8 @@ interface FormSignatureModalProps {
 
 export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
   field,
-  assignee,
-  actualUser,
+  role,
+  currentUser,
   currentValue,
   defaultSignerName = '',
   onSave,
@@ -37,9 +37,9 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
   // Signer Name
   const initialSignerName =
     (typeof currentValue === 'object' && currentValue?.signerName) ||
-    actualUser?.name ||
+    currentUser?.name ||
     defaultSignerName ||
-    assignee?.name ||
+    role?.name ||
     '';
   const [signerName, setSignerName] = useState<string>(initialSignerName);
 
@@ -287,12 +287,12 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
   // Commit signature
   const handleAdoptAndSign = () => {
     if (signatureType === 'digital') {
-      const finalName = signerName.trim() || actualUser?.name || 'Authorized Signer';
+      const finalName = signerName.trim() || currentUser?.name || 'Authorized Signer';
       const sigVal: FormSignatureValue = {
         type: 'digital',
         signerName: finalName,
-        signerEmail: actualUser?.email,
-        signerRole: assignee?.name || field.assigneeId,
+        signerEmail: currentUser?.email,
+        signerRole: role?.name || field.roleId,
         timestamp: Date.now(),
         reason: signingReason,
         certificateHash: certFingerprint,
@@ -304,7 +304,7 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
 
     // Electronic Signature
     let finalDataUrl = '';
-    const finalSignerName = signerName.trim() || actualUser?.name || 'Signer';
+    const finalSignerName = signerName.trim() || currentUser?.name || 'Signer';
 
     if (electronicTab === 'draw') {
       const canvas = canvasRef.current;
@@ -316,7 +316,7 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
         return;
       }
     } else if (electronicTab === 'type') {
-      finalDataUrl = renderTypedToDataUrl(signerName.trim() || actualUser?.name || 'Signature', cursiveFonts[typedFontIndex]);
+      finalDataUrl = renderTypedToDataUrl(signerName.trim() || currentUser?.name || 'Signature', cursiveFonts[typedFontIndex]);
       if (!finalDataUrl) {
         alert('Please enter your name for the signature.');
         return;
@@ -333,15 +333,15 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
       type: 'electronic',
       dataUrl: finalDataUrl,
       signerName: finalSignerName,
-      signerEmail: actualUser?.email,
-      signerRole: assignee?.name || field.assigneeId,
+      signerEmail: currentUser?.email,
+      signerRole: role?.name || field.roleId,
       timestamp: Date.now(),
     };
     onSave(sigVal);
     onClose();
   };
 
-  const accentColor = assignee?.color || '#0284c7';
+  const accentColor = role?.color || '#0284c7';
 
   return (
     <div
@@ -411,7 +411,7 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
               </h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748b', marginTop: '2px', flexWrap: 'wrap' }}>
                 {field.label && <span>{field.label} · </span>}
-                {assignee && (
+                {role && (
                   <span
                     style={{
                       display: 'inline-flex',
@@ -425,15 +425,15 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
                       fontSize: '11px',
                     }}
                   >
-                    Role: {assignee.name}
+                    Role: {role.name}
                   </span>
                 )}
-                {actualUser?.name ? (
+                {currentUser?.name ? (
                   <span style={{ color: '#334155' }}>
-                    Signer: <strong>{actualUser.name}</strong>
-                    {actualUser.email ? ` (${actualUser.email})` : ''}
+                    Signer: <strong>{currentUser.name}</strong>
+                    {currentUser.email ? ` (${currentUser.email})` : ''}
                   </span>
-                ) : !assignee ? (
+                ) : !role ? (
                   <span>Document Signature</span>
                 ) : null}
               </div>
@@ -528,9 +528,9 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
               <label style={{ fontSize: '12px', fontWeight: 600, color: '#334155' }}>
                 Signer Full Name
               </label>
-              {actualUser?.name && (
+              {currentUser?.name && (
                 <span style={{ fontSize: '11px', color: '#0284c7', fontWeight: 500 }}>
-                  User session: {actualUser.name}
+                  User session: {currentUser.name}
                 </span>
               )}
             </div>
@@ -914,16 +914,16 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
 
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a', marginBottom: '2px' }}>
-                    Digitally signed by {signerName.trim() || actualUser?.name || 'Signer'}
+                    Digitally signed by {signerName.trim() || currentUser?.name || 'Signer'}
                   </div>
-                  {actualUser?.email && (
+                  {currentUser?.email && (
                     <div style={{ fontSize: '11px', color: '#475569', marginBottom: '2px' }}>
-                      Email: {actualUser.email}
+                      Email: {currentUser.email}
                     </div>
                   )}
-                  {assignee?.name && (
+                  {role?.name && (
                     <div style={{ fontSize: '11px', color: '#475569', marginBottom: '2px' }}>
-                      Role: {assignee.name}
+                      Role: {role.name}
                     </div>
                   )}
                   <div style={{ fontSize: '11px', color: '#475569', marginBottom: '2px' }}>

@@ -5,7 +5,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Settings, Trash2, Copy, Lock, PenTool, ShieldCheck, Check, User } from 'lucide-react';
-import type { FormField, FormToolType, FormDataRecord, FormAssignee, FormSignatureValue, FormFeatureOptions } from '../forms/types';
+import type { FormField, FormToolType, FormDataRecord, FormRole, FormSignatureValue, FormFeatureOptions } from '../forms/types';
 import type { FormManager } from '../forms/FormManager';
 import { FormFieldEditorModal } from './FormFieldEditorModal';
 import { FormSignatureModal } from './FormSignatureModal';
@@ -23,7 +23,7 @@ interface FormFieldLayerProps {
   formManager: FormManager;
   canFillForms?: boolean;
   showFlowOrder?: boolean;
-  selectedAssigneeFilter?: string | null;
+  selectedRoleFilter?: string | null;
 }
 
 const newId = (): string =>
@@ -43,12 +43,12 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
   formManager,
   canFillForms = true,
   showFlowOrder = true,
-  selectedAssigneeFilter = null,
+  selectedRoleFilter = null,
 }) => {
   const [fields, setFields] = useState<FormField[]>(() => formManager.getFieldsForPage(pageNum));
   const [values, setValues] = useState<FormDataRecord>(() => formManager.getValues());
-  const [assignees, setAssignees] = useState<FormAssignee[]>(() => formManager.getAssignees());
-  const [currentAssigneeId, setCurrentAssigneeId] = useState<string | null>(() => formManager.getCurrentAssignee());
+  const [roles, setRoles] = useState<FormRole[]>(() => formManager.getRoles());
+  const [currentRoleId, setCurrentRoleId] = useState<string | null>(() => formManager.getCurrentRole());
   const [activeFieldId, setActiveFieldId] = useState<string | null>(() => formManager.getActiveFieldId());
   const [options, setOptions] = useState<FormFeatureOptions>(() => formManager.getOptions());
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
@@ -73,7 +73,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
   const unW = rotation % 180 === 0 ? basePageWidth : basePageHeight;
   const unH = rotation % 180 === 0 ? basePageHeight : basePageWidth;
 
-  // Sync fields, values, assignees and flow state from FormManager
+  // Sync fields, values, roles and flow state from FormManager
   useEffect(() => {
     const unsubFields = formManager.onFieldsChange(() => {
       setFields(formManager.getFieldsForPage(pageNum));
@@ -81,11 +81,11 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
     const unsubData = formManager.onDataChange((newValues) => {
       setValues(newValues);
     });
-    const unsubAssignees = formManager.onAssigneesChange((newAssignees) => {
-      setAssignees(newAssignees);
+    const unsubRoles = formManager.onRolesChange((newRoles) => {
+      setRoles(newRoles);
     });
-    const unsubCurrent = formManager.onCurrentAssigneeChange((curr) => {
-      setCurrentAssigneeId(curr);
+    const unsubCurrent = formManager.onCurrentRoleChange((curr) => {
+      setCurrentRoleId(curr);
     });
     const unsubActive = formManager.onActiveFieldChange((actId) => {
       setActiveFieldId(actId);
@@ -96,7 +96,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
     return () => {
       unsubFields();
       unsubData();
-      unsubAssignees();
+      unsubRoles();
       unsubCurrent();
       unsubActive();
       unsubOptions();
@@ -226,7 +226,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
         };
 
         const existingCount = formManager.getFields().length;
-        const targetAssigneeId = selectedAssigneeFilter || undefined;
+        const targetRoleId = selectedRoleFilter || undefined;
         const isSig = activeTool === 'signature';
         const isDigitalSig = activeTool === 'digital_signature';
 
@@ -241,7 +241,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
           width: Math.round(w),
           height: Math.round(h),
           required: false,
-          assigneeId: targetAssigneeId,
+          roleId: targetRoleId,
           flowOrder: existingCount + 1,
           fontSize: 13,
           textColor: '#0f172a',
@@ -263,7 +263,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
 
       setCreationRect(null);
     }
-  }, [creationRect, activeTool, pageNum, formManager, setActiveTool, selectedAssigneeFilter]);
+  }, [creationRect, activeTool, pageNum, formManager, setActiveTool, selectedRoleFilter]);
 
   useEffect(() => {
     window.addEventListener('mousemove', handleMouseMove);
@@ -383,9 +383,9 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
         const isSelected = activeTab === 'Forms' && selectedFieldId === field.id;
         const fieldValue = values[field.name] !== undefined ? values[field.name] : (field.defaultValue ?? '');
 
-        const assignee = assignees.find((a) => a.id === field.assigneeId);
-        const fieldColor = assignee?.color || '#64748b';
-        const isFilteredOut = Boolean(selectedAssigneeFilter && field.assigneeId !== selectedAssigneeFilter);
+        const role = roles.find((r) => r.id === field.roleId);
+        const fieldColor = role?.color || '#64748b';
+        const isFilteredOut = Boolean(selectedRoleFilter && field.roleId !== selectedRoleFilter);
 
         // --------------------------------------------------------------------------------------
         // BUILDER MODE PRESENTATION
@@ -425,7 +425,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 transition: 'opacity 0.15s ease',
               }}
             >
-              {/* Field Label, Flow Order & Assignee Badge */}
+              {/* Field Label, Flow Order & Role Badge */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0, overflow: 'hidden' }}>
                   {showFlowOrder && field.flowOrder !== undefined && (
@@ -461,7 +461,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-                  {assignee ? (
+                  {role ? (
                     <span
                       style={{
                         display: 'inline-flex',
@@ -479,10 +479,10 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                       }}
-                      title={`Assigned to ${assignee.name}`}
+                      title={`Role: ${role.name}`}
                     >
                       <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: fieldColor, flexShrink: 0 }} />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{assignee.name}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{role.name}</span>
                     </span>
                   ) : (
                     <span
@@ -548,7 +548,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                   >
                     <span>
                       ✍️ {field.signTagText || (field.type === 'digital_signature' ? 'DIGITAL SIGN' : 'SIGN HERE')}
-                      {assignee ? ` (${assignee.name})` : ''}
+                      {role ? ` (${role.name})` : ''}
                     </span>
                   </div>
                   {/* Arrow pointing into the signature box */}
@@ -611,7 +611,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                   }}
                   onMouseDown={(e) => e.stopPropagation()}
                 >
-                  {/* Quick User Assignment Dropdown */}
+                  {/* Quick Role Assignment Dropdown */}
                   <div
                     style={{
                       display: 'flex',
@@ -623,14 +623,14 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                   >
                     <User size={13} color={fieldColor} />
                     <select
-                      value={field.assigneeId || ''}
+                      value={field.roleId || ''}
                       onChange={(e) => {
                         e.stopPropagation();
                         const nextId = e.target.value || undefined;
-                        const nextAssignee = assignees.find((a) => a.id === nextId);
+                        const nextRole = roles.find((r) => r.id === nextId);
                         formManager.updateField(field.id, {
-                          assigneeId: nextId,
-                          borderColor: nextAssignee ? nextAssignee.color : undefined,
+                          roleId: nextId,
+                          borderColor: nextRole ? nextRole.color : undefined,
                         });
                       }}
                       style={{
@@ -645,12 +645,12 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                         outline: 'none',
                         height: '22px',
                       }}
-                      title="Assign this field to a user"
+                      title="Assign this field to a role"
                     >
                       <option value="">Anyone</option>
-                      {assignees.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name}
+                      {roles.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
                         </option>
                       ))}
                     </select>
@@ -753,9 +753,9 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
         // --------------------------------------------------------------------------------------
         // FILLER MODE PRESENTATION (View Tab)
         // --------------------------------------------------------------------------------------
-        const isAssignedToOther = currentAssigneeId !== null && !!field.assigneeId && field.assigneeId !== currentAssigneeId;
-        // If otherUserFieldsMode is 'hidden', do not render other users' fields
-        if (isAssignedToOther && options.otherUserFieldsMode === 'hidden') {
+        const isAssignedToOther = currentRoleId !== null && !!field.roleId && field.roleId !== currentRoleId;
+        // If otherRoleFieldsMode is 'hidden', do not render other roles' fields
+        if (isAssignedToOther && options.otherRoleFieldsMode === 'hidden') {
           return null;
         }
 
@@ -782,9 +782,9 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
 
         const effectiveBorderColor = isAssignedToOther
           ? '#cbd5e1'
-          : assignee
-          ? (field.borderColor || assignee.color)
-          : (field.borderColor && !assignees.some((a) => a.color === field.borderColor) ? field.borderColor : '#94a3b8');
+          : role
+          ? (field.borderColor || role.color)
+          : (field.borderColor && !roles.some((r) => r.color === field.borderColor) ? field.borderColor : '#94a3b8');
 
         const effectiveBorderWidth = field.borderWidth ?? 1.5;
         const effectiveBorderRadius = field.borderRadius ?? 3;
@@ -867,7 +867,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                   maxWidth: `${Math.max(220, rot.width * scale * 1.5)}px`,
                 }}
               >
-                {isAssignedToOther && options.otherUserFieldsMode !== 'view-only' && (
+                {isAssignedToOther && options.otherRoleFieldsMode !== 'view-only' && (
                   <Lock size={10} style={{ flexShrink: 0, color: '#64748b' }} />
                 )}
 
@@ -904,8 +904,8 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                   {field.required && <span style={{ color: '#ef4444' }}> *</span>}
                 </span>
 
-                {/* Assignee Badge */}
-                {assignee ? (
+                {/* Role Badge */}
+                {role ? (
                   <span
                     style={{
                       display: 'inline-flex',
@@ -920,10 +920,10 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                       flexShrink: 0,
                       marginLeft: '2px',
                     }}
-                    title={`Assigned to ${assignee.name}`}
+                    title={`Role: ${role.name}`}
                   >
                     <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: fieldColor }} />
-                    {assignee.name}
+                    {role.name}
                   </span>
                 ) : (
                   <span
@@ -974,7 +974,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                     maxWidth: `${Math.max(220, rot.width * scale * 1.5)}px`,
                   }}
                 >
-                  {isAssignedToOther && options.otherUserFieldsMode !== 'view-only' && <Lock size={10} style={{ flexShrink: 0 }} />}
+                  {isAssignedToOther && options.otherRoleFieldsMode !== 'view-only' && <Lock size={10} style={{ flexShrink: 0 }} />}
                   {showFlowOrder && field.flowOrder !== undefined && (
                     <span
                       style={{
@@ -1004,7 +1004,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       ✍️ {field.signTagText || (field.type === 'digital_signature' ? 'DIGITAL SIGN' : 'SIGN HERE')}
                       {field.label && field.label !== field.signTagText ? ` · ${field.label}` : ''}
-                      {assignee ? ` (${assignee.name})` : ''}
+                      {role ? ` (${role.name})` : ''}
                       {field.required && <span style={{ color: '#fca5a5' }}> *</span>}
                     </span>
                   )}
@@ -1022,8 +1022,8 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
               </div>
             )}
 
-            {/* Page Margin Sticky / Index Flag for Signature — only for current user's fields */}
-            {isSignature && activeTab === 'View' && options.showSignatureFlags !== false && (!currentAssigneeId || !field.assigneeId || field.assigneeId === currentAssigneeId) && (
+            {/* Page Margin Sticky / Index Flag for Signature — only for current role's fields */}
+            {isSignature && activeTab === 'View' && options.showSignatureFlags !== false && (!currentRoleId || !field.roleId || field.roleId === currentRoleId) && (
               <div
                 className="tspdf-page-sticky-flag"
                 onClick={(e) => {
@@ -1085,7 +1085,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 disabled={isReadOnly}
                 value={fieldValue}
                 placeholder={field.placeholder || field.label || ''}
-                title={isAssignedToOther ? `Locked: Assigned to ${assignee?.name || 'another user'}` : assignee ? `Assigned to: ${assignee.name}` : undefined}
+                title={isAssignedToOther ? `Locked: Belongs to ${role?.name || 'another role'}` : role ? `Role: ${role.name}` : undefined}
                 onChange={(e) => formManager.setValue(field.name, e.target.value)}
                 onFocus={handleFocus}
                 onKeyDown={handleInputKeyDown}
@@ -1103,7 +1103,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 disabled={isReadOnly}
                 value={fieldValue}
                 placeholder={field.placeholder || field.label || ''}
-                title={isAssignedToOther ? `Locked: Assigned to ${assignee?.name || 'another user'}` : assignee ? `Assigned to: ${assignee.name}` : undefined}
+                title={isAssignedToOther ? `Locked: Belongs to ${role?.name || 'another role'}` : role ? `Role: ${role.name}` : undefined}
                 onChange={(e) => formManager.setValue(field.name, e.target.value)}
                 onFocus={handleFocus}
                 onKeyDown={handleInputKeyDown}
@@ -1122,7 +1122,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 type={field.dateFormat === 'date' ? 'date' : field.dateFormat === 'time' ? 'time' : 'datetime-local'}
                 disabled={isReadOnly}
                 value={fieldValue}
-                title={isAssignedToOther ? `Locked: Assigned to ${assignee?.name || 'another user'}` : assignee ? `Assigned to: ${assignee.name}` : undefined}
+                title={isAssignedToOther ? `Locked: Belongs to ${role?.name || 'another role'}` : role ? `Role: ${role.name}` : undefined}
                 onChange={(e) => formManager.setValue(field.name, e.target.value)}
                 onFocus={handleFocus}
                 onKeyDown={handleInputKeyDown}
@@ -1140,7 +1140,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 tabIndex={isReadOnly ? -1 : 0}
                 onFocus={handleFocus}
                 onKeyDown={handleInputKeyDown}
-                title={isAssignedToOther ? `Locked: Assigned to ${assignee?.name || 'another user'}` : assignee ? `Assigned to: ${assignee.name}` : undefined}
+                title={isAssignedToOther ? `Locked: Belongs to ${role?.name || 'another role'}` : role ? `Role: ${role.name}` : undefined}
                 style={{
                   ...baseInputStyle,
                   padding: `${4 * scale}px ${6 * scale}px`,
@@ -1199,7 +1199,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 tabIndex={isReadOnly ? -1 : 0}
                 onFocus={handleFocus}
                 onKeyDown={handleInputKeyDown}
-                title={isAssignedToOther ? `Locked: Assigned to ${assignee?.name || 'another user'}` : assignee ? `Assigned to: ${assignee.name}` : undefined}
+                title={isAssignedToOther ? `Locked: Belongs to ${role?.name || 'another role'}` : role ? `Role: ${role.name}` : undefined}
                 style={{
                   ...baseInputStyle,
                   display: 'flex',
@@ -1234,7 +1234,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                 id={`tspdf-field-${field.id}`}
                 disabled={isReadOnly}
                 value={fieldValue}
-                title={isAssignedToOther ? `Locked: Assigned to ${assignee?.name || 'another user'}` : assignee ? `Assigned to: ${assignee.name}` : undefined}
+                title={isAssignedToOther ? `Locked: Belongs to ${role?.name || 'another role'}` : role ? `Role: ${role.name}` : undefined}
                 onChange={(e) => formManager.setValue(field.name, e.target.value)}
                 onFocus={handleFocus}
                 onKeyDown={handleInputKeyDown}
@@ -1501,7 +1501,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                       )}
                       <span>
                         {isAssignedToOther
-                          ? `Assigned to ${assignee ? assignee.name : 'other user'}`
+                          ? `Assigned to ${role ? role.name : 'other role'}`
                           : `Click to sign ${field.type === 'digital_signature' ? 'digitally' : 'electronically'}`}
                         {field.label && <span style={{ opacity: 0.85, fontWeight: 500 }}> ({field.label})</span>}
                       </span>
@@ -1519,8 +1519,8 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
         <div style={{ pointerEvents: 'auto' }}>
           <FormFieldEditorModal
             field={editingField}
-            assignees={assignees}
-            onAddAssignee={(user) => formManager.addAssignee(user)}
+            roles={roles}
+            onAddRole={(newRole) => formManager.addRole(newRole)}
             onSave={(updates) => {
               formManager.updateField(editingField.id, updates);
               setEditingField(null);
@@ -1535,8 +1535,8 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
         <div style={{ pointerEvents: 'auto' }}>
           <FormSignatureModal
             field={signingField}
-            assignee={assignees.find((a) => a.id === signingField.assigneeId)}
-            actualUser={formManager.getActualUser()}
+            role={roles.find((r) => r.id === signingField.roleId)}
+            currentUser={formManager.getCurrentUser()}
             currentValue={values[signingField.name]}
             defaultSignerName={formManager.getEffectiveSignerName() || ''}
             onSave={(val) => {

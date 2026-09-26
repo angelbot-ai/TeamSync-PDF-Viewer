@@ -15,7 +15,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import type { FormManager } from '../forms/FormManager';
-import type { FormField, FormDataRecord, FormAssignee, FormSignatureValue, FormFeatureOptions } from '../forms/types';
+import type { FormField, FormDataRecord, FormRole, FormSignatureValue, FormFeatureOptions } from '../forms/types';
 import type { ViewerUser } from '../core/types';
 
 interface SignatureIndexFlagsProps {
@@ -29,39 +29,39 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
 }) => {
   const [fields, setFields] = useState<FormField[]>(() => formManager.getFields());
   const [values, setValues] = useState<FormDataRecord>(() => formManager.getValues());
-  const [assignees, setAssignees] = useState<FormAssignee[]>(() => formManager.getAssignees());
-  const [currentAssigneeId, setCurrentAssigneeId] = useState<string | null>(() =>
-    formManager.getCurrentAssignee()
+  const [roles, setRoles] = useState<FormRole[]>(() => formManager.getRoles());
+  const [currentRoleId, setCurrentRoleId] = useState<string | null>(() =>
+    formManager.getCurrentRole()
   );
   const [activeFieldId, setActiveFieldId] = useState<string | null>(() =>
     formManager.getActiveFieldId()
   );
   const [options, setOptions] = useState<FormFeatureOptions>(() => formManager.getOptions());
-  const [actualUser, setActualUser] = useState<ViewerUser | null>(() => formManager.getActualUser());
+  const [currentUser, setCurrentUser] = useState<ViewerUser | null>(() => formManager.getCurrentUser());
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
   const [hoveredFieldId, setHoveredFieldId] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubFields = formManager.onFieldsChange(() => setFields(formManager.getFields()));
     const unsubData = formManager.onDataChange((newVals) => setValues(newVals));
-    const unsubAssignees = formManager.onAssigneesChange((newAssignees) =>
-      setAssignees(newAssignees)
+    const unsubRoles = formManager.onRolesChange((newRoles) =>
+      setRoles(newRoles)
     );
-    const unsubCurrent = formManager.onCurrentAssigneeChange((curr) =>
-      setCurrentAssigneeId(curr)
+    const unsubCurrent = formManager.onCurrentRoleChange((curr) =>
+      setCurrentRoleId(curr)
     );
     const unsubActive = formManager.onActiveFieldChange((act) => setActiveFieldId(act));
     const unsubOptions = formManager.onOptionsChange((opts) => setOptions(opts));
-    const unsubActualUser = formManager.onActualUserChange((u) => setActualUser(u));
+    const unsubUser = formManager.onCurrentUserChange((u) => setCurrentUser(u));
 
     return () => {
       unsubFields();
       unsubData();
-      unsubAssignees();
+      unsubRoles();
       unsubCurrent();
       unsubActive();
       unsubOptions();
-      unsubActualUser();
+      unsubUser();
     };
   }, [formManager]);
 
@@ -72,22 +72,22 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
     );
   }, [fields]);
 
-  // Filter signatures based on the current user:
-  // - If a user is selected (currentAssigneeId): ONLY show their signature flags (and unassigned ones)
-  // - If "All Users / Anyone" (currentAssigneeId is null): show all signature flags in the document
+  // Filter signatures based on the current role:
+  // - If a role is selected (currentRoleId): ONLY show their signature flags (and unassigned ones)
+  // - If "All Roles / Anyone" (currentRoleId is null): show all signature flags in the document
   const relevantSignatures = useMemo(() => {
-    if (currentAssigneeId) {
+    if (currentRoleId) {
       return signatureFields.filter(
-        (f) => f.assigneeId === currentAssigneeId || !f.assigneeId
+        (f) => f.roleId === currentRoleId || !f.roleId
       );
     }
     return signatureFields;
-  }, [signatureFields, currentAssigneeId]);
+  }, [signatureFields, currentRoleId]);
 
-  const currentAssignee = useMemo(() => {
-    if (!currentAssigneeId) return null;
-    return assignees.find((a) => a.id === currentAssigneeId) || null;
-  }, [assignees, currentAssigneeId]);
+  const currentRole = useMemo(() => {
+    if (!currentRoleId) return null;
+    return roles.find((r) => r.id === currentRoleId) || null;
+  }, [roles, currentRoleId]);
 
   const checkIsSigned = useCallback(
     (field: FormField): boolean => {
@@ -154,7 +154,7 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
 
   // Collapsed State: A sleek, recognizable floating Post-it flag tab
   if (isCollapsed) {
-    const accentColor = totalPending > 0 ? (currentAssignee?.color || '#f59e0b') : '#16a34a';
+    const accentColor = totalPending > 0 ? (currentRole?.color || '#f59e0b') : '#16a34a';
     return (
       <div
         className="tspdf-sticky-flags-collapsed"
@@ -244,12 +244,12 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <PenTool size={13} style={{ color: currentAssignee?.color || '#f59e0b' }} />
+          <PenTool size={13} style={{ color: currentRole?.color || '#f59e0b' }} />
           <span>
-            {actualUser?.name
-              ? `${actualUser.name}${currentAssignee ? ` (${currentAssignee.name})` : ''}`
-              : currentAssignee
-              ? `${currentAssignee.name}'s Signatures`
+            {currentUser?.name
+              ? `${currentUser.name}${currentRole ? ` (${currentRole.name})` : ''}`
+              : currentRole
+              ? `${currentRole.name}'s Signatures`
               : 'Signature Flags'}
           </span>
           <span
@@ -305,9 +305,9 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
       >
         {relevantSignatures.map((field) => {
           const isSigned = checkIsSigned(field);
-          const assignee = assignees.find((a) => a.id === field.assigneeId);
-          // Color coding: green when signed; otherwise user's color or warm Post-it amber
-          const flagColor = isSigned ? '#16a34a' : assignee?.color || '#f59e0b';
+          const role = roles.find((r) => r.id === field.roleId);
+          // Color coding: green when signed; otherwise role's color or warm Post-it amber
+          const flagColor = isSigned ? '#16a34a' : role?.color || '#f59e0b';
           const isHovered = hoveredFieldId === field.id;
           const isActive = activeFieldId === field.id;
           const fieldLabel = field.label || field.name || 'Signature';
@@ -417,9 +417,9 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
                   </span>
                 </div>
 
-                {/* Assignee / Anyone pill */}
+                {/* Role / Anyone pill */}
                 <div style={{ flexShrink: 0, marginLeft: '6px' }}>
-                  {assignee ? (
+                  {role ? (
                     <span
                       style={{
                         backgroundColor: 'rgba(255,255,255,0.22)',
@@ -429,7 +429,7 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
                         fontWeight: 700,
                       }}
                     >
-                      {assignee.name}
+                      {role.name}
                     </span>
                   ) : (
                     <span

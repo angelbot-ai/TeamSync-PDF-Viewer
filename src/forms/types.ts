@@ -74,7 +74,7 @@ export interface FormField {
   textColor?: string;
   /** Background fill color (hex, rgba, or 'transparent') */
   backgroundColor?: string;
-  /** Custom border color (defaults to assignee color or neutral #94a3b8) */
+  /** Custom border color (defaults to role color or neutral #94a3b8) */
   borderColor?: string;
   /** Border stroke width in pixels (1, 2, or 3) */
   borderWidth?: number;
@@ -90,8 +90,8 @@ export interface FormField {
   fontStyle?: 'normal' | 'italic';
   /** Text alignment */
   textAlign?: 'left' | 'center' | 'right';
-  /** Assignee identifier responsible for filling this field (references FormAssignee.id) */
-  assigneeId?: string;
+  /** Role identifier responsible for filling this field (references FormRole.id) */
+  roleId?: string;
   /** Explicit step order in the form filling sequence (1, 2, 3...) */
   flowOrder?: number;
   /** Specific signature mode: electronic or digital */
@@ -115,9 +115,6 @@ export interface FormRole {
   /** Optional human-readable description for the role */
   description?: string;
 }
-
-/** FormAssignee is an alias for FormRole for backward compatibility. */
-export type FormAssignee = FormRole;
 
 export type FormDataRecord = Record<string, any>;
 
@@ -159,17 +156,17 @@ export interface FormFeatureOptions {
   canFillForms?: boolean;
 
   /**
-   * Whether the end-user can switch personas in the filler toolbar.
-   * When false, the user selector dropdown is locked to the assigned user.
+   * Whether the end-user can switch roles in the filler toolbar.
+   * When false, the role selector dropdown is locked to the assigned role.
    * Default: true.
    */
-  allowUserSwitching?: boolean;
+  allowRoleSwitching?: boolean;
 
   /**
-   * Show or hide the "Filling as:" user selector in the filler toolbar.
+   * Show or hide the "Filling as:" role selector in the filler toolbar.
    * Default: true.
    */
-  showUserSelector?: boolean;
+  showRoleSelector?: boolean;
 
   /**
    * Show or hide the persistent Post-it Signature Sticky / Index Flags on the side of the viewer.
@@ -202,12 +199,12 @@ export interface FormFeatureOptions {
   showExport?: boolean;
 
   /**
-   * Controls how form fields assigned to OTHER users are presented:
+   * Controls how form fields assigned to OTHER roles are presented:
    * - 'locked': rendered with disabled styling and a lock indicator badge (default)
    * - 'hidden': completely hidden from view for the current user
    * - 'view-only': rendered cleanly as read-only values without lock styling
    */
-  otherUserFieldsMode?: 'locked' | 'hidden' | 'view-only';
+  otherRoleFieldsMode?: 'locked' | 'hidden' | 'view-only';
 
   /**
    * Hide the entire FormFillerActions toolbar in View mode.

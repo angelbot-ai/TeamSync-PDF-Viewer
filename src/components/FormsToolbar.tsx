@@ -24,7 +24,7 @@ import {
   PenLine,
   ShieldCheck,
 } from 'lucide-react';
-import type { FormToolType, FormAssignee } from '../forms/types';
+import type { FormToolType, FormRole } from '../forms/types';
 import type { FormManager } from '../forms/FormManager';
 import { FormUsersModal } from './FormUsersModal';
 
@@ -35,8 +35,8 @@ interface FormsToolbarProps {
   onSwitchToView?: () => void;
   showFlowOrder?: boolean;
   setShowFlowOrder?: (show: boolean) => void;
-  selectedAssigneeFilter?: string | null;
-  setSelectedAssigneeFilter?: (id: string | null) => void;
+  selectedRoleFilter?: string | null;
+  setSelectedRoleFilter?: (id: string | null) => void;
 }
 
 export const FormsToolbar: React.FC<FormsToolbarProps> = ({
@@ -46,15 +46,15 @@ export const FormsToolbar: React.FC<FormsToolbarProps> = ({
   onSwitchToView,
   showFlowOrder = true,
   setShowFlowOrder,
-  selectedAssigneeFilter = null,
-  setSelectedAssigneeFilter,
+  selectedRoleFilter = null,
+  setSelectedRoleFilter,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUsersModalOpen, setIsUsersModalOpen] = useState(false);
-  const [assignees, setAssignees] = useState<FormAssignee[]>(() => formManager.getAssignees());
+  const [roles, setRoles] = useState<FormRole[]>(() => formManager.getRoles());
 
   useEffect(() => {
-    const unsub = formManager.onAssigneesChange((updated) => setAssignees(updated));
+    const unsub = formManager.onRolesChange((updated) => setRoles(updated));
     return unsub;
   }, [formManager]);
 
@@ -217,16 +217,16 @@ export const FormsToolbar: React.FC<FormsToolbarProps> = ({
           }}
         >
           <UserPlus size={14} color="#0284c7" />
-          <span>Users ({assignees.length})</span>
+          <span>Roles ({roles.length})</span>
         </button>
 
-        {/* Assignee View Filter */}
-        {setSelectedAssigneeFilter && (
+        {/* Role View Filter */}
+        {setSelectedRoleFilter && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '2px' }}>
             <Users size={14} color="#64748b" />
             <select
-              value={selectedAssigneeFilter || ''}
-              onChange={(e) => setSelectedAssigneeFilter(e.target.value || null)}
+              value={selectedRoleFilter || ''}
+              onChange={(e) => setSelectedRoleFilter(e.target.value || null)}
               style={{
                 fontSize: '12px',
                 padding: '2px 6px',
@@ -236,12 +236,12 @@ export const FormsToolbar: React.FC<FormsToolbarProps> = ({
                 color: '#334155',
                 cursor: 'pointer',
               }}
-              title="Filter visible fields by user assignment"
+              title="Filter visible fields by role assignment"
             >
               <option value="">Filter: All Fields</option>
-              {assignees.map((a) => (
-                <option key={a.id} value={a.id}>
-                  Filter: {a.name}
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  Filter: {r.name}
                 </option>
               ))}
             </select>

@@ -5,13 +5,13 @@
 
 import React, { useState } from 'react';
 import { X, Plus, Trash2, ArrowUp, ArrowDown, User, Palette, Sliders, Type, AlignLeft, AlignCenter, AlignRight, Bold, Italic, PenTool, ShieldCheck } from 'lucide-react';
-import type { FormField, DateTimeFormat, FormAssignee, SignatureType } from '../forms/types';
-import { DEFAULT_ASSIGNEES } from '../forms/FormManager';
+import type { FormField, DateTimeFormat, FormRole, SignatureType } from '../forms/types';
+import { DEFAULT_ROLES } from '../forms/FormManager';
 
 interface FormFieldEditorModalProps {
   field: FormField;
-  assignees?: FormAssignee[];
-  onAddAssignee?: (assignee: FormAssignee) => void;
+  roles?: FormRole[];
+  onAddRole?: (role: FormRole) => void;
   onSave: (updated: Partial<FormField>) => void;
   onClose: () => void;
 }
@@ -40,20 +40,20 @@ const PRESET_BG_COLORS = [
 
 export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
   field,
-  assignees = DEFAULT_ASSIGNEES,
-  onAddAssignee,
+  roles = DEFAULT_ROLES,
+  onAddRole,
   onSave,
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'style'>('general');
-  const [localAssignees, setLocalAssignees] = useState<FormAssignee[]>(assignees);
-  const [isAddingUser, setIsAddingUser] = useState(false);
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserColor, setNewUserColor] = useState('#2563eb');
+  const [localRoles, setLocalRoles] = useState<FormRole[]>(roles);
+  const [isAddingRole, setIsAddingRole] = useState(false);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [newRoleColor, setNewRoleColor] = useState('#2563eb');
 
   React.useEffect(() => {
-    setLocalAssignees(assignees);
-  }, [assignees]);
+    setLocalRoles(roles);
+  }, [roles]);
 
   // General state
   const [name, setName] = useState(field.name || '');
@@ -66,7 +66,7 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
   const [newOptionText, setNewOptionText] = useState('');
 
   // Multi-user & Flow state
-  const [assigneeId, setAssigneeId] = useState(field.assigneeId || '');
+  const [roleId, setRoleId] = useState(field.roleId || '');
   const [flowOrder, setFlowOrder] = useState<string>(field.flowOrder !== undefined ? String(field.flowOrder) : '');
 
   // Signature state
@@ -113,21 +113,21 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
     setOptions(copy);
   };
 
-  const handleQuickAddUser = () => {
-    const trimmed = newUserName.trim();
+  const handleQuickAddRole = () => {
+    const trimmed = newRoleName.trim();
     if (!trimmed) return;
-    const id = `user_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const newAssignee: FormAssignee = {
+    const id = `role_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const newRole: FormRole = {
       id,
       name: trimmed,
-      color: newUserColor,
+      color: newRoleColor,
     };
-    onAddAssignee?.(newAssignee);
-    setLocalAssignees((prev) => [...prev, newAssignee]);
-    setAssigneeId(id);
-    setBorderColor(newUserColor);
-    setNewUserName('');
-    setIsAddingUser(false);
+    onAddRole?.(newRole);
+    setLocalRoles((prev) => [...prev, newRole]);
+    setRoleId(id);
+    setBorderColor(newRoleColor);
+    setNewRoleName('');
+    setIsAddingRole(false);
   };
 
   const handleSave = () => {
@@ -142,7 +142,7 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
       defaultValue: defaultValue !== '' ? defaultValue : undefined,
       dateFormat: field.type === 'datetime' ? dateFormat : undefined,
       options: hasOptions ? options : undefined,
-      assigneeId: assigneeId || undefined,
+      roleId: roleId || undefined,
       flowOrder: Number.isFinite(parsedFlowOrder) ? parsedFlowOrder : undefined,
       type: isSignatureField ? (signatureType === 'digital' ? 'digital_signature' : 'signature') : field.type,
       signatureType: isSignatureField ? signatureType : undefined,
@@ -430,15 +430,15 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
                 </div>
               )}
 
-              {/* Multi-User Assignee Selection */}
+              {/* Role Selection */}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500, color: '#374151', margin: 0 }}>
-                    <User size={14} color="#0284c7" /> Assign To (Multi-User Role)
+                    <User size={14} color="#0284c7" /> Assign To Role
                   </label>
                   <button
                     type="button"
-                    onClick={() => setIsAddingUser(!isAddingUser)}
+                    onClick={() => setIsAddingRole(!isAddingRole)}
                     style={{
                       background: 'none',
                       border: 'none',
@@ -449,11 +449,11 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
                       padding: 0,
                     }}
                   >
-                    {isAddingUser ? 'Cancel' : '+ New User'}
+                    {isAddingRole ? 'Cancel' : '+ New Role'}
                   </button>
                 </div>
 
-                {isAddingUser && (
+                {isAddingRole && (
                   <div
                     style={{
                       backgroundColor: '#f8fafc',
@@ -468,8 +468,8 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
                   >
                     <input
                       type="color"
-                      value={newUserColor}
-                      onChange={(e) => setNewUserColor(e.target.value)}
+                      value={newRoleColor}
+                      onChange={(e) => setNewRoleColor(e.target.value)}
                       style={{
                         width: '24px',
                         height: '24px',
@@ -478,12 +478,12 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
                         borderRadius: '4px',
                         cursor: 'pointer',
                       }}
-                      title="Choose user color"
+                      title="Choose role color"
                     />
                     <input
                       type="text"
-                      value={newUserName}
-                      onChange={(e) => setNewUserName(e.target.value)}
+                      value={newRoleName}
+                      onChange={(e) => setNewRoleName(e.target.value)}
                       placeholder="e.g. Tenant, Inspector..."
                       style={{
                         flex: 1,
@@ -495,13 +495,13 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          handleQuickAddUser();
+                          handleQuickAddRole();
                         }
                       }}
                     />
                     <button
                       type="button"
-                      onClick={handleQuickAddUser}
+                      onClick={handleQuickAddRole}
                       style={{
                         padding: '4px 10px',
                         backgroundColor: '#0284c7',
@@ -514,17 +514,17 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      Assign Role
+                      Add Role
                     </button>
                   </div>
                 )}
 
                 <select
-                  value={assigneeId}
+                  value={roleId}
                   onChange={(e) => {
                     const val = e.target.value;
-                    setAssigneeId(val);
-                    const selected = localAssignees.find((a) => a.id === val);
+                    setRoleId(val);
+                    const selected = localRoles.find((r) => r.id === val);
                     if (selected) {
                       setBorderColor(selected.color);
                     } else {
@@ -542,14 +542,14 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
                   }}
                 >
                   <option value="">-- Anyone / Unassigned --</option>
-                  {localAssignees.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({a.color})
+                  {localRoles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({r.color})
                     </option>
                   ))}
                 </select>
                 <span style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', display: 'block' }}>
-                  Restricts filling of this field in View mode to the assigned user with color-coded badges.
+                  Restricts filling of this field in View mode to the assigned role with color-coded badges.
                 </span>
               </div>
 

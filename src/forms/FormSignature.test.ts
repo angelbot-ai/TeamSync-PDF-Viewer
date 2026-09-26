@@ -29,7 +29,7 @@ describe('Form Signatures & Placeholders Engine', () => {
       width: 220,
       height: 60,
       required: true,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
       flowOrder: 1,
     };
 
@@ -46,7 +46,7 @@ describe('Form Signatures & Placeholders Engine', () => {
       width: 300,
       height: 70,
       required: true,
-      assigneeId: 'user_b',
+      roleId: 'user_b',
       flowOrder: 2,
     };
 
@@ -136,7 +136,7 @@ describe('Form Signatures & Placeholders Engine', () => {
       label: 'User A Signature',
       type: 'signature',
       required: true,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
       pageIndex: 1,
       x: 10,
       y: 10,
@@ -150,7 +150,7 @@ describe('Form Signatures & Placeholders Engine', () => {
       label: 'User B Signature',
       type: 'digital_signature',
       required: true,
-      assigneeId: 'user_b',
+      roleId: 'user_b',
       pageIndex: 1,
       x: 10,
       y: 70,
@@ -191,7 +191,7 @@ describe('Form Signatures & Placeholders Engine', () => {
       y: 150,
       width: 220,
       height: 60,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
       flowOrder: 1,
     };
 

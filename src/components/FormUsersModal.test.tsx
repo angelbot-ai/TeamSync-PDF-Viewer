@@ -34,7 +34,7 @@ describe('FormUsersModal', () => {
         y: 10,
         width: 100,
         height: 30,
-        assigneeId: 'user_a',
+        roleId: 'user_a',
       },
     ];
     const formManager = new FormManager(fields);
@@ -91,7 +91,7 @@ describe('FormUsersModal', () => {
 
     expect(container.textContent).toContain('Legal Counsel');
     expect(onUserAdded).toHaveBeenCalled();
-    expect(formManager.getAssignees().some((a) => a.name === 'Legal Counsel')).toBe(true);
+    expect(formManager.getRoles().some((a) => a.name === 'Legal Counsel')).toBe(true);
   });
 
   it('prevents adding a user with an empty or duplicate name', async () => {
@@ -114,7 +114,7 @@ describe('FormUsersModal', () => {
       addBtn?.click();
     });
 
-    expect(container.textContent).toContain('Please enter a user or role name');
+    expect(container.textContent).toContain('Please enter a role name');
 
     // Attempt adding duplicate name
     const nameInput = container.querySelector('input[placeholder*="Tenant, Inspector"]') as HTMLInputElement;
@@ -141,7 +141,7 @@ describe('FormUsersModal', () => {
       y: 10,
       width: 100,
       height: 30,
-      assigneeId: 'user_c',
+      roleId: 'user_c',
     };
     const formManager = new FormManager([field]);
     const root = createRoot(container);
@@ -155,14 +155,14 @@ describe('FormUsersModal', () => {
       );
     });
 
-    expect(formManager.getAssignees().some((a) => a.id === 'user_c')).toBe(true);
+    expect(formManager.getRoles().some((a) => a.id === 'user_c')).toBe(true);
 
-    // Call formManager.removeAssignee directly or trigger delete button
+    // Call formManager.removeRole directly or trigger delete button
     await act(async () => {
-      formManager.removeAssignee('user_c');
+      formManager.removeRole('user_c');
     });
 
-    expect(formManager.getAssignees().some((a) => a.id === 'user_c')).toBe(false);
-    expect(formManager.getField('f_test')?.assigneeId).toBeUndefined();
+    expect(formManager.getRoles().some((a) => a.id === 'user_c')).toBe(false);
+    expect(formManager.getField('f_test')?.roleId).toBeUndefined();
   });
 });

@@ -35,7 +35,7 @@ describe('SignatureIndexFlags', () => {
       y: 400,
       width: 220,
       height: 60,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
       flowOrder: 1,
     };
 
@@ -69,7 +69,7 @@ describe('SignatureIndexFlags', () => {
       y: 100,
       width: 200,
       height: 50,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
       flowOrder: 1,
     };
     const sigB: FormField = {
@@ -82,12 +82,12 @@ describe('SignatureIndexFlags', () => {
       y: 200,
       width: 220,
       height: 60,
-      assigneeId: 'user_b',
+      roleId: 'user_b',
       flowOrder: 2,
     };
 
     const formManager = new FormManager([sigA, sigB]);
-    formManager.setCurrentAssignee('user_a');
+    formManager.setCurrentRole('user_a');
 
     const root = createRoot(container);
 
@@ -110,7 +110,7 @@ describe('SignatureIndexFlags', () => {
 
     // Switch to User B
     await act(async () => {
-      formManager.setCurrentAssignee('user_b');
+      formManager.setCurrentRole('user_b');
     });
 
     expect(container.textContent).toContain('User B');
@@ -130,11 +130,11 @@ describe('SignatureIndexFlags', () => {
       y: 100,
       width: 200,
       height: 50,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
     };
 
     const formManager = new FormManager([sigA]);
-    formManager.setCurrentAssignee('user_a');
+    formManager.setCurrentRole('user_a');
     const root = createRoot(container);
 
     await act(async () => {
@@ -174,11 +174,11 @@ describe('SignatureIndexFlags', () => {
       y: 100,
       width: 200,
       height: 50,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
     };
 
     const formManager = new FormManager([sigA]);
-    formManager.setCurrentAssignee('user_a');
+    formManager.setCurrentRole('user_a');
     const root = createRoot(container);
 
     await act(async () => {
@@ -211,11 +211,11 @@ describe('SignatureIndexFlags', () => {
       y: 100,
       width: 200,
       height: 50,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
     };
 
     const formManager = new FormManager([sigA]);
-    formManager.setCurrentAssignee('user_a');
+    formManager.setCurrentRole('user_a');
     const root = createRoot(container);
 
     await act(async () => {

@@ -134,7 +134,7 @@ export default function DocumentViewer({
   const bus = useViewerBus();
   const [activeFormTool, setActiveFormTool] = useState<FormToolType>('select');
   const [showFlowOrder, setShowFlowOrder] = useState<boolean>(true);
-  const [selectedAssigneeFilter, setSelectedAssigneeFilter] = useState<string | null>(null);
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState<string | null>(null);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [pageNum, setPageNum] = useState(1);
@@ -1919,8 +1919,8 @@ export default function DocumentViewer({
           onSwitchToView={() => setActiveTab?.('View')}
           showFlowOrder={showFlowOrder}
           setShowFlowOrder={setShowFlowOrder}
-          selectedAssigneeFilter={selectedAssigneeFilter}
-          setSelectedAssigneeFilter={setSelectedAssigneeFilter}
+          selectedRoleFilter={selectedRoleFilter}
+          setSelectedRoleFilter={setSelectedRoleFilter}
         />
       )}
 
@@ -2264,7 +2264,7 @@ export default function DocumentViewer({
                         setActiveFormTool={setActiveFormTool}
                         canFillForms={permissions?.canFillForms !== false}
                         showFlowOrder={showFlowOrder}
-                        selectedAssigneeFilter={selectedAssigneeFilter}
+                        selectedRoleFilter={selectedRoleFilter}
                       />
                       {compareState.isActive && compareState.mode === 'overlay' && pdfDocB && (
                         <div style={{

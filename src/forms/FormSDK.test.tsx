@@ -15,7 +15,7 @@ import { FormFillerActions } from '../components/FormFillerActions';
 import { SignatureIndexFlags } from '../components/SignatureIndexFlags';
 import { FormFieldLayer } from '../components/FormFieldLayer';
 import { FormSignatureModal } from '../components/FormSignatureModal';
-import type { FormField, FormAssignee, FormRole, FormFeatureOptions } from './types';
+import type { FormField, FormRole, FormFeatureOptions } from './types';
 import type { ViewerUser } from '../core/types';
 
 // @ts-ignore
@@ -45,7 +45,7 @@ describe('Form SDK & Programmatic Feature Control', () => {
       y: 100,
       width: 200,
       height: 40,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
       flowOrder: 1,
     },
     {
@@ -58,7 +58,7 @@ describe('Form SDK & Programmatic Feature Control', () => {
       y: 160,
       width: 200,
       height: 60,
-      assigneeId: 'user_b',
+      roleId: 'user_b',
       flowOrder: 2,
     },
     {
@@ -71,7 +71,7 @@ describe('Form SDK & Programmatic Feature Control', () => {
       y: 300,
       width: 200,
       height: 60,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
       flowOrder: 3,
     },
     {
@@ -84,7 +84,7 @@ describe('Form SDK & Programmatic Feature Control', () => {
       y: 400,
       width: 200,
       height: 60,
-      assigneeId: 'user_b',
+      roleId: 'user_b',
       flowOrder: 4,
     },
   ];
@@ -93,32 +93,30 @@ describe('Form SDK & Programmatic Feature Control', () => {
     const formManager = new FormManager(sampleFields);
     expect(formManager.getOptions()).toEqual(DEFAULT_FORM_OPTIONS);
 
-    formManager.setOptions({ allowUserSwitching: false, showSignatureFlags: false });
-    expect(formManager.getOptions().allowUserSwitching).toBe(false);
+    formManager.setOptions({ allowRoleSwitching: false, showSignatureFlags: false });
+    expect(formManager.getOptions().allowRoleSwitching).toBe(false);
     expect(formManager.getOptions().showSignatureFlags).toBe(false);
     expect(formManager.getOptions().showFlowNavigation).toBe(true);
   });
 
-  it('allows programmatically setting a user via setUser() and auto-registers assignees', () => {
+  it('allows programmatically setting role via setCurrentRole() and user via setCurrentUser()', () => {
     const formManager = new FormManager(sampleFields);
 
-    // Set by string ID
-    formManager.setUser('user_a');
-    expect(formManager.getCurrentAssignee()).toBe('user_a');
-    expect(formManager.getUser()?.name).toBe('User A');
+    // Set active role by ID
+    formManager.setCurrentRole('user_a');
+    expect(formManager.getCurrentRole()).toBe('user_a');
+    expect(formManager.getRole('user_a')?.name).toBe('User A');
 
-    // Set by custom user object
-    formManager.setUser({ id: 'user_custom', name: 'External Client', color: '#e11d48' });
-    expect(formManager.getCurrentAssignee()).toBe('user_custom');
-    const user = formManager.getUser();
-    expect(user?.name).toBe('External Client');
-    expect(user?.color).toBe('#e11d48');
-    expect(formManager.getAssignees().some((a) => a.id === 'user_custom')).toBe(true);
+    // Set current user
+    formManager.setCurrentUser({ id: 'usr_1', name: 'External Client', color: '#e11d48' });
+    expect(formManager.getCurrentUser()?.name).toBe('External Client');
+    expect(formManager.getCurrentUser()?.color).toBe('#e11d48');
 
-    // Clear user
-    formManager.setUser(null);
-    expect(formManager.getCurrentAssignee()).toBeNull();
-    expect(formManager.getUser()).toBeUndefined();
+    // Clear role and user
+    formManager.setCurrentRole(null);
+    formManager.setCurrentUser(null);
+    expect(formManager.getCurrentRole()).toBeNull();
+    expect(formManager.getCurrentUser()).toBeNull();
   });
 
   it('exposes full Form SDK methods on WebViewerInstance', () => {
@@ -127,19 +125,19 @@ describe('Form SDK & Programmatic Feature Control', () => {
     const formManager = new FormManager(sampleFields);
     const instance = new WebViewerInstance(bus, annManager, 'test-viewer', formManager);
 
-    // Test form user methods
-    instance.setFormUser({ id: 'user_tenant', name: 'Tenant Signer' });
-    expect(instance.getFormUser()?.name).toBe('Tenant Signer');
-    expect(instance.getCurrentFormAssignee()).toBe('user_tenant');
+    // Test current user methods
+    instance.setCurrentUser({ id: 'user_tenant', name: 'Tenant Signer', role: 'user_a' });
+    expect(instance.getCurrentUser()?.name).toBe('Tenant Signer');
+    expect(instance.getCurrentRole()).toBe('user_a');
 
     // Test form options methods
     instance.setFormOptions({
-      allowUserSwitching: false,
-      otherUserFieldsMode: 'hidden',
+      allowRoleSwitching: false,
+      otherRoleFieldsMode: 'hidden',
     });
     const opts = instance.getFormOptions();
-    expect(opts.allowUserSwitching).toBe(false);
-    expect(opts.otherUserFieldsMode).toBe('hidden');
+    expect(opts.allowRoleSwitching).toBe(false);
+    expect(opts.otherRoleFieldsMode).toBe('hidden');
 
     // Test schema and data methods
     expect(instance.getFormFields().length).toBe(4);
@@ -149,10 +147,10 @@ describe('Form SDK & Programmatic Feature Control', () => {
     expect(instance.getFormData()).toEqual({});
   });
 
-  it('locks user persona selector when allowUserSwitching is false in FormFillerActions', async () => {
+  it('locks role selector when allowRoleSwitching is false in FormFillerActions', async () => {
     const formManager = new FormManager(sampleFields);
-    formManager.setUser('user_a');
-    formManager.setOptions({ allowUserSwitching: false });
+    formManager.setCurrentRole('user_a');
+    formManager.setOptions({ allowRoleSwitching: false });
 
     const root = createRoot(container);
     await act(async () => {
@@ -164,9 +162,9 @@ describe('Form SDK & Programmatic Feature Control', () => {
     expect(container.textContent).toContain('User A');
     expect(container.querySelector('select')).toBeNull();
 
-    // Now re-enable user switching
+    // Now re-enable role switching
     await act(async () => {
-      formManager.setOptions({ allowUserSwitching: true });
+      formManager.setOptions({ allowRoleSwitching: true });
     });
 
     expect(container.querySelector('select')).not.toBeNull();
@@ -212,7 +210,7 @@ describe('Form SDK & Programmatic Feature Control', () => {
 
   it('controls signature flags visibility via showSignatureFlags option', async () => {
     const formManager = new FormManager(sampleFields);
-    formManager.setUser('user_a');
+    formManager.setCurrentRole('user_a');
 
     const root = createRoot(container);
     await act(async () => {
@@ -230,11 +228,11 @@ describe('Form SDK & Programmatic Feature Control', () => {
     expect(container.querySelector('.tspdf-signature-index-flags')).toBeNull();
   });
 
-  it('hides other users fields when otherUserFieldsMode is hidden in FormFieldLayer', async () => {
+  it('hides other roles fields when otherRoleFieldsMode is hidden in FormFieldLayer', async () => {
     const formManager = new FormManager(sampleFields);
     // User A is active
-    formManager.setUser('user_a');
-    formManager.setOptions({ otherUserFieldsMode: 'hidden' });
+    formManager.setCurrentRole('user_a');
+    formManager.setOptions({ otherRoleFieldsMode: 'hidden' });
 
     const root = createRoot(container);
     await act(async () => {
@@ -259,10 +257,10 @@ describe('Form SDK & Programmatic Feature Control', () => {
     expect(container.textContent).not.toContain('Reviewer Notes');
   });
 
-  it('disables lock badge when otherUserFieldsMode is view-only in FormFieldLayer', async () => {
+  it('disables lock badge when otherRoleFieldsMode is view-only in FormFieldLayer', async () => {
     const formManager = new FormManager(sampleFields);
-    formManager.setUser('user_a');
-    formManager.setOptions({ otherUserFieldsMode: 'view-only' });
+    formManager.setCurrentRole('user_a');
+    formManager.setOptions({ otherRoleFieldsMode: 'view-only' });
 
     const root = createRoot(container);
     await act(async () => {
@@ -287,30 +285,30 @@ describe('Form SDK & Programmatic Feature Control', () => {
     expect(container.querySelector('svg.lucide-lock')).toBeNull();
   });
 
-  it('correctly distinguishes template roles from actual user passed by application', () => {
+  it('correctly distinguishes template roles from current user passed by application', () => {
     const templateRoles: FormRole[] = [
       { id: 'tenant', name: 'Tenant', color: '#2563eb' },
       { id: 'landlord', name: 'Landlord', color: '#10b981' },
     ];
     const formManager = new FormManager(sampleFields, {}, templateRoles);
 
-    // Initial state: template roles are set, no actual user yet
+    // Initial state: template roles are set, no current user yet
     expect(formManager.getRoles().length).toBe(2);
-    expect(formManager.getActualUser()).toBeNull();
+    expect(formManager.getCurrentUser()).toBeNull();
     expect(formManager.getEffectiveSignerName()).toBe('');
 
-    // Host application passes actual user details fulfilling the 'tenant' role
-    const actualUser: ViewerUser = {
+    // Host application passes current user details fulfilling the 'tenant' role
+    const currentUser: ViewerUser = {
       id: 'usr_abc123',
       name: 'John Doe',
       email: 'john@example.com',
       role: 'tenant',
     };
 
-    formManager.setActualUser(actualUser);
+    formManager.setCurrentUser(currentUser);
 
-    // Verify role mapping and actual user details
-    expect(formManager.getActualUser()).toEqual(actualUser);
+    // Verify role mapping and current user details
+    expect(formManager.getCurrentUser()).toEqual(currentUser);
     expect(formManager.getCurrentRole()).toBe('tenant');
     expect(formManager.getEffectiveSignerName()).toBe('John Doe');
 
@@ -319,7 +317,7 @@ describe('Form SDK & Programmatic Feature Control', () => {
     expect(formManager.getRoles().some((r) => r.id === 'usr_abc123')).toBe(false);
   });
 
-  it('exposes role and actual user methods on WebViewerInstance', () => {
+  it('exposes role and current user methods on WebViewerInstance', () => {
     const bus = new ViewerBus();
     const annManager = new AnnotationManager();
     const templateRoles: FormRole[] = [
@@ -329,16 +327,16 @@ describe('Form SDK & Programmatic Feature Control', () => {
     const formManager = new FormManager(sampleFields, {}, templateRoles);
     const instance = new WebViewerInstance(bus, annManager, 'test-viewer', formManager);
 
-    // Set actual user via instance
-    instance.setActualUser({
+    // Set current user via instance
+    instance.setCurrentUser({
       id: 'usr_xyz',
       name: 'Alice Johnson',
       email: 'alice@company.com',
       role: 'reviewer',
     });
 
-    expect(instance.getActualUser()?.name).toBe('Alice Johnson');
-    expect(instance.getActualUser()?.email).toBe('alice@company.com');
+    expect(instance.getCurrentUser()?.name).toBe('Alice Johnson');
+    expect(instance.getCurrentUser()?.email).toBe('alice@company.com');
     expect(instance.getCurrentRole()).toBe('reviewer');
 
     // Switch role programmatically
@@ -349,26 +347,26 @@ describe('Form SDK & Programmatic Feature Control', () => {
     expect(instance.getFormRoles().length).toBe(2);
   });
 
-  it('displays actual user name and role badge cleanly in FormFillerActions', async () => {
+  it('displays current user name and role badge cleanly in FormFillerActions', async () => {
     const templateRoles: FormRole[] = [
       { id: 'tenant', name: 'Tenant', color: '#2563eb' },
       { id: 'landlord', name: 'Landlord', color: '#10b981' },
     ];
     const formManager = new FormManager(sampleFields, {}, templateRoles);
-    formManager.setActualUser({
+    formManager.setCurrentUser({
       id: 'usr_99',
       name: 'Robert Davis',
       email: 'robert@domain.com',
       role: 'tenant',
     });
-    formManager.setOptions({ allowUserSwitching: false });
+    formManager.setOptions({ allowRoleSwitching: false });
 
     const root = createRoot(container);
     await act(async () => {
       root.render(<FormFillerActions formManager={formManager} />);
     });
 
-    // Shows actual user name "Robert Davis" and locked role badge "(Tenant)"
+    // Shows current user name "Robert Davis" and locked role badge "(Tenant)"
     expect(container.textContent).toContain('Filling as:');
     expect(container.textContent).toContain('Robert Davis');
     expect(container.textContent).toContain('(Tenant)');
@@ -376,7 +374,7 @@ describe('Form SDK & Programmatic Feature Control', () => {
 
     // Enable role switching: Robert Davis remains the user, but role selector dropdown is rendered
     await act(async () => {
-      formManager.setOptions({ allowUserSwitching: true });
+      formManager.setOptions({ allowRoleSwitching: true });
     });
 
     expect(container.textContent).toContain('Robert Davis');
@@ -385,9 +383,9 @@ describe('Form SDK & Programmatic Feature Control', () => {
     expect(select?.value).toBe('tenant');
   });
 
-  it('defaults signature modal signer name to actual user and records email and role on save', async () => {
+  it('defaults signature modal signer name to current user and records email and role on save', async () => {
     const templateRole: FormRole = { id: 'applicant', name: 'Applicant', color: '#2563eb' };
-    const actualUser: ViewerUser = {
+    const currentUser: ViewerUser = {
       id: 'usr_42',
       name: 'Sarah Connor',
       email: 'sarah@resistance.org',
@@ -404,7 +402,7 @@ describe('Form SDK & Programmatic Feature Control', () => {
       y: 100,
       width: 200,
       height: 60,
-      assigneeId: 'applicant',
+      roleId: 'applicant',
     };
 
     const onSave = vi.fn();
@@ -415,9 +413,9 @@ describe('Form SDK & Programmatic Feature Control', () => {
       root.render(
         <FormSignatureModal
           field={sigField}
-          assignee={templateRole}
-          actualUser={actualUser}
-          defaultSignerName={actualUser.name}
+          role={templateRole}
+          currentUser={currentUser}
+          defaultSignerName={currentUser.name}
           onSave={onSave}
           onClose={onClose}
         />
@@ -444,7 +442,7 @@ describe('Form SDK & Programmatic Feature Control', () => {
       adoptBtn?.click();
     });
 
-    // onSave received actual user details
+    // onSave received current user details
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'electronic',

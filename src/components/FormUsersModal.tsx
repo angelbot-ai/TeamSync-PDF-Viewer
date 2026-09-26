@@ -6,12 +6,13 @@
 import React, { useState, useEffect } from 'react';
 import { X, Users, Plus, Trash2, Check, Sparkles } from 'lucide-react';
 import type { FormManager } from '../forms/FormManager';
-import type { FormAssignee } from '../forms/types';
+import type { FormRole } from '../forms/types';
 
 interface FormUsersModalProps {
   formManager: FormManager;
   onClose: () => void;
-  onUserAdded?: (user: FormAssignee) => void;
+  onRoleAdded?: (role: FormRole) => void;
+  onUserAdded?: (role: FormRole) => void;
 }
 
 const PRESET_USER_COLORS = [
@@ -57,16 +58,17 @@ const ROLE_TEMPLATES: Array<{ name: string; users: Array<{ name: string; color: 
 export const FormUsersModal: React.FC<FormUsersModalProps> = ({
   formManager,
   onClose,
+  onRoleAdded,
   onUserAdded,
 }) => {
-  const [assignees, setAssignees] = useState<FormAssignee[]>(() => formManager.getAssignees());
+  const [roles, setRoles] = useState<FormRole[]>(() => formManager.getRoles());
   const [newUserName, setNewUserName] = useState('');
   const [newUserColor, setNewUserColor] = useState(PRESET_USER_COLORS[0]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Sync assignees from FormManager
+  // Sync roles from FormManager
   useEffect(() => {
-    const unsub = formManager.onAssigneesChange((updated) => setAssignees(updated));
+    const unsub = formManager.onRolesChange((updated) => setRoles(updated));
     return unsub;
   }, [formManager]);
 
@@ -75,24 +77,25 @@ export const FormUsersModal: React.FC<FormUsersModalProps> = ({
   const handleAddUser = () => {
     const trimmed = newUserName.trim();
     if (!trimmed) {
-      setErrorMsg('Please enter a user or role name.');
+      setErrorMsg('Please enter a role name.');
       return;
     }
 
-    if (assignees.some((a) => a.name.toLowerCase() === trimmed.toLowerCase())) {
-      setErrorMsg(`A user with the name "${trimmed}" already exists.`);
+    if (roles.some((r) => r.name.toLowerCase() === trimmed.toLowerCase())) {
+      setErrorMsg(`A role with the name "${trimmed}" already exists.`);
       return;
     }
 
-    const id = `user_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const newAssignee: FormAssignee = {
+    const id = `role_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const newRole: FormRole = {
       id,
       name: trimmed,
       color: newUserColor,
     };
 
-    formManager.addAssignee(newAssignee);
-    onUserAdded?.(newAssignee);
+    formManager.addRole(newRole);
+    onRoleAdded?.(newRole);
+    onUserAdded?.(newRole);
 
     setNewUserName('');
     // Advance to next preset color
@@ -102,14 +105,14 @@ export const FormUsersModal: React.FC<FormUsersModalProps> = ({
   };
 
   const handleRemoveUser = (id: string, name: string) => {
-    const assignedCount = fields.filter((f) => f.assigneeId === id).length;
+    const assignedCount = fields.filter((f) => f.roleId === id).length;
     if (assignedCount > 0) {
       const confirmRemove = window.confirm(
-        `"${name}" has ${assignedCount} field(s) assigned. Removing this user will set those fields to "Anyone / Unassigned". Continue?`
+        `"${name}" has ${assignedCount} field(s) assigned. Removing this role will set those fields to "Anyone / Unassigned". Continue?`
       );
       if (!confirmRemove) return;
     }
-    formManager.removeAssignee(id);
+    formManager.removeRole(id);
   };
 
   const handleApplyTemplate = (template: typeof ROLE_TEMPLATES[0]) => {
@@ -117,19 +120,19 @@ export const FormUsersModal: React.FC<FormUsersModalProps> = ({
     if (
       currentCount > 0 &&
       !window.confirm(
-        `Replace current users with the "${template.name}" role template? Fields assigned to existing users will become unassigned.`
+        `Replace current roles with the "${template.name}" role template? Fields assigned to existing roles will become unassigned.`
       )
     ) {
       return;
     }
 
-    const newUsers: FormAssignee[] = template.users.map((u, idx) => ({
-      id: `user_${idx + 1}_${Math.random().toString(36).slice(2, 6)}`,
+    const newRoles: FormRole[] = template.users.map((u, idx) => ({
+      id: `role_${idx + 1}_${Math.random().toString(36).slice(2, 6)}`,
       name: u.name,
       color: u.color,
     }));
 
-    formManager.setAssignees(newUsers);
+    formManager.setRoles(newRoles);
   };
 
   return (
@@ -333,18 +336,18 @@ export const FormUsersModal: React.FC<FormUsersModalProps> = ({
             )}
           </div>
 
-          {/* Current Assignees List */}
+          {/* Current Roles List */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>
-                Current Users ({assignees.length})
+                Current Roles ({roles.length})
               </span>
               <span style={{ fontSize: '11px', color: '#64748b' }}>
                 Click name or color to edit
               </span>
             </div>
 
-            {assignees.length === 0 ? (
+            {roles.length === 0 ? (
               <div
                 style={{
                   padding: '24px',
@@ -356,12 +359,12 @@ export const FormUsersModal: React.FC<FormUsersModalProps> = ({
                   fontSize: '13px',
                 }}
               >
-                No users configured. Add a user above or pick a template below.
+                No roles configured. Add a role above or pick a template below.
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {assignees.map((user) => {
-                  const assignedCount = fields.filter((f) => f.assigneeId === user.id).length;
+                {roles.map((user) => {
+                  const assignedCount = fields.filter((f) => f.roleId === user.id).length;
 
                   return (
                     <div
@@ -385,7 +388,7 @@ export const FormUsersModal: React.FC<FormUsersModalProps> = ({
                           <input
                             type="color"
                             value={user.color}
-                            onChange={(e) => formManager.updateAssignee(user.id, { color: e.target.value })}
+                            onChange={(e) => formManager.updateRole(user.id, { color: e.target.value })}
                             style={{
                               position: 'absolute',
                               opacity: 0,

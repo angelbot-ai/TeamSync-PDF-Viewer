@@ -60,7 +60,7 @@ interface PageRendererProps {
   setActiveFormTool?: (tool: FormToolType) => void;
   canFillForms?: boolean;
   showFlowOrder?: boolean;
-  selectedAssigneeFilter?: string | null;
+  selectedRoleFilter?: string | null;
 }
 
 function PageRendererComponent({
@@ -72,7 +72,7 @@ function PageRendererComponent({
   watermark, watermarkText, redactions, onDiscardRedaction, onRendered,
   hideAnnotationsUntilPageRendered = true, onLinkClick,
   formManager, activeFormTool = 'select', setActiveFormTool, canFillForms = true,
-  showFlowOrder = true, selectedAssigneeFilter = null
+  showFlowOrder = true, selectedRoleFilter = null
 }: PageRendererProps) {
   const onRenderedRef = useRef(onRendered);
   useEffect(() => {
@@ -986,7 +986,7 @@ function PageRendererComponent({
           formManager={formManager}
           canFillForms={canFillForms}
           showFlowOrder={showFlowOrder}
-          selectedAssigneeFilter={selectedAssigneeFilter}
+          selectedRoleFilter={selectedRoleFilter}
         />
       )}
     </div>
@@ -1006,7 +1006,7 @@ const PageRenderer = React.memo(PageRendererComponent, (prevProps, nextProps) =>
          prevProps.activeTool === nextProps.activeTool &&
          prevProps.activeFormTool === nextProps.activeFormTool &&
          prevProps.showFlowOrder === nextProps.showFlowOrder &&
-         prevProps.selectedAssigneeFilter === nextProps.selectedAssigneeFilter &&
+         prevProps.selectedRoleFilter === nextProps.selectedRoleFilter &&
          prevProps.formManager === nextProps.formManager &&
          prevProps.canFillForms === nextProps.canFillForms &&
          prevProps.selectedAnnotationId === nextProps.selectedAnnotationId &&

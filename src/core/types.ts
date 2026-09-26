@@ -10,7 +10,7 @@ import type { PdfAssetPaths } from './pdfAssets';
 import type { WebViewerInstance } from './ViewerInstance';
 import type { OfficeConverterConfig, OfficeFileType } from '../office/types';
 import type { FormManager } from '../forms/FormManager';
-import type { FormField, FormDataRecord, FormAssignee, FormRole, FormFeatureOptions } from '../forms/types';
+import type { FormField, FormDataRecord, FormRole, FormFeatureOptions } from '../forms/types';
 
 export type {
   PdfAssetPaths,
@@ -20,7 +20,6 @@ export type {
   FormManager,
   FormField,
   FormDataRecord,
-  FormAssignee,
   FormRole,
   FormFeatureOptions,
 };
@@ -171,12 +170,8 @@ export interface WebViewerOptions {
    * Controls which fields and signature flags are interactive/visible for this role.
    */
   currentRole?: string | null;
-  /** Alias of `currentRole`. */
-  currentFormAssignee?: string | null;
   /** Custom list of form template roles. */
   formRoles?: FormRole[];
-  /** Alias of `formRoles`. */
-  formAssignees?: FormAssignee[];
   /** Pre-populated form fields schema. */
   formFields?: FormField[];
   /** Pre-filled form values record. */
@@ -184,11 +179,9 @@ export interface WebViewerOptions {
   /** Shorthand for "no annotation/redaction editing at all". */
   readOnly?: boolean;
   /**
-   * Actual user details passed by the host application (name, email, role, etc.).
+   * Current logged-in user details passed by the host application (name, email, role, etc.).
    * If user has a `role` property, the viewer automatically activates that role for form filling.
    */
-  actualUser?: ViewerUser;
-  /** Author attached to annotations created in this viewer, and current user details. */
   currentUser?: ViewerUser;
   /** pdf.js worker / CMap / font / wasm locations (see `configurePdfAssets`). */
   assets?: PdfAssetPaths;

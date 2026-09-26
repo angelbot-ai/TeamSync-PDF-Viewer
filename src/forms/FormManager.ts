@@ -7,7 +7,6 @@ import type {
   FormField,
   FormDataRecord,
   FormValidationResult,
-  FormAssignee,
   FormRole,
   FormFeatureOptions,
 } from './types';
@@ -16,18 +15,18 @@ import type { ViewerUser } from '../core/types';
 export const DEFAULT_FORM_OPTIONS: FormFeatureOptions = {
   canCreateForms: true,
   canFillForms: true,
-  allowUserSwitching: true,
-  showUserSelector: true,
+  allowRoleSwitching: true,
+  showRoleSelector: true,
   showSignatureFlags: true,
   showFlowNavigation: true,
   showValidation: true,
   showReset: true,
   showExport: true,
-  otherUserFieldsMode: 'locked',
+  otherRoleFieldsMode: 'locked',
   hideToolbar: false,
 };
 
-export const DEFAULT_ASSIGNEES: FormAssignee[] = [
+export const DEFAULT_ROLES: FormRole[] = [
   { id: 'user_a', name: 'User A', color: '#2563eb' },
   { id: 'user_b', name: 'User B', color: '#9333ea' },
   { id: 'user_c', name: 'User C', color: '#059669' },
@@ -50,35 +49,35 @@ const MAX_HISTORY = 100;
 export class FormManager {
   private fields: FormField[] = [];
   private values: FormDataRecord = {};
-  private assignees: FormAssignee[] = [...DEFAULT_ASSIGNEES];
-  private currentAssigneeId: string | null = null;
+  private roles: FormRole[] = [...DEFAULT_ROLES];
+  private currentRoleId: string | null = null;
+  private currentUser: ViewerUser | null = null;
   private activeFieldId: string | null = null;
   private options: FormFeatureOptions = { ...DEFAULT_FORM_OPTIONS };
   private past: HistorySnapshot[] = [];
   private future: HistorySnapshot[] = [];
   private fieldsListeners = new Set<FormFieldsChangeListener>();
   private dataListeners = new Set<FormDataChangeListener>();
-  private assigneesListeners = new Set<(assignees: FormAssignee[]) => void>();
-  private activeAssigneeListeners = new Set<(assigneeId: string | null) => void>();
+  private rolesListeners = new Set<(roles: FormRole[]) => void>();
+  private activeRoleListeners = new Set<(roleId: string | null) => void>();
   private activeFieldListeners = new Set<(fieldId: string | null) => void>();
   private optionsListeners = new Set<(options: FormFeatureOptions) => void>();
-  private actualUser: ViewerUser | null = null;
-  private actualUserListeners = new Set<(user: ViewerUser | null) => void>();
+  private userListeners = new Set<(user: ViewerUser | null) => void>();
   private readOnly = false;
 
   constructor(
     initialFields: FormField[] = [],
     initialValues: FormDataRecord = {},
-    initialAssignees: FormAssignee[] = DEFAULT_ASSIGNEES,
+    initialRoles: FormRole[] = DEFAULT_ROLES,
     initialOptions: Partial<FormFeatureOptions> = {},
-    initialActualUser: ViewerUser | null = null
+    initialUser: ViewerUser | null = null
   ) {
     this.fields = [...initialFields];
     this.values = { ...initialValues };
-    this.assignees = initialAssignees && initialAssignees.length > 0 ? [...initialAssignees] : [...DEFAULT_ASSIGNEES];
+    this.roles = initialRoles && initialRoles.length > 0 ? [...initialRoles] : [...DEFAULT_ROLES];
     this.options = { ...DEFAULT_FORM_OPTIONS, ...initialOptions };
-    if (initialActualUser) {
-      this.setActualUser(initialActualUser);
+    if (initialUser) {
+      this.setCurrentUser(initialUser);
     }
     if (this.options.currentRole) {
       this.setCurrentRole(this.options.currentRole);
@@ -158,7 +157,7 @@ export class FormManager {
     return true;
   }
 
-  // ---- Field Schema Management (Builder) ---------------------------------------------------
+  // ---- Field Schema Management ------------------------------------------------------------
 
   getFields(): FormField[] {
     return [...this.fields];
@@ -172,61 +171,95 @@ export class FormManager {
     return this.fields.find((f) => f.id === id);
   }
 
-  setFields(newFields: FormField[], recordHistory = true): void {
-    if (recordHistory) this.pushHistory();
-    this.fields = [...newFields];
-    this.notifyFieldsChange('set');
+  getFieldByName(name: string): FormField | undefined {
+    return this.fields.find((f) => f.name === name);
   }
 
-  addField(field: FormField, recordHistory = true): void {
-    if (recordHistory) this.pushHistory();
-    this.fields.push({ ...field });
-    // Initialize default value if present and no active value set
-    if (field.defaultValue !== undefined && this.values[field.name] === undefined) {
-      this.values[field.name] = field.defaultValue;
+  setFields(fields: FormField[]): void {
+    this.pushHistory();
+    this.fields = [...fields];
+    // Sync default values
+    for (const field of this.fields) {
+      if (this.values[field.name] === undefined && field.defaultValue !== undefined) {
+        this.values[field.name] = field.defaultValue;
+      }
+    }
+    this.notifyFieldsChange('set');
+    this.notifyDataChange();
+  }
+
+  addField(field: FormField): void {
+    this.pushHistory();
+    // Ensure unique ID
+    const exists = this.fields.some((f) => f.id === field.id);
+    const newField: FormField = exists
+      ? { ...field, id: `field_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` }
+      : { ...field };
+
+    if (!newField.flowOrder) {
+      const pageFields = this.getFieldsForPage(newField.pageIndex);
+      newField.flowOrder = pageFields.length + 1;
+    }
+
+    this.fields.push(newField);
+    if (newField.defaultValue !== undefined && this.values[newField.name] === undefined) {
+      this.values[newField.name] = newField.defaultValue;
       this.notifyDataChange();
     }
     this.notifyFieldsChange('add');
   }
 
-  updateField(id: string, updates: Partial<FormField>, recordHistory = true): void {
+  updateField(id: string, updates: Partial<Omit<FormField, 'id'>>, recordHistory = true): boolean {
     const idx = this.fields.findIndex((f) => f.id === id);
-    if (idx === -1) return;
-    if (recordHistory) this.pushHistory();
+    if (idx === -1) return false;
 
-    const oldName = this.fields[idx].name;
-    const updated = { ...this.fields[idx], ...updates };
-    this.fields[idx] = updated;
+    if (recordHistory) {
+      this.pushHistory();
+    }
+    const oldField = this.fields[idx];
+    const updatedField = { ...oldField, ...updates };
 
-    // If field name changed, migrate stored value
-    if (updates.name && updates.name !== oldName) {
-      if (this.values[oldName] !== undefined) {
-        this.values[updates.name] = this.values[oldName];
-        delete this.values[oldName];
+    // If name changed, migrate value
+    if (updates.name && updates.name !== oldField.name) {
+      if (this.values[oldField.name] !== undefined) {
+        this.values[updates.name] = this.values[oldField.name];
+        delete this.values[oldField.name];
         this.notifyDataChange();
       }
     }
 
+    this.fields[idx] = updatedField;
     this.notifyFieldsChange('update');
+    return true;
   }
 
-  deleteField(id: string, recordHistory = true): void {
-    const field = this.fields.find((f) => f.id === id);
-    if (!field) return;
-    if (recordHistory) this.pushHistory();
+  deleteField(id: string): boolean {
+    const idx = this.fields.findIndex((f) => f.id === id);
+    if (idx === -1) return false;
 
-    this.fields = this.fields.filter((f) => f.id !== id);
+    this.pushHistory();
+    const [removed] = this.fields.splice(idx, 1);
+    if (removed && this.values[removed.name] !== undefined) {
+      delete this.values[removed.name];
+      this.notifyDataChange();
+    }
+    if (this.activeFieldId === id) {
+      this.setActiveFieldId(null);
+    }
     this.notifyFieldsChange('delete');
+    return true;
   }
 
-  clearFields(recordHistory = true): void {
-    if (this.fields.length === 0) return;
-    if (recordHistory) this.pushHistory();
+  clearFields(): void {
+    this.pushHistory();
     this.fields = [];
+    this.values = {};
+    this.setActiveFieldId(null);
     this.notifyFieldsChange('clear');
+    this.notifyDataChange();
   }
 
-  // ---- Form Values Management (Filler) -----------------------------------------------------
+  // ---- Form Values / Data Management ------------------------------------------------------
 
   getValues(): FormDataRecord {
     return { ...this.values };
@@ -237,25 +270,19 @@ export class FormManager {
   }
 
   setValue(name: string, value: any): void {
-    if (this.readOnly) return;
-    this.values[name] = value;
+    this.values = {
+      ...this.values,
+      [name]: value,
+    };
     this.notifyDataChange();
   }
 
   setValues(newValues: FormDataRecord): void {
-    if (this.readOnly) return;
     this.values = { ...newValues };
     this.notifyDataChange();
   }
 
   clearValues(): void {
-    if (this.readOnly) return;
-    this.values = {};
-    this.notifyDataChange();
-  }
-
-  resetToDefaults(): void {
-    if (this.readOnly) return;
     const defaults: FormDataRecord = {};
     for (const field of this.fields) {
       if (field.defaultValue !== undefined) {
@@ -274,48 +301,47 @@ export class FormManager {
     return this.readOnly;
   }
 
-  // ---- Assignees & Multi-User -------------------------------------------------------------
+  // ---- Roles (Document Template Role Slots) ------------------------------------------------
 
-  getAssignees(): FormAssignee[] {
-    return [...this.assignees];
+  getRoles(): FormRole[] {
+    return [...this.roles];
   }
 
-  setAssignees(assignees: FormAssignee[]): void {
-    this.assignees = [...assignees];
-    for (const l of this.assigneesListeners) l(this.getAssignees());
+  setRoles(roles: FormRole[]): void {
+    this.roles = [...roles];
+    for (const l of this.rolesListeners) l(this.getRoles());
   }
 
-  addAssignee(assignee: FormAssignee): void {
-    if (this.assignees.some((a) => a.id === assignee.id)) return;
-    this.assignees.push(assignee);
-    for (const l of this.assigneesListeners) l(this.getAssignees());
+  addRole(role: FormRole): void {
+    if (this.roles.some((r) => r.id === role.id)) return;
+    this.roles.push(role);
+    for (const l of this.rolesListeners) l(this.getRoles());
   }
 
-  updateAssignee(id: string, updates: Partial<Omit<FormAssignee, 'id'>>): void {
-    const idx = this.assignees.findIndex((a) => a.id === id);
+  updateRole(id: string, updates: Partial<Omit<FormRole, 'id'>>): void {
+    const idx = this.roles.findIndex((r) => r.id === id);
     if (idx === -1) return;
-    this.assignees[idx] = { ...this.assignees[idx], ...updates };
-    for (const l of this.assigneesListeners) l(this.getAssignees());
+    this.roles[idx] = { ...this.roles[idx], ...updates };
+    for (const l of this.rolesListeners) l(this.getRoles());
   }
 
-  removeAssignee(id: string): void {
-    this.assignees = this.assignees.filter((a) => a.id !== id);
-    // Unassign any fields that were assigned to this user
+  removeRole(id: string): void {
+    this.roles = this.roles.filter((r) => r.id !== id);
     let fieldsChanged = false;
     this.fields = this.fields.map((f) => {
-      if (f.assigneeId === id) {
+      if (f.roleId === id) {
         fieldsChanged = true;
-        return { ...f, assigneeId: undefined };
+        return { ...f, roleId: undefined };
       }
       return f;
     });
 
-    if (this.currentAssigneeId === id) {
-      this.currentAssigneeId = null;
-      for (const l of this.activeAssigneeListeners) l(null);
+    if (this.currentRoleId === id) {
+      this.currentRoleId = null;
+      for (const l of this.activeRoleListeners) l(null);
     }
 
-    for (const l of this.assigneesListeners) l(this.getAssignees());
+    for (const l of this.rolesListeners) l(this.getRoles());
     if (fieldsChanged) {
       for (const l of this.fieldsListeners) {
         l({
@@ -326,28 +352,72 @@ export class FormManager {
     }
   }
 
-  getAssignee(id?: string): FormAssignee | undefined {
+  getRole(id?: string): FormRole | undefined {
     if (!id) return undefined;
-    return this.assignees.find((a) => a.id === id);
+    return this.roles.find((r) => r.id === id);
   }
 
-  onAssigneesChange(listener: (assignees: FormAssignee[]) => void): () => void {
-    this.assigneesListeners.add(listener);
-    return () => this.assigneesListeners.delete(listener);
+  onRolesChange(listener: (roles: FormRole[]) => void): () => void {
+    this.rolesListeners.add(listener);
+    return () => this.rolesListeners.delete(listener);
   }
 
-  getCurrentAssignee(): string | null {
-    return this.currentAssigneeId;
+  getCurrentRole(): string | null {
+    return this.currentRoleId;
   }
 
-  setCurrentAssignee(id: string | null): void {
-    this.currentAssigneeId = id;
-    for (const l of this.activeAssigneeListeners) l(id);
+  setCurrentRole(roleId: string | null): void {
+    this.currentRoleId = roleId;
+    for (const l of this.activeRoleListeners) l(roleId);
   }
 
-  onCurrentAssigneeChange(listener: (assigneeId: string | null) => void): () => void {
-    this.activeAssigneeListeners.add(listener);
-    return () => this.activeAssigneeListeners.delete(listener);
+  onCurrentRoleChange(listener: (roleId: string | null) => void): () => void {
+    this.activeRoleListeners.add(listener);
+    return () => this.activeRoleListeners.delete(listener);
+  }
+
+  // ---- Current User (Host Application User Details) ----------------------------------------
+
+  /** Returns the current logged-in user details passed by the host application. */
+  getCurrentUser(): ViewerUser | null {
+    return this.currentUser ? { ...this.currentUser } : null;
+  }
+
+  /**
+   * Sets the current logged-in user details passed by the host application.
+   * If the user object specifies a `role`, automatically sets that role as the active role.
+   */
+  setCurrentUser(user: ViewerUser | null): void {
+    this.currentUser = user ? { ...user } : null;
+    if (user?.role) {
+      this.setCurrentRole(user.role);
+    }
+    for (const listener of this.userListeners) {
+      try {
+        listener(this.getCurrentUser());
+      } catch (err) {
+        console.error('Error in FormManager currentUser listener:', err);
+      }
+    }
+  }
+
+  /** Subscribes to changes in the current logged-in user details. */
+  onCurrentUserChange(listener: (user: ViewerUser | null) => void): () => void {
+    this.userListeners.add(listener);
+    return () => this.userListeners.delete(listener);
+  }
+
+  /**
+   * Returns the effective signer name:
+   * Prioritizes the actual user's real name (from host application),
+   * falling back to the active role name or an empty string.
+   */
+  getEffectiveSignerName(): string {
+    if (this.currentUser?.name) {
+      return this.currentUser.name;
+    }
+    const role = this.getRole(this.currentRoleId || undefined);
+    return role?.name || '';
   }
 
   // ---- Form Feature Visibility & Permissions ----------------------------------------------
@@ -359,7 +429,6 @@ export class FormManager {
 
   /**
    * Updates form feature options and notifies active listeners.
-   * Allows dynamically controlling feature visibility, user selector, persona locking, and other features.
    */
   setOptions(opts: Partial<FormFeatureOptions>): void {
     this.options = { ...this.options, ...opts };
@@ -376,157 +445,6 @@ export class FormManager {
   onOptionsChange(listener: (options: FormFeatureOptions) => void): () => void {
     this.optionsListeners.add(listener);
     return () => this.optionsListeners.delete(listener);
-  }
-
-  // ---- Actual User vs Template Roles ------------------------------------------------------
-
-  /** Returns the actual logged-in user details passed by the host application, if set. */
-  getActualUser(): ViewerUser | null {
-    return this.actualUser ? { ...this.actualUser } : null;
-  }
-
-  /**
-   * Sets the actual logged-in user details passed by the host application.
-   * If the user specifies a role or roleId, that role is automatically activated for form filling.
-   */
-  setActualUser(user: ViewerUser | null): void {
-    this.actualUser = user ? { ...user } : null;
-    const targetRole = user?.role || user?.roleId;
-    if (targetRole) {
-      this.setCurrentAssignee(targetRole);
-    }
-    for (const listener of this.actualUserListeners) {
-      try {
-        listener(this.getActualUser());
-      } catch (err) {
-        console.error('Error in FormManager actualUser listener:', err);
-      }
-    }
-  }
-
-  /** Subscribes to changes in the actual logged-in user details. */
-  onActualUserChange(listener: (user: ViewerUser | null) => void): () => void {
-    this.actualUserListeners.add(listener);
-    return () => this.actualUserListeners.delete(listener);
-  }
-
-  /**
-   * Returns the effective signer name:
-   * Prioritizes the actual user's real name (from host application),
-   * falling back to the active role name or an empty string.
-   */
-  getEffectiveSignerName(): string {
-    if (this.actualUser?.name) {
-      return this.actualUser.name;
-    }
-    const role = this.getAssignee(this.currentAssigneeId || undefined);
-    return role?.name || '';
-  }
-
-  // ---- Role Aliases (Template Roles) ------------------------------------------------------
-
-  /** Returns all configured form template roles. */
-  getRoles(): FormRole[] {
-    return this.getAssignees();
-  }
-
-  /** Sets the list of form template roles. */
-  setRoles(roles: FormRole[]): void {
-    this.setAssignees(roles);
-  }
-
-  /** Returns a form template role by ID. */
-  getRole(id?: string): FormRole | undefined {
-    return this.getAssignee(id);
-  }
-
-  /** Returns the active form role ID. */
-  getCurrentRole(): string | null {
-    return this.getCurrentAssignee();
-  }
-
-  /** Sets the active form role ID. */
-  setCurrentRole(roleId: string | null): void {
-    this.setCurrentAssignee(roleId);
-  }
-
-  onRolesChange(listener: (roles: FormRole[]) => void): () => void {
-    return this.onAssigneesChange(listener);
-  }
-
-  onCurrentRoleChange(listener: (roleId: string | null) => void): () => void {
-    return this.onCurrentAssigneeChange(listener);
-  }
-
-  /**
-   * Sets the active form user / persona.
-   * - If a string is passed, activates that role ID.
-   * - If an actual user object with role/roleId is passed, records actual user and activates their role.
-   * - If an actual user object without a role is passed, registers them and activates for backward compatibility.
-   */
-  setUser(
-    user:
-      | ViewerUser
-      | FormAssignee
-      | { id: string; name?: string; color?: string; role?: string; roleId?: string; email?: string }
-      | string
-      | null
-  ): void {
-    if (!user) {
-      this.setActualUser(null);
-      this.setCurrentAssignee(null);
-      return;
-    }
-
-    if (typeof user === 'string') {
-      this.setCurrentAssignee(user);
-      return;
-    }
-
-    const userObj = user as any;
-    const roleId = userObj.role || userObj.roleId;
-    if (roleId) {
-      this.setActualUser({
-        id: userObj.id,
-        name: userObj.name || userObj.id,
-        email: userObj.email,
-        role: roleId,
-        color: userObj.color,
-      });
-      this.setCurrentAssignee(roleId);
-      return;
-    }
-
-    // Check if user.id corresponds to an existing template role
-    const existing = this.assignees.find((a) => a.id === userObj.id);
-    if (existing) {
-      this.setActualUser({
-        id: userObj.id,
-        name: userObj.name || existing.name,
-        role: userObj.id,
-        color: userObj.color || existing.color,
-      });
-      this.setCurrentAssignee(userObj.id);
-      return;
-    }
-
-    // Legacy fallback: register user as an assignee
-    this.setActualUser({
-      id: userObj.id,
-      name: userObj.name || userObj.id,
-      color: userObj.color || '#2563eb',
-    });
-    this.addAssignee({
-      id: userObj.id,
-      name: userObj.name || userObj.id,
-      color: userObj.color || '#2563eb',
-    });
-    this.setCurrentAssignee(userObj.id);
-  }
-
-  /** Returns the current active form user assignee record, if set. */
-  getUser(): FormAssignee | undefined {
-    return this.getAssignee(this.currentAssigneeId || undefined);
   }
 
   // ---- Active Field & Form Flow -----------------------------------------------------------
@@ -547,14 +465,14 @@ export class FormManager {
 
   /**
    * Returns form fields sorted according to flow order.
-   * If assigneeId is provided, filters to fields assigned to that user.
+   * If roleId is provided, filters to fields assigned to that role.
    */
-  getFlowFields(assigneeId?: string | null): FormField[] {
-    const targetAssignee = assigneeId !== undefined ? assigneeId : this.currentAssigneeId;
+  getFlowFields(roleId?: string | null): FormField[] {
+    const targetRole = roleId !== undefined ? roleId : this.currentRoleId;
     let list = [...this.fields];
 
-    if (targetAssignee) {
-      list = list.filter((f) => f.assigneeId === targetAssignee);
+    if (targetRole) {
+      list = list.filter((f) => f.roleId === targetRole);
     }
 
     return list.sort((a, b) => {
@@ -569,8 +487,8 @@ export class FormManager {
     });
   }
 
-  getNextField(currentFieldId?: string | null, assigneeId?: string | null): FormField | null {
-    const flow = this.getFlowFields(assigneeId);
+  getNextField(currentFieldId?: string | null, roleId?: string | null): FormField | null {
+    const flow = this.getFlowFields(roleId);
     if (flow.length === 0) return null;
     const curId = currentFieldId ?? this.activeFieldId;
     if (!curId) return flow[0];
@@ -580,8 +498,8 @@ export class FormManager {
     return flow[0]; // loop around
   }
 
-  getPreviousField(currentFieldId?: string | null, assigneeId?: string | null): FormField | null {
-    const flow = this.getFlowFields(assigneeId);
+  getPreviousField(currentFieldId?: string | null, roleId?: string | null): FormField | null {
+    const flow = this.getFlowFields(roleId);
     if (flow.length === 0) return null;
     const curId = currentFieldId ?? this.activeFieldId;
     if (!curId) return flow[flow.length - 1];
@@ -591,16 +509,16 @@ export class FormManager {
     return flow[flow.length - 1]; // loop around
   }
 
-  goToNextField(assigneeId?: string | null): FormField | null {
-    const next = this.getNextField(this.activeFieldId, assigneeId);
+  goToNextField(roleId?: string | null): FormField | null {
+    const next = this.getNextField(this.activeFieldId, roleId);
     if (next) {
       this.setActiveFieldId(next.id);
     }
     return next;
   }
 
-  goToPreviousField(assigneeId?: string | null): FormField | null {
-    const prev = this.getPreviousField(this.activeFieldId, assigneeId);
+  goToPreviousField(roleId?: string | null): FormField | null {
+    const prev = this.getPreviousField(this.activeFieldId, roleId);
     if (prev) {
       this.setActiveFieldId(prev.id);
     }
@@ -609,13 +527,13 @@ export class FormManager {
 
   // ---- Validation --------------------------------------------------------------------------
 
-  validate(assigneeId?: string | null): FormValidationResult {
-    const targetAssignee = assigneeId !== undefined ? assigneeId : this.currentAssigneeId;
+  validate(roleId?: string | null): FormValidationResult {
+    const targetRole = roleId !== undefined ? roleId : this.currentRoleId;
     const errors: Record<string, string> = {};
 
     for (const field of this.fields) {
       if (!field.required) continue;
-      if (targetAssignee && field.assigneeId && field.assigneeId !== targetAssignee) continue;
+      if (targetRole && field.roleId && field.roleId !== targetRole) continue;
 
       const val = this.values[field.name];
       const displayName = field.label || field.name;
@@ -645,7 +563,7 @@ export class FormManager {
       {
         version: '1.9.0',
         fields: this.fields,
-        assignees: this.assignees,
+        roles: this.roles,
       },
       null,
       2
@@ -661,8 +579,9 @@ export class FormManager {
       }
       if (typeof parsed === 'object' && parsed !== null && Array.isArray(parsed.fields)) {
         this.setFields(parsed.fields);
-        if (Array.isArray(parsed.assignees) && parsed.assignees.length > 0) {
-          this.setAssignees(parsed.assignees);
+        const rolesList = Array.isArray(parsed.roles) ? parsed.roles : null;
+        if (rolesList && rolesList.length > 0) {
+          this.setRoles(rolesList);
         }
         return true;
       }

@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { FormManager, DEFAULT_ASSIGNEES } from './FormManager';
+import { FormManager, DEFAULT_ROLES } from './FormManager';
 import type { FormField } from './types';
 
 describe('FormManager Multi-User & Flow Flow Engine', () => {
@@ -14,19 +14,19 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
     formManager = new FormManager();
   });
 
-  it('initializes with default assignees (User A, User B, User C)', () => {
-    const assignees = formManager.getAssignees();
-    expect(assignees).toHaveLength(3);
-    expect(assignees.map((a) => a.id)).toEqual(['user_a', 'user_b', 'user_c']);
-    expect(assignees[0].name).toContain('User A');
-    expect(assignees[0].color).toBe('#2563eb');
+  it('initializes with default roles (User A, User B, User C)', () => {
+    const roles = formManager.getRoles();
+    expect(roles).toHaveLength(3);
+    expect(roles.map((a) => a.id)).toEqual(['user_a', 'user_b', 'user_c']);
+    expect(roles[0].name).toContain('User A');
+    expect(roles[0].color).toBe('#2563eb');
   });
 
-  it('allows adding and updating assignees', () => {
-    formManager.addAssignee({ id: 'approver', name: 'Compliance Approver', color: '#e11d48' });
-    expect(formManager.getAssignee('approver')).toBeDefined();
-    expect(formManager.getAssignee('approver')?.name).toBe('Compliance Approver');
-    expect(formManager.getAssignees()).toHaveLength(4);
+  it('allows adding and updating roles', () => {
+    formManager.addRole({ id: 'approver', name: 'Compliance Approver', color: '#e11d48' });
+    expect(formManager.getRole('approver')).toBeDefined();
+    expect(formManager.getRole('approver')?.name).toBe('Compliance Approver');
+    expect(formManager.getRoles()).toHaveLength(4);
   });
 
   it('resolves definable flow order and per-user flow sequence', () => {
@@ -40,7 +40,7 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
         y: 100,
         width: 100,
         height: 30,
-        assigneeId: 'user_a',
+        roleId: 'user_a',
         flowOrder: 2,
       },
       {
@@ -52,7 +52,7 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
         y: 200,
         width: 100,
         height: 30,
-        assigneeId: 'user_b',
+        roleId: 'user_b',
         flowOrder: 1,
       },
       {
@@ -64,7 +64,7 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
         y: 50,
         width: 100,
         height: 30,
-        assigneeId: 'user_a',
+        roleId: 'user_a',
         flowOrder: 1,
       },
       {
@@ -76,7 +76,7 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
         y: 50,
         width: 100,
         height: 30,
-        assigneeId: 'user_b',
+        roleId: 'user_b',
         flowOrder: 2,
       },
     ];
@@ -107,7 +107,7 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
         y: 10,
         width: 100,
         height: 30,
-        assigneeId: 'user_a',
+        roleId: 'user_a',
         flowOrder: 1,
       },
       {
@@ -119,7 +119,7 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
         y: 50,
         width: 100,
         height: 30,
-        assigneeId: 'user_b',
+        roleId: 'user_b',
         flowOrder: 1,
       },
       {
@@ -131,13 +131,13 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
         y: 90,
         width: 100,
         height: 30,
-        assigneeId: 'user_a',
+        roleId: 'user_a',
         flowOrder: 2,
       },
     ];
 
     formManager.setFields(fields);
-    formManager.setCurrentAssignee('user_a');
+    formManager.setCurrentRole('user_a');
 
     // Start with no active field -> goToNextField picks first field of user A
     const first = formManager.goToNextField();
@@ -158,7 +158,7 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
     expect(prev?.id).toBe('a2');
   });
 
-  it('performs per-user validation respecting the active assignee context', () => {
+  it('performs per-role validation respecting the active role context', () => {
     const fields: FormField[] = [
       {
         id: 'req_a',
@@ -171,7 +171,7 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
         width: 100,
         height: 30,
         required: true,
-        assigneeId: 'user_a',
+        roleId: 'user_a',
       },
       {
         id: 'req_b',
@@ -184,7 +184,7 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
         width: 100,
         height: 30,
         required: true,
-        assigneeId: 'user_b',
+        roleId: 'user_b',
       },
     ];
 
@@ -192,7 +192,7 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
 
     // When validated as User A with nothing filled:
     // Only contract_title is flagged, approval_signature (User B's field) is NOT flagged
-    formManager.setCurrentAssignee('user_a');
+    formManager.setCurrentRole('user_a');
     const resA1 = formManager.validate();
     expect(resA1.valid).toBe(false);
     expect(resA1.errors['contract_title']).toBeDefined();
@@ -204,19 +204,19 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
     expect(resA2.valid).toBe(true);
 
     // When validated as User B:
-    formManager.setCurrentAssignee('user_b');
+    formManager.setCurrentRole('user_b');
     const resB1 = formManager.validate();
     expect(resB1.valid).toBe(false);
     expect(resB1.errors['approval_signature']).toBeDefined();
 
-    // When validated as Admin / All (no assignee filter):
+    // When validated as Admin / All (no role filter):
     const resAll = formManager.validate(null);
     expect(resAll.valid).toBe(false);
     expect(resAll.errors['approval_signature']).toBeDefined();
     expect(resAll.errors['contract_title']).toBeUndefined();
   });
 
-  it('exports and imports schema preserving custom styling and assignees', () => {
+  it('exports and imports schema preserving custom styling and roles', () => {
     const customField: FormField = {
       id: 'styled_1',
       name: 'styled_field',
@@ -236,7 +236,7 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
       fontWeight: 'bold',
       fontStyle: 'italic',
       textAlign: 'center',
-      assigneeId: 'user_b',
+      roleId: 'user_b',
       flowOrder: 5,
     };
 
@@ -260,7 +260,7 @@ describe('FormManager Multi-User & Flow Flow Engine', () => {
     expect(f.fontWeight).toBe('bold');
     expect(f.fontStyle).toBe('italic');
     expect(f.textAlign).toBe('center');
-    expect(f.assigneeId).toBe('user_b');
+    expect(f.roleId).toBe('user_b');
     expect(f.flowOrder).toBe(5);
   });
 });

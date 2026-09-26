@@ -16,7 +16,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import type { FormManager } from '../forms/FormManager';
-import type { FormField, FormDataRecord, FormAssignee, FormFeatureOptions } from '../forms/types';
+import type { FormField, FormDataRecord, FormRole, FormFeatureOptions } from '../forms/types';
 import type { ViewerUser } from '../core/types';
 
 interface FormFillerActionsProps {
@@ -30,41 +30,41 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
 }) => {
   const [fields, setFields] = useState<FormField[]>(() => formManager.getFields());
   const [values, setValues] = useState<FormDataRecord>(() => formManager.getValues());
-  const [assignees, setAssignees] = useState<FormAssignee[]>(() => formManager.getAssignees());
-  const [currentAssigneeId, setCurrentAssigneeId] = useState<string | null>(() => formManager.getCurrentAssignee());
+  const [roles, setRoles] = useState<FormRole[]>(() => formManager.getRoles());
+  const [currentRoleId, setCurrentRoleId] = useState<string | null>(() => formManager.getCurrentRole());
   const [activeFieldId, setActiveFieldId] = useState<string | null>(() => formManager.getActiveFieldId());
   const [options, setOptions] = useState<FormFeatureOptions>(() => formManager.getOptions());
-  const [actualUser, setActualUser] = useState<ViewerUser | null>(() => formManager.getActualUser());
+  const [currentUser, setCurrentUser] = useState<ViewerUser | null>(() => formManager.getCurrentUser());
   const [validationMsg, setValidationMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     const unsubFields = formManager.onFieldsChange(() => setFields(formManager.getFields()));
     const unsubData = formManager.onDataChange((newValues) => setValues(newValues));
-    const unsubAssignees = formManager.onAssigneesChange((newAssignees) => setAssignees(newAssignees));
-    const unsubCurrent = formManager.onCurrentAssigneeChange((curr) => setCurrentAssigneeId(curr));
+    const unsubRoles = formManager.onRolesChange((newRoles) => setRoles(newRoles));
+    const unsubCurrent = formManager.onCurrentRoleChange((curr) => setCurrentRoleId(curr));
     const unsubActive = formManager.onActiveFieldChange((act) => setActiveFieldId(act));
     const unsubOptions = formManager.onOptionsChange((opts) => setOptions(opts));
-    const unsubActualUser = formManager.onActualUserChange((u) => setActualUser(u));
+    const unsubUser = formManager.onCurrentUserChange((u) => setCurrentUser(u));
 
     return () => {
       unsubFields();
       unsubData();
-      unsubAssignees();
+      unsubRoles();
       unsubCurrent();
       unsubActive();
       unsubOptions();
-      unsubActualUser();
+      unsubUser();
     };
   }, [formManager]);
 
   if (options.hideToolbar || fields.length === 0) return null;
 
-  const currentAssignee = assignees.find((a) => a.id === currentAssigneeId);
-  const flowFields = formManager.getFlowFields(currentAssigneeId);
+  const currentRole = roles.find((r) => r.id === currentRoleId);
+  const flowFields = formManager.getFlowFields(currentRoleId);
   const currentFlowIndex = activeFieldId ? flowFields.findIndex((f) => f.id === activeFieldId) : -1;
 
   // Calculate completion progress for current role
-  const targetFields = currentAssigneeId ? fields.filter((f) => f.assigneeId === currentAssigneeId) : fields;
+  const targetFields = currentRoleId ? fields.filter((f) => f.roleId === currentRoleId) : fields;
   const targetRequiredCount = targetFields.filter((f) => f.required).length;
   const targetFilledCount = targetFields.filter((f) => {
     const val = values[f.name];
@@ -89,7 +89,7 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
   const handleValidate = () => {
     const res = formManager.validate();
     if (res.valid) {
-      const scopeLabel = currentAssignee ? `${currentAssignee.name}'s required fields` : 'All required fields';
+      const scopeLabel = currentRole ? `${currentRole.name}'s required fields` : 'All required fields';
       setValidationMsg({ type: 'success', text: `${scopeLabel} are valid!` });
     } else {
       const missingKeys = Object.keys(res.errors).join(', ');
@@ -138,8 +138,8 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
           <FileSpreadsheet size={13} /> Form Mode
         </span>
 
-        {/* Multi-user "Filling as:" selector */}
-        {options.showUserSelector !== false && (
+        {/* Role "Filling as:" selector */}
+        {options.showRoleSelector !== false && (
           <div
             style={{
               display: 'flex',
@@ -151,61 +151,61 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
               padding: '2px 8px',
             }}
           >
-            <Users size={13} color={currentAssignee?.color || '#64748b'} />
+            <Users size={13} color={currentRole?.color || '#64748b'} />
             <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>Filling as:</span>
 
-            {/* Actual User Name (if passed by host application) */}
-            {actualUser?.name && (
+            {/* Current User Name (if passed by host application) */}
+            {currentUser?.name && (
               <span
                 style={{
                   fontSize: '11px',
                   fontWeight: 600,
                   color: '#0f172a',
                 }}
-                title={actualUser.email ? `${actualUser.name} <${actualUser.email}>` : actualUser.name}
+                title={currentUser.email ? `${currentUser.name} <${currentUser.email}>` : currentUser.name}
               >
-                {actualUser.name}
+                {currentUser.name}
               </span>
             )}
 
-            {options.allowUserSwitching === false ? (
+            {options.allowRoleSwitching === false ? (
               <span
                 style={{
                   fontSize: '11px',
                   fontWeight: 600,
-                  color: currentAssignee?.color || '#334155',
-                  backgroundColor: currentAssignee?.color ? `${currentAssignee.color}15` : '#f1f5f9',
+                  color: currentRole?.color || '#334155',
+                  backgroundColor: currentRole?.color ? `${currentRole.color}15` : '#f1f5f9',
                   padding: '1px 6px',
                   borderRadius: '4px',
                 }}
                 title={
-                  actualUser?.name
-                    ? `Role locked to ${currentAssignee?.name || 'Assignee'} for ${actualUser.name}`
-                    : 'Assigned user role is locked by host application'
+                  currentUser?.name
+                    ? `Role locked to ${currentRole?.name || 'Role'} for ${currentUser.name}`
+                    : 'Assigned role is locked by host application'
                 }
               >
-                {actualUser?.name ? `(${currentAssignee?.name || 'Role'})` : (currentAssignee?.name || 'Current User')}
+                {currentUser?.name ? `(${currentRole?.name || 'Role'})` : (currentRole?.name || 'Current Role')}
               </span>
             ) : (
               <select
-                value={currentAssigneeId || ''}
-                onChange={(e) => formManager.setCurrentAssignee(e.target.value || null)}
+                value={currentRoleId || ''}
+                onChange={(e) => formManager.setCurrentRole(e.target.value || null)}
                 style={{
                   fontSize: '11px',
                   fontWeight: 600,
                   border: 'none',
                   backgroundColor: 'transparent',
-                  color: currentAssignee?.color || '#334155',
+                  color: currentRole?.color || '#334155',
                   cursor: 'pointer',
                   outline: 'none',
                 }}
               >
-                <option value="">{actualUser?.name ? 'All Roles / Anyone' : 'All Users / Anyone'}</option>
-                {assignees.map((a) => {
-                  const userFieldCount = fields.filter((f) => f.assigneeId === a.id).length;
+                <option value="">All Roles / Anyone</option>
+                {roles.map((r) => {
+                  const roleFieldCount = fields.filter((f) => f.roleId === r.id).length;
                   return (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({userFieldCount} {userFieldCount === 1 ? 'field' : 'fields'})
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({roleFieldCount} {roleFieldCount === 1 ? 'field' : 'fields'})
                     </option>
                   );
                 })}
@@ -251,7 +251,7 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
               style={{
                 fontSize: '11px',
                 fontWeight: 600,
-                color: currentAssignee?.color || '#334155',
+                color: currentRole?.color || '#334155',
                 padding: '0 6px',
                 minWidth: '70px',
                 textAlign: 'center',

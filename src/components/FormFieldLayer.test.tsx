@@ -290,7 +290,7 @@ describe('FormFieldLayer', () => {
       y: 20,
       width: 150,
       height: 35,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
     };
     const userBField: FormField = {
       id: 'field_b',
@@ -301,12 +301,12 @@ describe('FormFieldLayer', () => {
       y: 70,
       width: 150,
       height: 35,
-      assigneeId: 'user_b',
+      roleId: 'user_b',
     };
 
     const formManager = new FormManager([userAField, userBField]);
     // Set current active filler to User A
-    formManager.setCurrentAssignee('user_a');
+    formManager.setCurrentRole('user_a');
     const root = createRoot(container);
 
     await act(async () => {
@@ -416,7 +416,7 @@ describe('FormFieldLayer', () => {
       y: 10,
       width: 220,
       height: 60,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
     };
 
     const formManager = new FormManager([sigField]);
@@ -503,12 +503,12 @@ describe('FormFieldLayer', () => {
       y: 10,
       width: 250,
       height: 60,
-      assigneeId: 'user_b',
+      roleId: 'user_b',
     };
 
     const formManager = new FormManager([sigField]);
     // Filling context is User A
-    formManager.setCurrentAssignee('user_a');
+    formManager.setCurrentRole('user_a');
     const root = createRoot(container);
 
     await act(async () => {
@@ -577,13 +577,13 @@ describe('FormFieldLayer', () => {
     // Check newly created field
     const fields = formManager.getFields();
     expect(fields).toHaveLength(1);
-    expect(fields[0].assigneeId).toBeUndefined(); // Must NOT forcibly assign to User A!
+    expect(fields[0].roleId).toBeUndefined(); // Must NOT forcibly assign to User A!
 
     // Field should display "Anyone" badge
     expect(container.textContent).toContain('Anyone');
 
     // Field should be selected, so floating action bar should show the quick assign select
-    const quickAssignSelect = container.querySelector('select[title="Assign this field to a user"]') as HTMLSelectElement;
+    const quickAssignSelect = container.querySelector('select[title="Assign this field to a role"]') as HTMLSelectElement;
     expect(quickAssignSelect).not.toBeNull();
     expect(quickAssignSelect.value).toBe('');
 
@@ -596,11 +596,11 @@ describe('FormFieldLayer', () => {
 
     // Verify field is now assigned to user_b and has User B's purple color
     const updatedFields = formManager.getFields();
-    expect(updatedFields[0].assigneeId).toBe('user_b');
+    expect(updatedFields[0].roleId).toBe('user_b');
     expect(updatedFields[0].borderColor).toBe('#9333ea');
   });
 
-  it('displays full assignee names without truncating them to User', async () => {
+  it('displays full role names without truncating them to User', async () => {
     const fieldA: FormField = {
       id: 'fa',
       name: 'name_a',
@@ -611,7 +611,7 @@ describe('FormFieldLayer', () => {
       y: 10,
       width: 150,
       height: 40,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
     };
     const fieldB: FormField = {
       id: 'fb',
@@ -624,7 +624,7 @@ describe('FormFieldLayer', () => {
       y: 60,
       width: 250,
       height: 60,
-      assigneeId: 'user_b',
+      roleId: 'user_b',
     };
 
     const formManager = new FormManager([fieldA, fieldB]);
@@ -654,7 +654,7 @@ describe('FormFieldLayer', () => {
     expect(container.textContent).not.toMatch(/DIGITAL SIGN \(User\)/);
   });
 
-  it('prominently displays field names, flow orders, and assignees in View mode', async () => {
+  it('prominently displays field names, flow orders, and roles in View mode', async () => {
     const field1: FormField = {
       id: 'f1',
       name: 'applicant_name',
@@ -667,7 +667,7 @@ describe('FormFieldLayer', () => {
       height: 35,
       required: true,
       flowOrder: 1,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
     };
     const field2: FormField = {
       id: 'f2',
@@ -693,7 +693,7 @@ describe('FormFieldLayer', () => {
       width: 220,
       height: 60,
       flowOrder: 2,
-      assigneeId: 'user_a',
+      roleId: 'user_a',
     };
 
     const formManager = new FormManager([field1, field2, field3]);
@@ -725,7 +725,7 @@ describe('FormFieldLayer', () => {
     expect(container.textContent).toContain('Department');
     expect(container.textContent).toContain('Anyone');
 
-    // Signature tag should show Applicant Signature with assignee
+    // Signature tag should show Applicant Signature with role
     expect(container.textContent).toContain('Applicant Signature (User A)');
     expect(container.textContent).toContain('#2');
 

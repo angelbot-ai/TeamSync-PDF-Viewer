@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { FormSignatureModal } from './FormSignatureModal';
-import type { FormField, FormAssignee, FormSignatureValue } from '../forms/types';
+import type { FormField, FormRole, FormSignatureValue } from '../forms/types';
 
 describe('FormSignatureModal', () => {
   let container: HTMLDivElement;
@@ -35,10 +35,10 @@ describe('FormSignatureModal', () => {
     y: 50,
     width: 200,
     height: 60,
-    assigneeId: 'user_a',
+    roleId: 'user_a',
   };
 
-  const testAssignee: FormAssignee = {
+  const testRole: FormRole = {
     id: 'user_a',
     name: 'Jane Doe',
     color: '#2563eb',
@@ -53,7 +53,7 @@ describe('FormSignatureModal', () => {
       root.render(
         <FormSignatureModal
           field={testField}
-          assignee={testAssignee}
+          role={testRole}
           onSave={onSave}
           onClose={onClose}
         />
@@ -82,7 +82,7 @@ describe('FormSignatureModal', () => {
       root.render(
         <FormSignatureModal
           field={testField}
-          assignee={testAssignee}
+          role={testRole}
           defaultSignerName="Jane Doe"
           onSave={onSave}
           onClose={onClose}
@@ -135,7 +135,7 @@ describe('FormSignatureModal', () => {
       root.render(
         <FormSignatureModal
           field={digitalField}
-          assignee={testAssignee}
+          role={testRole}
           defaultSignerName="Officer Smith"
           onSave={onSave}
           onClose={onClose}

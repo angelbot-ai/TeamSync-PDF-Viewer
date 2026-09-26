@@ -51,6 +51,35 @@ const hexToRgb = (hex: string | undefined) => {
   return rgb(r, g, b);
 };
 
+/**
+ * Decodes a base64 Data URL directly in memory without triggering network fetch.
+ * Prevents SSRF / unhandled network rejections during PDF export.
+ */
+function decodeBase64DataUrl(dataUrl: string): { bytes: Uint8Array; mime: string } | null {
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) return null;
+  const match = dataUrl.match(/^data:([^;,]+)(?:;charset=[^;,]+)?;base64,(.*)$/s);
+  if (!match) return null;
+  const mime = match[1].toLowerCase();
+  const base64Data = match[2].trim();
+  try {
+    const globalBuffer = (globalThis as any).Buffer;
+    if (globalBuffer && typeof globalBuffer.from === 'function') {
+      const buf = globalBuffer.from(base64Data, 'base64');
+      return { bytes: new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength), mime };
+    } else if (typeof atob !== 'undefined') {
+      const binary = atob(base64Data);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return { bytes, mime };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 function wrapText(text: string, maxWidth: number, fontSize: number): string[] {
   const approxCharWidth = fontSize * 0.55;
   const maxCharsPerLine = Math.max(1, Math.floor(maxWidth / approxCharWidth));
@@ -373,6 +402,22 @@ export async function buildPdfBytes(input: ExportInput, options: ExportOptions =
   if (input.formFields && input.formFields.length > 0) {
     const form = pdfDoc.getForm();
     const values = input.formData || {};
+    const usedFieldNames = new Set<string>();
+
+    const getUniqueFieldName = (baseName: string): string => {
+      let name = (baseName || 'field').trim();
+      if (!usedFieldNames.has(name)) {
+        usedFieldNames.add(name);
+        return name;
+      }
+      let counter = 1;
+      while (usedFieldNames.has(`${name}_${counter}`)) {
+        counter++;
+      }
+      const uniqueName = `${name}_${counter}`;
+      usedFieldNames.add(uniqueName);
+      return uniqueName;
+    };
 
     for (const field of input.formFields) {
       const pageIdx = Math.max(0, Math.min((field.pageIndex || 1) - 1, pages.length - 1));
@@ -394,17 +439,18 @@ export async function buildPdfBytes(input: ExportInput, options: ExportOptions =
       const w = Math.max(10, urx - llx);
       const h = Math.max(10, ury - lly);
       const filledVal = values[field.name] !== undefined ? values[field.name] : field.defaultValue;
+      const uniqueFieldName = getUniqueFieldName(field.name);
 
       try {
         if (field.type === 'text' || (field.type as string) === 'textbox') {
-          const tf = form.createTextField(field.name);
+          const tf = form.createTextField(uniqueFieldName);
           tf.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
           if (field.fontSize) {
             try { tf.setFontSize(field.fontSize); } catch {}
           }
           if (filledVal !== undefined && filledVal !== null && filledVal !== '') tf.setText(String(filledVal));
         } else if (field.type === 'textarea') {
-          const tf = form.createTextField(field.name);
+          const tf = form.createTextField(uniqueFieldName);
           tf.enableMultiline();
           tf.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
           if (field.fontSize) {
@@ -412,18 +458,18 @@ export async function buildPdfBytes(input: ExportInput, options: ExportOptions =
           }
           if (filledVal !== undefined && filledVal !== null && filledVal !== '') tf.setText(String(filledVal));
         } else if (field.type === 'datetime') {
-          const tf = form.createTextField(field.name);
+          const tf = form.createTextField(uniqueFieldName);
           tf.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
           if (field.fontSize) {
             try { tf.setFontSize(field.fontSize); } catch {}
           }
           if (filledVal !== undefined && filledVal !== null && filledVal !== '') tf.setText(String(filledVal));
         } else if (field.type === 'checkbox') {
-          const cb = form.createCheckBox(field.name);
+          const cb = form.createCheckBox(uniqueFieldName);
           cb.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
           if (Boolean(filledVal)) cb.check();
         } else if (field.type === 'dropdown') {
-          const dd = form.createDropdown(field.name);
+          const dd = form.createDropdown(uniqueFieldName);
           if (field.options && field.options.length > 0) dd.setOptions(field.options);
           dd.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
           if (filledVal) dd.select(String(filledVal));
@@ -432,7 +478,7 @@ export async function buildPdfBytes(input: ExportInput, options: ExportOptions =
           const itemH = h / opts.length;
           const selectedList = Array.isArray(filledVal) ? filledVal : [];
           opts.forEach((opt, idx) => {
-            const cb = form.createCheckBox(`${field.name}_${idx}`);
+            const cb = form.createCheckBox(getUniqueFieldName(`${field.name}_${idx}`));
             cb.addToPage(targetPage, {
               x: llx,
               y: lly + h - (idx + 1) * itemH + 2,
@@ -444,20 +490,26 @@ export async function buildPdfBytes(input: ExportInput, options: ExportOptions =
         } else if (field.type === 'signature') {
           const dataUrl = typeof filledVal === 'object' && filledVal ? (filledVal.dataUrl || (filledVal as any).imageUrl) : (typeof filledVal === 'string' && filledVal.startsWith('data:') ? filledVal : undefined);
           if (dataUrl) {
-            const imageBytes = await fetch(dataUrl).then((res) => res.arrayBuffer());
-            const image = dataUrl.startsWith('data:image/jpeg') || dataUrl.startsWith('data:image/jpg')
-              ? await pdfDoc.embedJpg(imageBytes)
-              : await pdfDoc.embedPng(imageBytes);
-            targetPage.drawImage(image, { x: llx, y: lly, width: w, height: h });
-            if (typeof filledVal === 'object' && filledVal?.signerName) {
-              try {
-                targetPage.drawText(`Digitally signed by ${filledVal.signerName}`, {
-                  x: llx,
-                  y: Math.max(0, lly - 10),
-                  size: 8,
-                  color: rgb(100 / 255, 116 / 255, 139 / 255),
-                });
-              } catch {}
+            try {
+              const decoded = decodeBase64DataUrl(dataUrl);
+              const imageBytes = decoded ? decoded.bytes : await fetch(dataUrl).then((res) => res.arrayBuffer());
+              const isJpg = (decoded && (decoded.mime === 'image/jpeg' || decoded.mime === 'image/jpg')) || dataUrl.startsWith('data:image/jpeg') || dataUrl.startsWith('data:image/jpg');
+              const image = isJpg
+                ? await pdfDoc.embedJpg(imageBytes)
+                : await pdfDoc.embedPng(imageBytes);
+              targetPage.drawImage(image, { x: llx, y: lly, width: w, height: h });
+              if (typeof filledVal === 'object' && filledVal?.signerName) {
+                try {
+                  targetPage.drawText(`Digitally signed by ${filledVal.signerName}`, {
+                    x: llx,
+                    y: Math.max(0, lly - 10),
+                    size: 8,
+                    color: rgb(100 / 255, 116 / 255, 139 / 255),
+                  });
+                } catch {}
+              }
+            } catch (err) {
+              console.warn('[export] Failed to embed signature image:', err);
             }
           } else {
             // Unsigned signature placeholder box with baseline

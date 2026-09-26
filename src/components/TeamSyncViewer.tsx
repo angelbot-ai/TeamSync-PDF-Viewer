@@ -132,10 +132,11 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   const bus = useMemo(() => new ViewerBus(), []);
   const annotationManager = useMemo(() => new AnnotationManager(), []);
 
-  const formManager = useMemo(
-    () => propFormManager || new FormManager(formFields, formData, formRoles, formOptions, currentUser),
-    [propFormManager, formFields, formData, formRoles, formOptions, currentUser]
+  // Initialize FormManager once per viewer lifecycle; subsequent updates are synced via useEffect hooks
+  const [internalFormManager] = useState(
+    () => new FormManager(formFields, formData, formRoles, formOptions, currentUser)
   );
+  const formManager = propFormManager || internalFormManager;
   const instanceRef = useRef<WebViewerInstance | null>(null);
   if (!instanceRef.current) instanceRef.current = new WebViewerInstance(bus, annotationManager, id, formManager);
   const instance = instanceRef.current;

@@ -360,10 +360,11 @@ export default async function handler(request: Request): Promise<Response> {
         },
       });
     } catch (err: any) {
+      console.error('[convert-edge] GET unhandled conversion exception:', err);
       return new Response(
         JSON.stringify({
           error: 'Internal Server Error',
-          message: err?.message || 'Unknown error occurred',
+          message: 'An error occurred while converting the document',
         }),
         {
           status: 500,
@@ -483,10 +484,11 @@ export default async function handler(request: Request): Promise<Response> {
         },
       });
     } catch (err: any) {
+      console.error('[convert-edge] POST unhandled upload exception:', err);
       return new Response(
         JSON.stringify({
           error: 'Error processing upload',
-          message: err?.message || 'Unknown error occurred',
+          message: 'An error occurred while processing the uploaded file',
         }),
         {
           status: 500,

@@ -21,11 +21,13 @@ import type { ViewerUser } from '../core/types';
 interface SignatureIndexFlagsProps {
   formManager: FormManager;
   activeTab: string;
+  onJumpToPage?: (page: number) => void;
 }
 
 export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
   formManager,
   activeTab,
+  onJumpToPage,
 }) => {
   const [fields, setFields] = useState<FormField[]>(() => formManager.getFields());
   const [values, setValues] = useState<FormDataRecord>(() => formManager.getValues());
@@ -113,10 +115,24 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
     (field: FormField) => {
       formManager.setActiveFieldId(field.id);
 
-      // Function to focus, click, and trigger visual highlight on the field DOM element
-      const tryFocusAndOpen = (retries = 8, delay = 150) => {
+      // Navigate to field's page first (crucial for page-by-page and virtualized continuous scroll modes)
+      if (typeof field.pageIndex === 'number') {
+        if (onJumpToPage) {
+          onJumpToPage(field.pageIndex);
+        } else if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('action-go-to-page', { detail: { page: field.pageIndex, smooth: true } })
+          );
+        }
+      }
+
+      // Function to scroll into view, focus, click, and trigger visual highlight on the field DOM element
+      const tryFocusAndOpen = (retries = 10, delay = 120) => {
         const fieldEl = document.getElementById(`tspdf-field-${field.id}`);
         if (fieldEl) {
+          try {
+            fieldEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } catch {}
           fieldEl.focus();
           fieldEl.click();
 
@@ -134,7 +150,7 @@ export const SignatureIndexFlags: React.FC<SignatureIndexFlagsProps> = ({
 
       tryFocusAndOpen();
     },
-    [formManager]
+    [formManager, onJumpToPage]
   );
 
   // Only display in View or Forms modes

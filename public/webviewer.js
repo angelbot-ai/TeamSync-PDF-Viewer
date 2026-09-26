@@ -40,15 +40,21 @@ export default function WebViewer(options, viewerElement) {
       Core: {
         annotationManager: {
           exportAnnotations: () => {
-            return new Promise((res) => {
+            return new Promise((res, rej) => {
+              let timeoutId;
               const listener = (event) => {
                 if (event.source !== iframe.contentWindow) return;
                 if (targetOrigin !== '*' && event.origin !== targetOrigin) return;
                 if (event.data.type === 'EXPORT_ANNOTATIONS_RESULT') {
+                  clearTimeout(timeoutId);
                   window.removeEventListener('message', listener);
                   res(event.data.annotations);
                 }
               };
+              timeoutId = setTimeout(() => {
+                window.removeEventListener('message', listener);
+                rej(new Error('Export annotations timed out after 30 seconds'));
+              }, 30000);
               window.addEventListener('message', listener);
               iframe.contentWindow.postMessage({ type: 'CORE_EXPORT_ANNOTATIONS' }, targetOrigin);
             });
@@ -57,15 +63,21 @@ export default function WebViewer(options, viewerElement) {
         documentViewer: {
           getDocument: () => ({
             getFileData: () => {
-              return new Promise((res) => {
+              return new Promise((res, rej) => {
+                let timeoutId;
                 const listener = (event) => {
                   if (event.source !== iframe.contentWindow) return;
                   if (targetOrigin !== '*' && event.origin !== targetOrigin) return;
                   if (event.data.type === 'GET_FILE_DATA_RESULT') {
+                    clearTimeout(timeoutId);
                     window.removeEventListener('message', listener);
                     res(event.data.data);
                   }
                 };
+                timeoutId = setTimeout(() => {
+                  window.removeEventListener('message', listener);
+                  rej(new Error('Get file data timed out after 30 seconds'));
+                }, 30000);
                 window.addEventListener('message', listener);
                 iframe.contentWindow.postMessage({ type: 'CORE_GET_FILE_DATA' }, targetOrigin);
               });
@@ -76,6 +88,7 @@ export default function WebViewer(options, viewerElement) {
     };
 
     // Wait for the React app inside the iframe to signal it is ready
+    let initTimeoutId;
     const messageListener = (event) => {
       if (event.source !== iframe.contentWindow) return;
       if (targetOrigin !== '*' && event.origin !== targetOrigin) return;
@@ -94,11 +107,16 @@ export default function WebViewer(options, viewerElement) {
           options: serializedOptions 
         }, targetOrigin);
       } else if (event.data === 'VIEWER_INITIALIZED') {
+        clearTimeout(initTimeoutId);
         window.removeEventListener('message', messageListener);
         resolve(instance);
       }
     };
     
+    initTimeoutId = setTimeout(() => {
+      window.removeEventListener('message', messageListener);
+      reject(new Error('WebViewer initialization timed out after 60 seconds'));
+    }, 60000);
     window.addEventListener('message', messageListener);
   });
 }

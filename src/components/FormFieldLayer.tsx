@@ -79,7 +79,12 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
       setFields(formManager.getFieldsForPage(pageNum));
     });
     const unsubData = formManager.onDataChange((newValues) => {
-      setValues(newValues);
+      // PERF: Only trigger re-render on this page if a field on this page actually changed value
+      setValues((prevValues) => {
+        const pageFields = formManager.getFieldsForPage(pageNum);
+        const hasRelevantChange = pageFields.some((f) => prevValues[f.name] !== newValues[f.name]);
+        return hasRelevantChange ? newValues : prevValues;
+      });
     });
     const unsubRoles = formManager.onRolesChange((newRoles) => {
       setRoles(newRoles);

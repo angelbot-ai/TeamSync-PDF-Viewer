@@ -78,6 +78,7 @@ function PageRendererComponent({
   useEffect(() => {
     onRenderedRef.current = onRendered;
   }, [onRendered]);
+  const pageContainerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
   const renderTaskRef = useRef<any>(null);
@@ -85,6 +86,58 @@ function PageRendererComponent({
   const hasRenderedOnceRef = useRef(false);
   const [isCanvasRendered, setIsCanvasRendered] = useState(false);
   const [textContent, setTextContent] = useState<any>(null);
+
+  // Virtualization: only allocate heavy GPU canvas memory when page is in or near viewport (800px buffer)
+  const [isInViewport, setIsInViewport] = useState<boolean>(() => {
+    return typeof IntersectionObserver === 'undefined' || pageNum === 1;
+  });
+
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsInViewport(true);
+      return;
+    }
+    const el = pageContainerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry) {
+          setIsInViewport(entry.isIntersecting);
+        }
+      },
+      {
+        rootMargin: '800px 0px 800px 0px',
+        threshold: 0,
+      }
+    );
+
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+    };
+  }, [pageNum]);
+
+  // When scrolling far out of viewport, free GPU canvas backbuffer textures and text layer nodes
+  useEffect(() => {
+    if (!isInViewport) {
+      if (renderTaskRef.current) {
+        try { renderTaskRef.current.cancel(); } catch {}
+        renderTaskRef.current = null;
+      }
+      const canvas = canvasRef.current;
+      if (canvas && hasRenderedOnceRef.current) {
+        canvas.width = 0;
+        canvas.height = 0;
+        hasRenderedOnceRef.current = false;
+        setIsCanvasRendered(false);
+      }
+      if (textLayerRef.current) {
+        textLayerRef.current.innerHTML = '';
+      }
+    }
+  }, [isInViewport]);
 
   const scaledWidth = basePageWidth * scale;
   const scaledHeight = basePageHeight * scale;
@@ -105,7 +158,7 @@ function PageRendererComponent({
     let timer: any = null;
 
     const renderCanvas = async () => {
-      if (!canvasRef.current || !pdfDoc) return;
+      if (!canvasRef.current || !pdfDoc || !isInViewport) return;
       if (renderTaskRef.current) {
         try { renderTaskRef.current.cancel(); } catch {}
         renderTaskRef.current = null;
@@ -282,7 +335,7 @@ function PageRendererComponent({
         pageProxyRef.current = null;
       }
     };
-  }, [pageNum, pdfDoc, scale, rotation, basePageWidth, basePageHeight, watermark, watermarkText, redactions]);
+  }, [pageNum, pdfDoc, scale, rotation, basePageWidth, basePageHeight, watermark, watermarkText, redactions, isInViewport]);
 
   // Load TextContent independently
   useEffect(() => {
@@ -331,7 +384,7 @@ function PageRendererComponent({
   // Render TextLayer
   useEffect(() => {
     const container = textLayerRef.current;
-    if (!textContent || !container) return;
+    if (!textContent || !container || !isInViewport) return;
     let isCancelled = false;
 
     const renderText = async () => {
@@ -383,7 +436,7 @@ function PageRendererComponent({
     return () => {
       isCancelled = true;
     };
-  }, [textContent, pdfDoc, pageNum, rotation, redactions]);
+  }, [textContent, pdfDoc, pageNum, rotation, redactions, isInViewport]);
 
   // Load Native PDF Link Annotations
   const [nativeLinks, setNativeLinks] = useState<Array<{ id: string; rect: number[]; url: string }>>([]);
@@ -427,6 +480,7 @@ function PageRendererComponent({
 
   return (
     <div 
+      ref={pageContainerRef}
       id={`pdf-page-${pageNum}`}
       className="pdf-page-container"
       onClick={() => { if (activeTool === null || activeTool === 'select') onClearSelection(); }}

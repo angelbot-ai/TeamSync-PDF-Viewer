@@ -73,15 +73,11 @@ async function mount(options: WebViewerOptions, el: HTMLElement): Promise<WebVie
 }
 
 // Conversion service endpoint: uses same-origin proxy (/api/convert) to eliminate browser CORS preflight issues
+// (SEC: Authentication credentials are held securely in server-side edge environment variables)
 const CONVERTER_ENDPOINT = '/api/convert';
-const CONVERTER_BASIC_AUTH =
-  'Basic ' + btoa('admin:ASDF!@!@#!@RDSDFF#$#@$SDFSD#@#@#SDFGDF$%^%$^DFG#$%#G#$%ERER%$%');
 
 const defaultOfficeConverter = {
   endpoint: CONVERTER_ENDPOINT,
-  headers: {
-    Authorization: CONVERTER_BASIC_AUTH,
-  },
   cache: 'memory' as const,
 };
 

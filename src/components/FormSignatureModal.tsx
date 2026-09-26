@@ -265,15 +265,40 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
       // Fallback to SVG below
     }
 
-    // High quality vector SVG data URL fallback
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="180"><text x="300" y="90" font-family="${fontObj.name}, cursive" font-size="52" font-style="${fontObj.style}" fill="${penColor}" text-anchor="middle" dominant-baseline="middle">${nameText || 'Signature'}</text></svg>`;
-    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    // High quality vector SVG data URL fallback (SEC: XML entities escaped to prevent SVG XSS injection)
+    const escapeXml = (s: string) =>
+      s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+
+    const safeName = escapeXml(nameText || 'Signature');
+    const safeFamily = escapeXml(fontObj.name || 'cursive');
+    const safeStyle = escapeXml(fontObj.style || 'normal');
+    const safeColor = escapeXml(penColor || '#000000');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="180"><text x="300" y="90" font-family="${safeFamily}, cursive" font-size="52" font-style="${safeStyle}" fill="${safeColor}" text-anchor="middle" dominant-baseline="middle">${safeName}</text></svg>`;
+    
+    try {
+      const base64Svg = typeof btoa !== 'undefined' ? btoa(unescape(encodeURIComponent(svg))) : encodeURIComponent(svg);
+      return `data:image/svg+xml;base64,${base64Svg}`;
+    } catch {
+      return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    }
   }, [penColor]);
+
+  // Allowed image MIME types for uploaded signatures (SEC: prevent SVG/HTML script injection)
+  const ALLOWED_SIGNATURE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
 
   // Handle uploaded image file
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!ALLOWED_SIGNATURE_MIME_TYPES.has(file.type.toLowerCase())) {
+      alert('Please upload a valid PNG, JPEG, or WebP image file.');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (ev) => {
       const result = ev.target?.result as string;
@@ -811,7 +836,7 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
                             Replace Image
                             <input
                               type="file"
-                              accept="image/png, image/jpeg, image/jpg"
+                              accept="image/png, image/jpeg, image/webp"
                               style={{ display: 'none' }}
                               onChange={handleFileUpload}
                             />
@@ -842,7 +867,7 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
                           Browse File
                           <input
                             type="file"
-                            accept="image/png, image/jpeg, image/jpg"
+                            accept="image/png, image/jpeg, image/webp"
                             style={{ display: 'none' }}
                             onChange={handleFileUpload}
                           />

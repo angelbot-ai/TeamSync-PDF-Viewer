@@ -2559,6 +2559,7 @@ export default function DocumentViewer({
               <SignatureIndexFlags
                 formManager={formManager}
                 activeTab={activeTab}
+                onJumpToPage={(p) => scrollToPage(p, { smooth: true })}
               />
             )}
           </div>

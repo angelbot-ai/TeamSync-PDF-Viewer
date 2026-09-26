@@ -79,15 +79,25 @@ export async function computePageDiffBoxes(
   pdfDocB: pdfjsLib.PDFDocumentProxy,
   pageIndex: number
 ): Promise<PageDiffResult> {
-  const [pageA, pageB] = await Promise.all([
-    pdfDocA.getPage(pageIndex),
-    pdfDocB.getPage(Math.min(pageIndex, pdfDocB.numPages))
-  ]);
+  let pageA: pdfjsLib.PDFPageProxy | null = null;
+  let pageB: pdfjsLib.PDFPageProxy | null = null;
+  let wordsA: WordToken[];
+  let wordsB: WordToken[];
 
-  const [wordsA, wordsB] = await Promise.all([
-    extractWordsFromPage(pageA),
-    extractWordsFromPage(pageB)
-  ]);
+  try {
+    [pageA, pageB] = await Promise.all([
+      pdfDocA.getPage(pageIndex),
+      pdfDocB.getPage(Math.min(pageIndex, pdfDocB.numPages))
+    ]);
+
+    [wordsA, wordsB] = await Promise.all([
+      extractWordsFromPage(pageA),
+      extractWordsFromPage(pageB)
+    ]);
+  } finally {
+    try { pageA?.cleanup?.(); } catch {}
+    try { pageB?.cleanup?.(); } catch {}
+  }
 
   const textArrA = wordsA.map(w => w.text);
   const textArrB = wordsB.map(w => w.text);

@@ -112,4 +112,72 @@ describe('PDF Export Form Baking (AcroForms)', () => {
     expect(dropdownField).toBeDefined();
     expect(dropdownField.getSelected()).toEqual(['Developer']);
   });
+
+  it('safely handles duplicate field names without throwing FieldAlreadyExistsError', async () => {
+    const blankDoc = await PDFDocument.create();
+    blankDoc.addPage([600, 800]);
+    const blankBytes = await blankDoc.save();
+
+    const formFields: FormField[] = [
+      { id: 'f1', name: 'user_comment', type: 'text', pageIndex: 1, x: 50, y: 50, width: 200, height: 30 },
+      { id: 'f2', name: 'user_comment', type: 'text', pageIndex: 1, x: 50, y: 100, width: 200, height: 30 },
+      { id: 'f3', name: 'user_comment', type: 'text', pageIndex: 1, x: 50, y: 150, width: 200, height: 30 },
+    ];
+
+    const exportedBytes = await buildPdfBytes({
+      getSourceBytes: async () => blankBytes,
+      annotations: [],
+      redactions: [],
+      formFields,
+      formData: { user_comment: 'Approved' },
+    });
+
+    expect(exportedBytes).toBeInstanceOf(Uint8Array);
+    const loadedDoc = await PDFDocument.load(exportedBytes);
+    const form = loadedDoc.getForm();
+    const fields = form.getFields();
+    expect(fields.length).toBe(3);
+    expect(form.getTextField('user_comment').getText()).toBe('Approved');
+    expect(form.getTextField('user_comment_1').getText()).toBe('Approved');
+    expect(form.getTextField('user_comment_2').getText()).toBe('Approved');
+  });
+
+  it('embeds Base64 signature data URLs in-memory without throwing', async () => {
+    const blankDoc = await PDFDocument.create();
+    blankDoc.addPage([600, 800]);
+    const blankBytes = await blankDoc.save();
+
+    // 1x1 transparent PNG data URL
+    const pngDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+    const formFields: FormField[] = [
+      {
+        id: 'sig_1',
+        name: 'client_signature',
+        type: 'signature',
+        signatureType: 'electronic',
+        pageIndex: 1,
+        x: 50,
+        y: 200,
+        width: 150,
+        height: 50,
+      },
+    ];
+
+    const exportedBytes = await buildPdfBytes({
+      getSourceBytes: async () => blankBytes,
+      annotations: [],
+      redactions: [],
+      formFields,
+      formData: {
+        client_signature: {
+          dataUrl: pngDataUrl,
+          signerName: 'Jane Doe',
+        },
+      },
+    });
+
+    expect(exportedBytes).toBeInstanceOf(Uint8Array);
+    expect(exportedBytes.byteLength).toBeGreaterThan(0);
+  });
 });

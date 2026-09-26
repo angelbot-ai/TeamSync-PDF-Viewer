@@ -2,6 +2,36 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [2.0.0] — 2026-09-26
+
+### Added
+- **Multi-Role Form Templates & Host Application User Context**:
+  - **Decoupled Form Roles from User Identity**: Form templates assign fields to abstract roles (`FormRole`) such as `applicant`, `tenant`, `landlord`, or `reviewer`.
+  - **Host Application Current User Integration**: Applications pass the logged-in user profile (`ViewerUser`) containing `id`, `name`, `email`, and `role`. Setting a user automatically activates their role in the form session without hardcoding user IDs into templates.
+  - **Audit-Grade Signature Capture**: Electronic and digital signatures adopted in the viewer automatically bind the active signer's name, email, role, and cryptographic SHA-256 seal.
+- **Signature Sticky / Index Flags**:
+  - **Side-Docked Visual Flags**: Sticky index flags positioned along the right edge of the viewport indicate pending signatures assigned to the current user's role.
+  - **Cross-Page Accessibility**: Flags are visible even when viewing page 1 while signature fields reside on page 2 or later, giving users immediate visibility into required actions.
+  - **1-Click Jump & Sign**: Clicking a sticky flag smoothly scrolls the document directly to the target signature field and activates signature capture.
+  - **Filtered by Active Role**: Only flags relevant to the current user's role are displayed, preventing clutter and cross-user confusion.
+- **Form SDK & Programmatic Feature Control**:
+  - **SDK Methods on `WebViewerInstance`**:
+    - `getFormRoles()`, `setFormRoles()`, `addFormRole()`, `updateFormRole()`, `removeFormRole()`
+    - `getCurrentRole()`, `setCurrentRole()`
+    - `getCurrentUser()`, `setCurrentUser()`
+    - `getFormFields()`, `setFormFields()`, `getFormData()`, `setFormData()`, `clearFormData()`
+    - `validateForm(roleId?)`, `nextFormField(roleId?)`, `previousFormField(roleId?)`
+    - `getFormOptions()`, `setFormOptions()`
+  - **Granular Feature Visibility Controls (`FormFeatureOptions`)**:
+    - `allowRoleSwitching`: Lock users to their assigned role or allow role switching in filler mode.
+    - `showRoleSelector`: Toggle visibility of the role selector dropdown in the toolbar.
+    - `otherRoleFieldsMode`: Configure how fields assigned to other roles are rendered (`'interactive'`, `'view-only'`, or `'hidden'`).
+    - `showSignatureFlags`: Toggle sticky index flags on or off.
+    - `showFlowNavigation`, `showValidation`, `showReset`, `showExport`, `hideToolbar`: Fine-grained visibility toggles for the filler toolbar.
+
+### Breaking Changes
+- **Standardized on Roles**: Removed legacy assignee terminology and aliases (`FormAssignee`, `assigneeId`, `setUser`, `setAssignees`, `actualUser`, etc.) across all models, types, and components in favor of `FormRole`, `FormField.roleId`, and `currentUser`.
+
 ## [1.9.0] — 2026-09-25
 
 ### Added

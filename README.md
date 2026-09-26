@@ -65,20 +65,29 @@ If installing from GitHub Packages registry:
 
 Explore detailed SDK guides, parameter options, code snippets, and architecture deep dives:
 
-- 🏠 **[Wiki Home](docs/wiki/Home.md)**: Main documentation index & overview.
-- 🚀 **[Getting Started Guide](docs/wiki/Getting-Started.md)**: Installation, CDN, and framework setups.
-- ⚙️ **[API Reference & Options](docs/wiki/API-Reference-&-Options.md)**: Complete parameter list for `WebViewerOptions` & `SDKPermissions`.
-- 🎨 **[Annotations & Markup Guide](docs/wiki/Annotations-&-Markup-Guide.md)**: Freehand drawing, vector shapes, callouts & links.
-- 🛡️ **[Redactions & PII Sanitization Guide](docs/wiki/Redactions-&-PII-Sanitization.md)**: Binary redactions, regex PII scanning & discard options.
-- 💧 **[Forensic Watermarking Guide](docs/wiki/Forensic-Watermarking.md)**: Dynamic single and tiled watermark setup.
-- 📄 **[Viewing Office Documents Guide](docs/wiki/Viewing-Office-Documents.md)**: Word (.docx), PowerPoint (.pptx), Excel (.xlsx) high-fidelity viewing & conversion.
-- 🔌 **[Plugin Architecture Guide](docs/wiki/Plugin-Architecture.md)**: Writing custom extension plugins.
+- 🏠 **[Wiki Home](https://github.com/angelbot-ai/TeamSync-PDF-Viewer/wiki/Home)**: Main documentation index & overview.
+- 🚀 **[Getting Started Guide](https://github.com/angelbot-ai/TeamSync-PDF-Viewer/wiki/Getting-Started)**: Installation, CDN, and framework setups.
+- ⚙️ **[API Reference & Options](https://github.com/angelbot-ai/TeamSync-PDF-Viewer/wiki/API-Reference-&-Options)**: Complete parameter list for `WebViewerOptions` & `SDKPermissions`.
+- 📝 **[Interactive Forms & Multi-Role Signatures](https://github.com/angelbot-ai/TeamSync-PDF-Viewer/wiki/Interactive-Forms-&-Multi-Role-Signatures)**: PDF form designer, multi-role template assignment, signature sticky index flags & SDK.
+- 🎨 **[Annotations & Markup Guide](https://github.com/angelbot-ai/TeamSync-PDF-Viewer/wiki/Annotations-&-Markup-Guide)**: Freehand drawing, vector shapes, callouts & links.
+- 🛡️ **[Redactions & PII Sanitization Guide](https://github.com/angelbot-ai/TeamSync-PDF-Viewer/wiki/Redactions-&-PII-Sanitization)**: Binary redactions, regex PII scanning & discard options.
+- 💧 **[Forensic Watermarking Guide](https://github.com/angelbot-ai/TeamSync-PDF-Viewer/wiki/Forensic-Watermarking)**: Dynamic single and tiled watermark setup.
+- 🔌 **[Plugin Architecture Guide](https://github.com/angelbot-ai/TeamSync-PDF-Viewer/wiki/Plugin-Architecture)**: Writing custom extension plugins.
 
 ---
 
 ## ✨ Uncompromised Feature Set
 
 Everything you need to build collaborative, secure document workflows.
+
+### 📝 Interactive PDF Forms & Multi-Role Signatures (v2.0)
+- **Visual Forms Designer ("Forms" Tab)**: Dedicated builder tab to design interactive forms with drag-to-create bounding boxes, 8 interactive resize handles, drag-to-move, and keyboard shortcuts.
+- **Comprehensive Form Field Controls**: Textbox, Text Area, Date & Time Picker (calendar/clock modes), Multi-Choice Checklist, Single-Select Dropdown, and Radio Groups.
+- **Multi-Role Form Templates**: Decoupled template roles (`FormRole`) such as `applicant`, `tenant`, `landlord`, or `reviewer`. Design reusable form templates without hardcoding user IDs.
+- **Host Application User Integration**: Pass the logged-in user profile (`ViewerUser`) containing `id`, `name`, `email`, and `role`. Setting the user automatically activates their role in the form session.
+- **Signature Sticky / Index Flags**: Visual sticky index flags docked along the viewport edge indicate pending signatures for the current user's role. Visible on Page 1 even when signature sections reside on Page 2 or later, with 1-click jump & sign.
+- **Audit-Grade Signatures**: Electronic signatures (canvas drawing, typed handwriting, image upload) and digital certificate signatures (cryptographic SHA-256 seal) automatically recording signer name, email, role, and timestamp.
+- **Interactive Form Filler ("View" Tab)**: Embedded live inputs positioned over PDF pages at exact coordinates, with sequential filling flow, per-role validation, JSON export, and native PDF AcroForm baking.
 
 ### 🎨 Smart Markup & Annotations
 - **Full Drawing Toolkit**: Freehand ink (`brush`), highlighters, geometric shapes (rectangles, ellipses), arrows, and lines.
@@ -165,6 +174,53 @@ function App() {
 }
 ```
 
+### Multi-Role Forms & Electronic Signatures (v2.0)
+
+For multi-party form workflows, role assignment, and signature collection:
+
+```tsx
+import { TeamSyncViewer, WebViewerInstance } from 'teamsync-pdf-viewer';
+import 'teamsync-pdf-viewer/style.css';
+
+function ContractSigningPortal() {
+  const currentUser = {
+    id: 'usr_98124',
+    name: 'Robert Davis',
+    email: 'robert@domain.com',
+    role: 'tenant', // Automatically activates 'tenant' role & signature flags
+  };
+
+  const formRoles = [
+    { id: 'tenant', name: 'Tenant', color: '#2563eb' },
+    { id: 'landlord', name: 'Landlord', color: '#10b981' },
+  ];
+
+  return (
+    <div style={{ width: '100vw', height: '100vh' }}>
+      <TeamSyncViewer
+        initialDoc="/lease-agreement.pdf"
+        currentUser={currentUser}
+        formRoles={formRoles}
+        formOptions={{
+          allowRoleSwitching: false,       // Locked to respondent's assigned role
+          otherRoleFieldsMode: 'view-only', // Read-only for landlord fields
+          showSignatureFlags: true,         // Display side sticky index flags
+        }}
+        onViewerReady={(instance: WebViewerInstance) => {
+          // Programmatic Form SDK
+          console.log('Active Role:', instance.getCurrentRole());
+          console.log('Form Fields:', instance.getFormFields());
+          
+          // Validate current role's required fields
+          const result = instance.validateForm();
+          if (!result.valid) console.warn('Incomplete:', result.errors);
+        }}
+      />
+    </div>
+  );
+}
+```
+
 ---
 
 ## 🛠️ Local Development Quick Start
@@ -226,7 +282,10 @@ WebViewer({
 ```
 TeamSync-PDF-Viewer/
 ├── src/
-│   ├── components/       # Native React UI (Header, DocumentViewer, Sidebars, Modals)
+│   ├── components/       # Native React UI (Header, DocumentViewer, Forms, Modals)
+│   ├── forms/            # Interactive Forms Engine (FormManager, Roles, AcroForm, Signatures)
+│   ├── office/           # Native Microsoft Office document viewing and conversion
+│   ├── annotations/      # Annotation manager, vector rendering, and XFDF engine
 │   ├── hooks/            # Search & Keyboard shortcut hooks
 │   ├── utils/            # Redaction algorithms, rotation transforms & vector helpers
 │   ├── plugins/          # Plugin API interfaces & registry

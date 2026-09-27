@@ -80,21 +80,30 @@ Explore detailed SDK guides, parameter options, code snippets, and architecture 
 
 Everything you need to build collaborative, secure document workflows.
 
-### 📝 Interactive PDF Forms & Multi-Role Signatures (v2.0)
+### 📝 Interactive PDF Forms & Multi-Role Signatures (v2.0 & v2.1)
 - **Visual Forms Designer ("Forms" Tab)**: Dedicated builder tab to design interactive forms with drag-to-create bounding boxes, 8 interactive resize handles, drag-to-move, and keyboard shortcuts.
 - **Comprehensive Form Field Controls**: Textbox, Text Area, Date & Time Picker (calendar/clock modes), Multi-Choice Checklist, Single-Select Dropdown, and Radio Groups.
 - **Multi-Role Form Templates**: Decoupled template roles (`FormRole`) such as `applicant`, `tenant`, `landlord`, or `reviewer`. Design reusable form templates without hardcoding user IDs.
 - **Host Application User Integration**: Pass the logged-in user profile (`ViewerUser`) containing `id`, `name`, `email`, and `role`. Setting the user automatically activates their role in the form session.
-- **Signature Sticky / Index Flags**: Visual sticky index flags docked along the viewport edge indicate pending signatures for the current user's role. Visible on Page 1 even when signature sections reside on Page 2 or later, with 1-click jump & sign.
+- **Signature Sticky / Index Flags & Cross-Page Navigation**: Visual sticky index flags docked along the viewport edge indicate pending signatures for the current user's role. Clicking a flag navigates across pages, smoothly scrolls the field into view (`scrollIntoView`), and triggers a glowing pulse highlight.
 - **Audit-Grade Signatures**: Electronic signatures (canvas drawing, typed handwriting, image upload) and digital certificate signatures (cryptographic SHA-256 seal) automatically recording signer name, email, role, and timestamp.
-- **Interactive Form Filler ("View" Tab)**: Embedded live inputs positioned over PDF pages at exact coordinates, with sequential filling flow, per-role validation, JSON export, and native PDF AcroForm baking.
+- **Interactive Form Filler ("View" Tab)**: Embedded live inputs positioned over PDF pages at exact coordinates, with sequential filling flow, per-page re-render isolation, per-role validation, JSON export, and native PDF AcroForm baking.
 
 ### 🎨 Smart Markup & Annotations
 - **Full Drawing Toolkit**: Freehand ink (`brush`), highlighters, geometric shapes (rectangles, ellipses), arrows, and lines.
 - **Notes & Callouts**: Sticky notes, callout text boxes with directional arrows, and text annotations.
 - **Interactive Hyperlinks**: Create internal page-jump links (`#page=N`) or external web URL links directly on document selections.
 
-### 🛡️ Secure Redaction
+### ⚡ Viewport Virtualization & High-DPI Scaling (v2.1)
+- **Continuous Scroll Canvas Virtualization**: Built-in `IntersectionObserver` with an 800px lookahead buffer. Off-screen canvases unmount and release high-DPI GPU backbuffers immediately (`canvas.width = 0; canvas.height = 0`) while preserving exact wrapper layout geometry. Supports 1,000+ page documents without crashing mobile Safari or bloating tab memory.
+- **Isolated Form Re-renders**: Typing keystrokes only re-evaluate fields on the active page, producing 0 re-renders across all other mounted pages in large documents.
+- **Retina 60 FPS Zoom & Pan**: High-DPI `devicePixelRatio` scaling eliminates blurred text. Micro-debounced rendering enables buttery-smooth 60 FPS trackpad pinching and 360° mouse drag panning.
+- **Contextual Document Search**: Instant client-side text search with real-time match highlighting, result jumping, and match counting.
+
+### 🛡️ Enterprise Security & Redaction (v2.1)
+- **SVG XSS & Stored Injection Protection**: Typed signatures strictly escape XML entities before rendering SVG templates, and fallback signatures are Base64 encoded.
+- **Strict Image Upload MIME Validation**: Enforces whitelist checks (`image/png`, `image/jpeg`, `image/webp`) to prevent executable SVG/HTML payloads.
+- **In-Memory Data URL Decoding**: AcroForm export decodes Base64 data URLs in-memory without external network `fetch()`, blocking SSRF and network errors.
 - **Binary-Level Data Obliteration**: We don't just place black boxes over text—redactions are permanently rasterized and burned into the underlying PDF vector structure.
 - **Text Layer Sanitization**: Redacted text is automatically stripped from the DOM `textLayer` and PDF content streams, preventing copy/paste extraction and search indexing.
 - **Automatic Regex Redactions**: Programmatically locate and redact sensitive PII in a single click.
@@ -103,10 +112,6 @@ Everything you need to build collaborative, secure document workflows.
 ### 📐 Dynamic Layout & Viewport Controls
 - **Fit to Width & Fit to Page**: Container-aware dynamic scaling calculations for responsive reading on any screen size.
 - **Synchronized Page Rotation**: 360° page rotation with real-time vector coordinate transforms so annotations rotate seamlessly with document content.
-
-### 🔍 High-DPI Canvas Rendering & Search
-- **Retina 60 FPS Zoom & Pan**: High-DPI `devicePixelRatio` scaling eliminates blurred text. Micro-debounced rendering enables buttery-smooth 60 FPS trackpad pinching and 360° mouse drag panning.
-- **Contextual Document Search**: Instant client-side text search with real-time match highlighting, result jumping, and match counting.
 
 ### 💧 Dynamic Forensic Watermarking
 - Programmatic, non-destructive watermarks rendered on the fly (single centered or full-page tiled) with customizable text, color, opacity, font size, and rotation.

@@ -75,12 +75,9 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
     if (typeof currentValue === 'object' && currentValue?.certificateHash) {
       return currentValue.certificateHash;
     }
-    const chars = '0123456789abcdef';
-    let hash = '';
-    for (let i = 0; i < 64; i++) {
-      hash += chars[Math.floor(Math.random() * chars.length)];
-    }
-    return hash;
+    const bytes = new Uint8Array(32); // 32 bytes => 64 hex chars
+    window.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   });
 
   // Redraw all stored strokes cleanly on high-DPI canvas

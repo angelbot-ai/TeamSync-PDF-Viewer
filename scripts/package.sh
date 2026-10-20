@@ -9,7 +9,7 @@ ZIP_PATH="$PROJECT_ROOT/teamsync-pdfviewer-package.zip"
 echo "📦 Starting packaging process..."
 
 echo -e "\n🔨 Building the application..."
-npm run build
+npm run build:app
 
 echo -e "\n📁 Preparing package directory..."
 rm -rf "$PACKAGE_DIR"

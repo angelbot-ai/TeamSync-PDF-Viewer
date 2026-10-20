@@ -13,7 +13,7 @@ async function packageApp() {
 
   // 1. Build the Vite app
   console.log('\n🔨 Building the application...');
-  execSync('npm run build', { cwd: PROJECT_ROOT, stdio: 'inherit' });
+  execSync('npm run build:app', { cwd: PROJECT_ROOT, stdio: 'inherit' });
 
   // 2. Prepare the package directory
   console.log('\n📁 Preparing package directory...');

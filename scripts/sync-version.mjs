@@ -52,3 +52,16 @@ export const VERSION: string =
 
 fs.writeFileSync(versionFileUrl, content, 'utf8');
 console.log(`✓ Synchronized src/version.ts to version ${releaseVersion}`);
+
+const apiVersionUrl = new URL('../api/version.ts', import.meta.url);
+if (fs.existsSync(apiVersionUrl)) {
+  const currentApi = fs.readFileSync(apiVersionUrl, 'utf8');
+  const updatedApi = currentApi.replace(
+    /const FALLBACK_VERSION = '[^']+';/,
+    `const FALLBACK_VERSION = '${releaseVersion}';`
+  );
+  if (updatedApi !== currentApi) {
+    fs.writeFileSync(apiVersionUrl, updatedApi, 'utf8');
+    console.log(`✓ Synchronized api/version.ts fallback version to ${releaseVersion}`);
+  }
+}

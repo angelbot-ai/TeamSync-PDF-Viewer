@@ -7,6 +7,7 @@
  */
 export { createWebViewer, WebViewer } from './core/createWebViewer';
 export { WebViewerInstance } from './core/ViewerInstance';
+export type { LoadDocumentOptions } from './core/ViewerInstance';
 export { TeamSyncViewer } from './components/TeamSyncViewer';
 export type { TeamSyncViewerProps } from './components/TeamSyncViewer';
 export * from './types/compare';

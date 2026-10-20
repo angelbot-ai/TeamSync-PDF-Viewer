@@ -187,6 +187,37 @@ export interface WebViewerOptions {
   assets?: PdfAssetPaths;
   /** Send cookies with the document request (same-origin session-bound URLs). Default false. */
   withCredentials?: boolean;
+  /**
+   * Custom HTTP headers sent with every document request (e.g. Authorization: Bearer <token>).
+   * Passed directly to the underlying PDF.js engine.
+   */
+  httpHeaders?: Record<string, string>;
+  /**
+   * Alias for `httpHeaders` providing an alternative headers option.
+   */
+  customHeaders?: Record<string, string>;
+  /**
+   * Maximum number of bytes fetched per HTTP 206 range request.
+   * Default is 65536 (= 64 KB).
+   */
+  rangeChunkSize?: number;
+  /**
+   * Disable chunked streaming of PDF file data.
+   * Default is false.
+   */
+  disableStream?: boolean;
+  /**
+   * Disable automatic background pre-fetching of remaining PDF file chunks when range requests are enabled.
+   * When true, only pages explicitly navigated to are fetched.
+   * Automatically disables streaming as required by the underlying PDF.js engine.
+   * Default is false.
+   */
+  disableAutoFetch?: boolean;
+  /**
+   * Disable HTTP 206 range requests entirely, forcing the full PDF to download.
+   * Default is false.
+   */
+  disableRange?: boolean;
   /** Render the top toolbar. Default true. */
   toolbar?: boolean;
   /** Render the left (thumbnails) and right (comments/search) panels. Default true. */

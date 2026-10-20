@@ -22,6 +22,47 @@ import type {
   FormFeatureOptions,
 } from '../forms/types';
 
+/** Options passed to `instance.loadDocument(url, options)`. */
+export interface LoadDocumentOptions {
+  page?: number;
+  initialPage?: number;
+  /**
+   * Custom HTTP headers sent with every document request (e.g. Authorization: Bearer <token>).
+   * Passed directly to the underlying PDF.js engine.
+   */
+  httpHeaders?: Record<string, string>;
+  /**
+   * Alias for `httpHeaders` providing an alternative headers option.
+   */
+  customHeaders?: Record<string, string>;
+  /**
+   * Maximum number of bytes fetched per HTTP 206 range request.
+   * Default is 65536 (= 64 KB).
+   */
+  rangeChunkSize?: number;
+  /**
+   * Disable chunked streaming of PDF file data.
+   * Default is false.
+   */
+  disableStream?: boolean;
+  /**
+   * Disable automatic background pre-fetching of remaining PDF file chunks when range requests are enabled.
+   * When true, only pages explicitly navigated to are fetched.
+   * Automatically disables streaming as required by the underlying PDF.js engine.
+   * Default is false.
+   */
+  disableAutoFetch?: boolean;
+  /**
+   * Disable HTTP 206 range requests entirely, forcing the full PDF to download.
+   * Default is false.
+   */
+  disableRange?: boolean;
+  /** Send cookies with the document request (same-origin session-bound URLs). Default false. */
+  withCredentials?: boolean;
+  /** Password for password-protected PDFs. */
+  password?: string;
+}
+
 /** Callbacks the React component installs so the instance can reach live state. */
 export interface ViewerBinding {
   getAnnotations(): Annotation[];
@@ -33,7 +74,7 @@ export interface ViewerBinding {
   getCurrentUserName(): string | undefined;
   getCurrentPage(): number;
   getPageCount(): number;
-  loadDocument(url: string): void;
+  loadDocument(url: string, options?: LoadDocumentOptions): void;
   goToPage(pageNumber: number, options?: { smooth?: boolean }): void;
   getTransientHighlights(): TransientHighlight[];
   setTransientHighlights(highlights: TransientHighlight[]): void;
@@ -195,7 +236,7 @@ export class WebViewerInstance {
   /** Load (or reload) a document by URL. Resolves when loaded, rejects on load error. */
   loadDocument(
     url: string,
-    options?: { page?: number; initialPage?: number }
+    options?: LoadDocumentOptions
   ): Promise<{ url: string; numPages: number }> {
     const b = this.binding ?? noBinding();
     const targetPage = options?.page ?? options?.initialPage;
@@ -221,7 +262,7 @@ export class WebViewerInstance {
         offLoaded();
         offError();
       };
-      b.loadDocument(url);
+      b.loadDocument(url, options);
     });
   }
 
@@ -231,7 +272,7 @@ export class WebViewerInstance {
    */
   async loadOrNavigate(
     url: string,
-    options?: { page?: number; initialPage?: number }
+    options?: LoadDocumentOptions
   ): Promise<{ url: string; numPages: number } | void> {
     const targetPage = options?.page ?? options?.initialPage;
     if (this.getDocumentUrl() === url) {

@@ -64,7 +64,7 @@ describe('Cross-Instance Document Linking', () => {
     expect(target).toBe(instB);
 
     await target?.loadOrNavigate(parsed.docUrl!, { page: parsed.pageNumber });
-    expect(loadDocBMock).toHaveBeenCalledWith('supporting.pdf');
+    expect(loadDocBMock).toHaveBeenCalledWith('supporting.pdf', { page: 4 });
   });
 
   it('jumps directly to the target page if the supporting document is already open in Viewer B', async () => {

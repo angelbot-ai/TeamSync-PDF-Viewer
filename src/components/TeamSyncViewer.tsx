@@ -17,7 +17,7 @@ import SettingsModal from './SettingsModal';
 import AboutModal from './AboutModal';
 import { ViewerBus } from '../core/eventBus';
 import { ViewerBusContext } from '../core/busContext';
-import { WebViewerInstance } from '../core/ViewerInstance';
+import { WebViewerInstance, type LoadDocumentOptions } from '../core/ViewerInstance';
 import { AnnotationManager } from '../annotations/AnnotationManager';
 import { FormManager } from '../forms/FormManager';
 import { printPdfBytes } from '../core/print';
@@ -110,7 +110,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     plugins, redactions, regexRedactions,
     enableAnnotations, enableSign = false, watermark, permissions, enableRedactions,
     canAddAnnotations, canEditAnnotations, canDeleteAnnotations, readOnly = false,
-    assets, withCredentials = false, toolbar = true, sidebars = true, leftPanelOpen = true,
+    assets, withCredentials = false, httpHeaders, customHeaders, rangeChunkSize, disableStream, disableAutoFetch, disableRange, toolbar = true, sidebars = true, leftPanelOpen = true,
     className, style, hideAnnotationsUntilPageRendered = true,
     enableTextSelection = true, defaultTool = 'select', showSelectionTooltip = true,
     id, targetViewer, resolveLinkUrl, onLinkClick,
@@ -213,20 +213,22 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   // ---- document ------------------------------------------------------------------------------
   const requestedUrl = fileUrl ?? initialDoc;
   const [docUrl, setDocUrl] = useState<string | undefined>(requestedUrl);
+  const [dynamicDocOptions, setDynamicDocOptions] = useState<LoadDocumentOptions | undefined>(undefined);
   const [loadNonce, setLoadNonce] = useState(0);
   useEffect(() => {
     setDocUrl(requestedUrl);
+    setDynamicDocOptions(undefined);
   }, [requestedUrl]);
-  const loadDocument = useCallback((url: string) => {
+  const loadDocument = useCallback((url: string, options?: LoadDocumentOptions) => {
     setDocUrl(url);
+    setDynamicDocOptions(options);
     setLoadNonce((n) => n + 1);
   }, []);
 
   // ---- Office document conversion handling ---------------------------------------------------
   const officeInfo = useMemo(() => getOfficeDocumentInfo(docUrl), [docUrl]);
-  const [resolvedPdfUrl, setResolvedPdfUrl] = useState<string | undefined>(
-    officeInfo ? undefined : requestedUrl
-  );
+  const [convertedOfficePdfUrl, setConvertedOfficePdfUrl] = useState<string | undefined>(undefined);
+  const resolvedPdfUrl = officeInfo ? convertedOfficePdfUrl : docUrl;
   const [officeConversionState, setOfficeConversionState] = useState<
     'idle' | 'converting' | 'converted' | 'error'
   >(officeInfo ? 'converting' : 'idle');
@@ -234,7 +236,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
 
   useEffect(() => {
     if (!docUrl) {
-      setResolvedPdfUrl(undefined);
+      setConvertedOfficePdfUrl(undefined);
       setOfficeConversionState('idle');
       setOfficeConversionError(null);
       return;
@@ -242,7 +244,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
 
     if (!officeInfo) {
       // Standard PDF document: pass directly to DocumentViewer
-      setResolvedPdfUrl(docUrl);
+      setConvertedOfficePdfUrl(undefined);
       setOfficeConversionState('idle');
       setOfficeConversionError(null);
       return;
@@ -253,7 +255,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
       const err = new Error(
         `Document "${officeInfo.fileName || 'document'}" is a Microsoft ${officeInfo.category} document (${officeInfo.fileType.toUpperCase()}). To view Office files, configure the 'officeConverter' prop on <TeamSyncViewer> or in WebViewer options.`
       );
-      setResolvedPdfUrl(undefined);
+      setConvertedOfficePdfUrl(undefined);
       setOfficeConversionState('error');
       setOfficeConversionError(err);
       bus.emit('officeConversionError', { fileType: officeInfo.fileType, error: err, url: docUrl });
@@ -284,7 +286,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
           return;
         }
         convertedObjectUrl = res.objectUrl;
-        setResolvedPdfUrl(res.objectUrl);
+        setConvertedOfficePdfUrl(res.objectUrl);
         setOfficeConversionState('converted');
         bus.emit('officeConverted', {
           fileType: officeInfo.fileType,
@@ -300,7 +302,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
       .catch((err) => {
         if (cancelled) return;
         const error = err instanceof Error ? err : new Error(String(err));
-        setResolvedPdfUrl(undefined);
+        setConvertedOfficePdfUrl(undefined);
         setOfficeConversionState('error');
         setOfficeConversionError(error);
         bus.emit('officeConversionError', {
@@ -842,7 +844,14 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             annotationManager={annotationManager}
             initialDoc={resolvedPdfUrl}
             loadNonce={loadNonce}
-            withCredentials={withCredentials}
+            withCredentials={dynamicDocOptions?.withCredentials ?? withCredentials}
+            httpHeaders={dynamicDocOptions?.httpHeaders ?? httpHeaders}
+            customHeaders={dynamicDocOptions?.customHeaders ?? customHeaders}
+            rangeChunkSize={dynamicDocOptions?.rangeChunkSize ?? rangeChunkSize}
+            disableStream={dynamicDocOptions?.disableStream ?? disableStream}
+            disableAutoFetch={dynamicDocOptions?.disableAutoFetch ?? disableAutoFetch}
+            disableRange={dynamicDocOptions?.disableRange ?? disableRange}
+            password={dynamicDocOptions?.password}
             assets={assets}
             redactions={redactions}
             regexRedactions={regexRedactions}

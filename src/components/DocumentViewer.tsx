@@ -53,6 +53,20 @@ interface DocumentViewerProps {
   loadNonce?: number;
   /** Send cookies with the document request. */
   withCredentials?: boolean;
+  /** Custom HTTP headers sent with every document request (e.g. Authorization: Bearer <token>). */
+  httpHeaders?: Record<string, string>;
+  /** Alias for `httpHeaders` providing an alternative headers option. */
+  customHeaders?: Record<string, string>;
+  /** Maximum number of bytes fetched per HTTP 206 range request. Default is 65536. */
+  rangeChunkSize?: number;
+  /** Disable chunked streaming of PDF file data. Default false. */
+  disableStream?: boolean;
+  /** Disable automatic background pre-fetching of remaining PDF file chunks. Default false. */
+  disableAutoFetch?: boolean;
+  /** Disable HTTP 206 range requests entirely, forcing full PDF download. Default false. */
+  disableRange?: boolean;
+  /** Password for password-protected PDFs. */
+  password?: string;
   /** pdf.js asset locations, applied right before the document is opened. */
   assets?: PdfAssetPaths;
   /** Render the thumbnails (left) and comments/search (right) panels. Default true. */
@@ -111,7 +125,9 @@ interface DocumentViewerProps {
 }
 
 export default function DocumentViewer({
-  leftSidebarOpen, rightSidebarOpen, activeTab, annotationManager, initialDoc, loadNonce = 0, withCredentials = false, assets, sidebars = true,
+  leftSidebarOpen, rightSidebarOpen, activeTab, annotationManager, initialDoc, loadNonce = 0,
+  withCredentials = false, httpHeaders, customHeaders, rangeChunkSize, disableStream, disableAutoFetch, disableRange, password,
+  assets, sidebars = true,
   redactions, regexRedactions, scale, setScale, sidebarTab, setSidebarTab, onAnnotationsChange, onRedactionsChange, onRedactionsApplied,
   onDocumentLoaded, onLoadError, onFirstPageRendered, onPageRendered, onPageChange,
   pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations: _enableAnnotations, initialPage, page, transientHighlights, permissions,
@@ -180,13 +196,56 @@ export default function DocumentViewer({
   const assetsRef = useRef(assets);
   assetsRef.current = assets;
 
+  const httpHeadersRef = useRef(httpHeaders);
+  httpHeadersRef.current = httpHeaders;
+  const customHeadersRef = useRef(customHeaders);
+  customHeadersRef.current = customHeaders;
+  const rangeChunkSizeRef = useRef(rangeChunkSize);
+  rangeChunkSizeRef.current = rangeChunkSize;
+  const disableStreamRef = useRef(disableStream);
+  disableStreamRef.current = disableStream;
+  const disableAutoFetchRef = useRef(disableAutoFetch);
+  disableAutoFetchRef.current = disableAutoFetch;
+  const disableRangeRef = useRef(disableRange);
+  disableRangeRef.current = disableRange;
+  const passwordRef = useRef(password);
+  passwordRef.current = password;
+
+  const resolveNetworkParams = useCallback(() => {
+    const headers = { ...(customHeadersRef.current || {}), ...(httpHeadersRef.current || {}) };
+    const params: Record<string, any> = {};
+    if (Object.keys(headers).length > 0) {
+      params.httpHeaders = headers;
+    }
+    if (typeof rangeChunkSizeRef.current === 'number' && rangeChunkSizeRef.current > 0) {
+      params.rangeChunkSize = rangeChunkSizeRef.current;
+    }
+    if (typeof disableStreamRef.current === 'boolean') {
+      params.disableStream = disableStreamRef.current;
+    }
+    if (typeof disableAutoFetchRef.current === 'boolean') {
+      params.disableAutoFetch = disableAutoFetchRef.current;
+      // Per PDF.js: disabling auto-fetch also requires disabling streaming
+      if (params.disableStream === undefined && disableAutoFetchRef.current) {
+        params.disableStream = true;
+      }
+    }
+    if (typeof disableRangeRef.current === 'boolean') {
+      params.disableRange = disableRangeRef.current;
+    }
+    if (passwordRef.current) {
+      params.password = passwordRef.current;
+    }
+    return params;
+  }, []);
+
   const loadDocA = useCallback(async (docSource: string | ArrayBuffer | Uint8Array) => {
     try {
       assertWorkerConfigured();
       if (assetsRef.current) configurePdfAssets(assetsRef.current);
       const params: any = typeof docSource === 'string' ? { url: docSource } : { data: docSource };
       if (withCredentials) params.withCredentials = true;
-      Object.assign(params, getDocumentParams());
+      Object.assign(params, resolveNetworkParams(), getDocumentParams());
       const loadingTask = pdfjsLib.getDocument(params);
       const loadedDocA = await loadingTask.promise;
       setPdfDoc(loadedDocA);
@@ -194,7 +253,7 @@ export default function DocumentViewer({
     } catch (err: any) {
       console.error('Failed to load comparison document A:', err);
     }
-  }, [withCredentials]);
+  }, [withCredentials, resolveNetworkParams]);
 
   const loadCompareDoc = useCallback(async (docSource: string | ArrayBuffer | Uint8Array) => {
     try {
@@ -202,7 +261,7 @@ export default function DocumentViewer({
       if (assetsRef.current) configurePdfAssets(assetsRef.current);
       const params: any = typeof docSource === 'string' ? { url: docSource } : { data: docSource };
       if (withCredentials) params.withCredentials = true;
-      Object.assign(params, getDocumentParams());
+      Object.assign(params, resolveNetworkParams(), getDocumentParams());
       const loadingTask = pdfjsLib.getDocument(params);
       const loadedDocB = await loadingTask.promise;
       setPdfDocB(loadedDocB);
@@ -1110,7 +1169,12 @@ export default function DocumentViewer({
       try {
         if (assetsRef.current) configurePdfAssets(assetsRef.current);
         assertWorkerConfigured();
-        loadingTask = pdfjsLib.getDocument({ url, withCredentials, ...getDocumentParams() });
+        loadingTask = pdfjsLib.getDocument({
+          url,
+          withCredentials,
+          ...resolveNetworkParams(),
+          ...getDocumentParams(),
+        });
         const doc = await loadingTask.promise;
         // If the effect was cleaned up meanwhile, the loading task (and its worker transport)
         // has already been destroyed by the cleanup function.

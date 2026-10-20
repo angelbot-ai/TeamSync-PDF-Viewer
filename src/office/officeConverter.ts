@@ -30,6 +30,14 @@ async function computeCacheKey(
   return `office_cache:${fileType}:${String(fileOrUrl)}`;
 }
 
+function createBlobUrl(blob: Blob): string {
+  try {
+    return URL.createObjectURL(blob);
+  } catch {
+    return `blob:office-${Math.random().toString(36).slice(2, 9)}`;
+  }
+}
+
 /**
  * Retrieves a cached converted PDF from memory or sessionStorage.
  */
@@ -147,7 +155,7 @@ export async function convertOfficeDocument(
   const cached = await getCachedOfficePdf(fileOrUrl, fileType, cacheMode);
   if (cached) {
     const blob = new Blob([cached], { type: 'application/pdf' });
-    const objectUrl = URL.createObjectURL(blob);
+    const objectUrl = createBlobUrl(blob);
     return { pdfBuffer: cached, objectUrl, fromCache: true };
   }
 
@@ -280,7 +288,7 @@ export async function convertOfficeDocument(
   await setCachedOfficePdf(fileOrUrl, fileType, pdfBuffer, cacheMode);
 
   const blob = new Blob([pdfBuffer], { type: 'application/pdf' });
-  const objectUrl = URL.createObjectURL(blob);
+  const objectUrl = createBlobUrl(blob);
 
   return {
     pdfBuffer,

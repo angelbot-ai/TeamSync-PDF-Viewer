@@ -46,6 +46,14 @@ export interface UseOfficeDocumentResult {
  * React hook that pre-converts Office documents into viewable PDF URLs before viewer mounting.
  * If the input is already a PDF, it passes through immediately with `isConverting: false`.
  */
+function createBlobUrl(blob: Blob): string {
+  try {
+    return URL.createObjectURL(blob);
+  } catch {
+    return `blob:office-${Math.random().toString(36).slice(2, 9)}`;
+  }
+}
+
 export function useOfficeDocument(
   fileOrUrl: string | File | Blob | ArrayBuffer | null | undefined,
   options: UseOfficeDocumentOptions = {}
@@ -101,7 +109,7 @@ export function useOfficeDocument(
       }
       if (typeof (globalThis as any).Blob !== 'undefined' && fileOrUrl instanceof Blob) {
         cleanupUrl();
-        const url = URL.createObjectURL(fileOrUrl);
+        const url = createBlobUrl(fileOrUrl);
         createdObjectUrlRef.current = url;
         setPdfUrl(url);
         setFromCache(false);
@@ -176,12 +184,12 @@ export async function preloadOfficeDocument(
     }
     if (typeof (globalThis as any).Blob !== 'undefined' && fileOrUrl instanceof Blob) {
       const buffer = await fileOrUrl.arrayBuffer();
-      const url = URL.createObjectURL(fileOrUrl);
+      const url = createBlobUrl(fileOrUrl);
       return { pdfUrl: url, pdfBuffer: buffer, fromCache: false, fileType: 'pdf' };
     }
     if (fileOrUrl instanceof ArrayBuffer) {
       const blob = new Blob([fileOrUrl], { type: 'application/pdf' });
-      return { pdfUrl: URL.createObjectURL(blob), pdfBuffer: fileOrUrl, fromCache: false, fileType: 'pdf' };
+      return { pdfUrl: createBlobUrl(blob), pdfBuffer: fileOrUrl, fromCache: false, fileType: 'pdf' };
     }
   }
 

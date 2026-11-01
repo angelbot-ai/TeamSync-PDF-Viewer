@@ -4,30 +4,32 @@
 
 ![TeamSync PDF Viewer UI](https://raw.githubusercontent.com/angelbot-ai/TeamSync-PDF-Viewer/main/docs/images/viewer_ui.png)
 
-### **100% Open Source. 100% Client-Side. Enterprise SDK.**
+### ** Advanced Web PDF Viewer, Annotation and PDF Forms with PDF Enterprise SDK.**
 
-[![License: CPAL-1.0](https://img.shields.io/badge/License-CPAL--1.0-blue.svg)](LICENSE)
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-pdfviewer.teamsync.com-000000.svg)](https://pdfviewer.teamsync.com/)
 [![NPM Version](https://img.shields.io/badge/npm-teamsync--pdf--viewer-blue.svg)](https://www.npmjs.com/package/teamsync-pdf-viewer)
 [![React 19](https://img.shields.io/badge/React-19-61dafb.svg)](https://reactjs.org/)
 [![Vite 8](https://img.shields.io/badge/Vite-8.2-646cff.svg)](https://vitejs.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue.svg)](https://www.typescriptlang.org/)
 
-*No paywalls. No vendor lock-in. No server dependencies.*  
 Try the **[Interactive Live Demo](https://pdfviewer.teamsync.com/)** or integrate the high-performance PDF Viewer SDK directly into your React applications.
 
 </div>
 
 ---
 
-## 🚀 Why TeamSync PDF Viewer?
+**TeamSync PDF Viewer** allows developers to embed advanced viewing, annotation, and forms capabilities directly into any web application.
 
-Traditional commercial PDF viewers force developers into expensive per-domain licenses, opaque sales calls, and heavy server-side processing dependencies. **TeamSync PDF Viewer** is built from the ground up to solve these pain points.
+⚡ **Universal Document Viewing**: It accurately renders PDFs, Microsoft Office files (Word, Excel, PowerPoint), CAD drawings, and images directly in the browser. It handles massive, complex files smoothly with vector-based zooming and lightning-fast rendering.
 
-- 💰 **Zero-Cost, Transparent Licensing**: Uncapped usage, no per-server fees, and no commercial paywalls. 100% free and open-source under CPAL 1.0.
-- ⚡ **100% Client-Side PDF Processing**: Documents never leave the browser sandbox. Process, redact, and render PDFs entirely on the client. 
-- 🔌 **Universal WebViewer API**: Clean, intuitive `WebViewer({...})` API interface that makes integrating into your web applications effortless.
-- 🎨 **Headless & Customizable**: Built for modern React 19 SPA lifecycles. No bloated iFrames to fight—customize toolbars, sidebars, context menus, and controls natively.
+• **True Client-Side Processing**: Because it processes everything locally using the browser's resources, sensitive files never leave the user's device. This makes it ideal for highly secure environments (like finance, healthcare, or legal apps) and significantly reduces server infrastructure costs.
+
+• **Rich Annotation & Collaboration**: It provides built-in UI tools for highlighting text, adding sticky notes, drawing shapes, stamping, and text callouts. It supports real-time collaboration so multiple users can comment and mark up the same document simultaneously.
+
+• **Interactive Forms & Digital Signatures**: Users can fill out existing PDF forms, build new forms from scratch, and apply secure e-signatures or digital signatures.
+
+• **Advanced Text Editing & Redaction**: It allows users to edit underlying text directly within a PDF as if they were in a word processor. It also features programmatic and manual redaction, permanently wiping sensitive data from the document's code.
+
 
 ---
 
@@ -307,6 +309,8 @@ TeamSync-PDF-Viewer/
 
 Distributed under the **CPAL 1.0 (Common Public Attribution License)**.  
 100% Free and Open Source for personal and commercial usage.
+
+[![License: CPAL-1.0](https://img.shields.io/badge/License-CPAL--1.0-blue.svg)](LICENSE)
 
 ---
 

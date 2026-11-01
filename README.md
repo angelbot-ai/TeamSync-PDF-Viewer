@@ -4,7 +4,7 @@
 
 ![TeamSync PDF Viewer UI](https://raw.githubusercontent.com/angelbot-ai/TeamSync-PDF-Viewer/main/docs/images/viewer_ui.png)
 
-### ** Advanced Web PDF Viewer, Annotation and PDF Forms with PDF Enterprise SDK.**
+###  Advanced Web PDF Viewer, Annotation and PDF Forms with PDF Enterprise SDK.
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-pdfviewer.teamsync.com-000000.svg)](https://pdfviewer.teamsync.com/)
 [![NPM Version](https://img.shields.io/badge/npm-teamsync--pdf--viewer-blue.svg)](https://www.npmjs.com/package/teamsync-pdf-viewer)

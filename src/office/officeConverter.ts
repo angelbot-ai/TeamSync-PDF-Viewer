@@ -34,7 +34,12 @@ function createBlobUrl(blob: Blob): string {
   try {
     return URL.createObjectURL(blob);
   } catch {
-    return `blob:office-${Math.random().toString(36).slice(2, 9)}`;
+    const cryptoObj = (globalThis as { crypto?: Crypto }).crypto;
+    if (cryptoObj?.getRandomValues) {
+      const randomValue = cryptoObj.getRandomValues(new Uint32Array(1))[0];
+      return `blob:office-${randomValue.toString(36)}`;
+    }
+    return `blob:office-${Date.now().toString(36)}`;
   }
 }
 

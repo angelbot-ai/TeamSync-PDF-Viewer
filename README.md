@@ -78,7 +78,7 @@ Explore detailed SDK guides, parameter options, code snippets, and architecture 
 
 ---
 
-## ✨ Uncompromised Feature Set
+## ✨ Feature Set
 
 Everything you need to build collaborative, secure document workflows.
 

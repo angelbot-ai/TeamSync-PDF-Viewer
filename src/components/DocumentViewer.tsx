@@ -13,7 +13,7 @@ import LeftSidebar from './LeftSidebar';
 import { usePdfSearch, type SearchResult } from '../hooks/usePdfSearch';
 import PageRenderer from './PageRenderer';
 import type { Annotation } from '../annotations/types';
-import { newAnnotationId } from '../annotations/ids';
+import { newAnnotationId, generateSecureId } from '../annotations/ids';
 import type { AnnotationManager } from '../annotations/AnnotationManager';
 import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths, TransientHighlight, ToolMode, InitialScale, LinkClickEvent, WebViewerInstance } from '../core/types';
 import { parseLinkTarget } from '../utils/linkUtils';
@@ -1602,7 +1602,7 @@ export default function DocumentViewer({
         if (activeTool === 'redaction') {
           if (permissions?.canRedact === false) return;
           setManualRedactions(prev => [...prev, {
-            id: `manual-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+            id: generateSecureId('manual'),
             pageIndex: targetPageNum,
             x,
             y,

@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { X, Plus, Trash2, ArrowUp, ArrowDown, User, Palette, Sliders, Type, AlignLeft, AlignCenter, AlignRight, Bold, Italic, PenTool, ShieldCheck } from 'lucide-react';
 import type { FormField, DateTimeFormat, FormRole, SignatureType } from '../forms/types';
 import { DEFAULT_ROLES } from '../forms/FormManager';
+import { generateSecureId } from '../annotations/ids';
 
 interface FormFieldEditorModalProps {
   field: FormField;
@@ -116,7 +117,7 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
   const handleQuickAddRole = () => {
     const trimmed = newRoleName.trim();
     if (!trimmed) return;
-    const id = `role_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const id = generateSecureId('role');
     const newRole: FormRole = {
       id,
       name: trimmed,

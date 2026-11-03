@@ -19,6 +19,7 @@ import { ViewerBus } from '../core/eventBus';
 import { ViewerBusContext } from '../core/busContext';
 import { WebViewerInstance, type LoadDocumentOptions } from '../core/ViewerInstance';
 import { AnnotationManager } from '../annotations/AnnotationManager';
+import { generateSecureId } from '../annotations/ids';
 import { FormManager } from '../forms/FormManager';
 import { printPdfBytes } from '../core/print';
 import { useShortcuts, matchShortcut } from '../hooks/useShortcuts';
@@ -101,8 +102,7 @@ export interface TeamSyncViewerProps extends Omit<WebViewerOptions, 'path'> {
   style?: React.CSSProperties;
 }
 
-const newId = (): string =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const newId = (): string => generateSecureId('inst');
 
 export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewerProps>(function TeamSyncViewer(props, ref) {
   const {

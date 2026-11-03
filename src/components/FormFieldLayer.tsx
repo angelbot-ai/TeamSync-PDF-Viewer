@@ -10,6 +10,7 @@ import type { FormManager } from '../forms/FormManager';
 import { FormFieldEditorModal } from './FormFieldEditorModal';
 import { FormSignatureModal } from './FormSignatureModal';
 import { convertToRotatedRect, convertToUnrotated } from '../utils/rotationUtils';
+import { generateSecureId } from '../annotations/ids';
 
 interface FormFieldLayerProps {
   pageNum: number;
@@ -26,10 +27,7 @@ interface FormFieldLayerProps {
   selectedRoleFilter?: string | null;
 }
 
-const newId = (): string =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const newId = (): string => generateSecureId('field');
 
 export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
   pageNum,

@@ -11,6 +11,7 @@ import type {
   FormFeatureOptions,
 } from './types';
 import type { ViewerUser } from '../core/types';
+import { generateSecureId } from '../annotations/ids';
 
 export const DEFAULT_FORM_OPTIONS: FormFeatureOptions = {
   canCreateForms: true,
@@ -193,7 +194,7 @@ export class FormManager {
     // Ensure unique ID
     const exists = this.fields.some((f) => f.id === field.id);
     const newField: FormField = exists
-      ? { ...field, id: `field_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` }
+      ? { ...field, id: generateSecureId('field') }
       : { ...field };
 
     if (!newField.flowOrder) {

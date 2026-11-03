@@ -4,6 +4,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import type { Redaction } from '../core/types';
 import { buildPageText } from './pageText';
+import { generateSecureId } from '../annotations/ids';
 
 export async function findRegexRedactions(
   pdfDoc: pdfjsLib.PDFDocumentProxy,
@@ -89,7 +90,7 @@ export async function findRegexRedactions(
             const topY = viewport.height - ty - matchHeight;
             
             redactions.push({
-              id: `regex-${pageNum}-${Math.random().toString(36).substr(2, 9)}`,
+              id: generateSecureId(`regex-${pageNum}`),
               pageIndex: pageNum,
               x: startX - padding,
               y: topY - padding,

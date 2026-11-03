@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Users, Plus, Trash2, Check, Sparkles } from 'lucide-react';
 import type { FormManager } from '../forms/FormManager';
 import type { FormRole } from '../forms/types';
+import { generateSecureId } from '../annotations/ids';
 
 interface FormUsersModalProps {
   formManager: FormManager;
@@ -86,7 +87,7 @@ export const FormUsersModal: React.FC<FormUsersModalProps> = ({
       return;
     }
 
-    const id = `role_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const id = generateSecureId('role');
     const newRole: FormRole = {
       id,
       name: trimmed,
@@ -127,7 +128,7 @@ export const FormUsersModal: React.FC<FormUsersModalProps> = ({
     }
 
     const newRoles: FormRole[] = template.users.map((u, idx) => ({
-      id: `role_${idx + 1}_${Math.random().toString(36).slice(2, 6)}`,
+      id: generateSecureId(`role_${idx + 1}`),
       name: u.name,
       color: u.color,
     }));

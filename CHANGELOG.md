@@ -2,6 +2,25 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [2.2.1] — 2026-11-03
+
+### Security
+- **Cryptographically Secure Identifier Generation**: Replaced pseudo-random number generator routines with cryptographically secure random values (`crypto.randomUUID()` and `crypto.getRandomValues()`) across fallback blob URLs, manual redactions, and form roles, resolving CodeQL alert CWE-338.
+- **Vulnerability Patches & Dependency Updates**:
+  - Upgraded `vite` to `^8.3.5` resolving launch-editor command execution and filesystem bypass advisories.
+  - Upgraded `vitest` to `^5.0.5` (resolving to `5.1.0`) fixing `@vitest/mocker` code injection and path traversal advisories.
+  - Upgraded `vite-plugin-dts` to `^5.1.2` resolving `minimatch` glob amplification denial-of-service advisory.
+  - Upgraded `undici` to `^8.12.3` resolving cache poisoning, TLS options dropping, and DoS advisories.
+  - Upgraded `fast-uri` to `^3.1.9` and `source-map-js` to `^1.2.2`.
+  - Achieved clean `npm audit` with 0 reported vulnerabilities.
+
+## [2.2.0] — 2026-10-20
+
+### Added
+- **Network Authentication Headers**: Added `httpHeaders` and `customHeaders` options to `WebViewerOptions` and `loadDocument(url, options)` allowing authenticated document requests with session tokens and custom HTTP headers.
+- **Progressive Streaming Controls**: Added `rangeChunkSize`, `disableStream`, `disableAutoFetch`, and `disableRange` options to control document downloading behavior and prevent background bandwidth consumption.
+- **Cross-Environment Compatibility**: Enhanced `createBlobUrl` fallback for environments lacking native `URL.createObjectURL(blob)` support (e.g. Node 22 / jsdom).
+
 ## [2.0.0] — 2026-09-26
 
 ### Added

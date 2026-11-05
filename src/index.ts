@@ -96,6 +96,8 @@ export type {
 export { VERSION } from './version';
 export { FormManager, DEFAULT_FORM_OPTIONS, DEFAULT_ROLES } from './forms/FormManager';
 export type { FormFieldsChangeEvent, FormFieldsChangeListener, FormDataChangeListener } from './forms/FormManager';
+export { extractAcroFormFields } from './forms/acroFormIngestion';
+export { parseXfdfFormFields } from './annotations/xfdf';
 export type {
   FormField,
   FormFieldType,
@@ -107,5 +109,11 @@ export type {
   FormValidationResult,
   FormToolType,
   FormFeatureOptions,
+  FormFieldValueChangedEvent,
+  FormSignatureAppliedEvent,
+  FormSignatureClearedEvent,
+  FormFieldAddedEvent,
+  FormFieldRemovedEvent,
+  FormFieldUpdatedEvent,
 } from './forms/types';
 

@@ -10,8 +10,10 @@
  * authority (base page space <-> PDF user space).
  */
 import type { Annotation, AnnotationInput, AnnotationPoint } from './types';
-import { newAnnotationId } from './ids';
+import type { FormField, FormDataRecord } from '../forms/types';
+import { newAnnotationId, generateSecureId } from './ids';
 import {
+  createPageGeometry,
   fmt,
   pathFromPdf,
   pathToPdf,
@@ -93,7 +95,7 @@ function readCustomData(el: Element): Record<string, unknown> {
   if (!node) return {};
   try {
     const parsed = JSON.parse(node.getAttribute('bytes') || '{}');
-    const data = parsed?.[CUSTOM_KEY];
+    const data = parsed?.[CUSTOM_KEY] || parsed?.custom || parsed;
     return data && typeof data === 'object' ? data : {};
   } catch {
     return {};
@@ -347,6 +349,9 @@ function elementToAnnotation(el: Element, g: PageGeometry): Annotation | null {
   });
 
   switch (kind) {
+    case 'widget':
+      // Widget form fields in XFDF are handled by parseXfdfFormFields / FormManager (F13)
+      return null;
     case 'square':
       return { ...base, type: 'rectangle' };
     case 'circle':
@@ -468,4 +473,91 @@ export async function parseXfdf(xml: string, resolve: GeometryResolver): Promise
     if (ann) out.push(ann);
   }
   return out;
+}
+
+/**
+ * Extracts form field definitions (<widget>) and field values (<fields>) from an XFDF document (F13).
+ */
+export async function parseXfdfFormFields(
+  xml: string,
+  resolve?: GeometryResolver,
+  roleMapper?: (customData: Record<string, string>) => string | undefined
+): Promise<{ fields: FormField[]; values: FormDataRecord }> {
+  const cleaned = stripXmlDeclarations(xml).trim();
+  if (!cleaned) return { fields: [], values: {} };
+  if (/<!DOCTYPE|<!ENTITY/i.test(cleaned)) {
+    throw new Error('[teamsync-pdf-viewer] invalid XFDF: DOCTYPE/ENTITY declarations are not allowed');
+  }
+
+  const wrapped = `<xfdf xmlns="${XFDF_NS}">${cleaned}</xfdf>`;
+  const doc = new DOMParser().parseFromString(wrapped, 'application/xml');
+  const error = doc.getElementsByTagName('parsererror')[0];
+  if (error) throw new Error(`[teamsync-pdf-viewer] invalid XFDF: ${error.textContent?.slice(0, 200)}`);
+
+  // 1. Extract values from <fields> / <field> / <value>
+  const values: FormDataRecord = {};
+  const fieldEls = Array.from(doc.getElementsByTagName('*')).filter((n) => n.localName === 'field');
+  for (const f of fieldEls) {
+    const name = f.getAttribute('name');
+    if (!name) continue;
+    const valueEl = Array.from(f.children).find((c) => c.localName === 'value');
+    if (valueEl && valueEl.textContent !== null) {
+      values[name] = valueEl.textContent.trim();
+    }
+  }
+
+  // 2. Extract <widget> tags
+  const fields: FormField[] = [];
+  const widgets = Array.from(doc.getElementsByTagName('*')).filter((n) => n.localName === 'widget');
+
+  for (const w of widgets) {
+    const page = (parseInt(w.getAttribute('page') || '0', 10) || 0) + 1;
+    const g = resolve ? await resolve(page) : createPageGeometry(page, [0, 0, 600, 800], 0);
+    const rectCoords = parseNumbers(w.getAttribute('rect'));
+    if (rectCoords.length < 4) continue;
+    const r = rectFromPdf(g, [rectCoords[0], rectCoords[1], rectCoords[2], rectCoords[3]]);
+    const name = w.getAttribute('field') || w.getAttribute('name') || `field_${fields.length + 1}`;
+    const custom = readCustomData(w);
+    const flags = (w.getAttribute('flags') || '').toLowerCase();
+    const readOnly = flags.includes('readonly') || flags.includes('locked');
+
+    const strCustom: Record<string, string> = {};
+    for (const [k, v] of Object.entries(custom)) {
+      if (typeof v === 'string') strCustom[k] = v;
+      else if (v !== null && v !== undefined) strCustom[k] = String(v);
+    }
+    const assignedParty = strCustom.assignedParty || strCustom.roleId || strCustom.party;
+    const resolvedRoleId = roleMapper ? roleMapper(strCustom) : assignedParty;
+    const roleId = typeof resolvedRoleId === 'string' ? resolvedRoleId : undefined;
+
+    let type: FormField['type'] = 'text';
+    const lowerName = name.toLowerCase();
+    const ft = w.getAttribute('ft');
+    if (lowerName.includes('sig') || custom.signatureType || ft === 'Sig') {
+      type = 'signature';
+    } else if (lowerName.includes('check') || ft === 'Btn') {
+      type = 'checkbox';
+    } else if (lowerName.includes('choice') || lowerName.includes('drop') || ft === 'Ch') {
+      type = 'dropdown';
+    } else if (lowerName.includes('radio')) {
+      type = 'radio';
+    }
+
+    fields.push({
+      id: w.getAttribute('name') || generateSecureId('field'),
+      name,
+      type,
+      pageIndex: page,
+      x: Math.round(r.x),
+      y: Math.round(r.y),
+      width: Math.round(r.width),
+      height: Math.round(r.height),
+      required: flags.includes('required'),
+      readOnly,
+      roleId,
+      defaultValue: values[name],
+    });
+  }
+
+  return { fields, values };
 }

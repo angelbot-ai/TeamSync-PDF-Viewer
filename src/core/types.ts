@@ -296,6 +296,15 @@ export interface LinkClickEvent {
   readonly defaultPrevented: boolean;
 }
 
+import type {
+  FormFieldValueChangedEvent,
+  FormSignatureAppliedEvent,
+  FormSignatureClearedEvent,
+  FormFieldAddedEvent,
+  FormFieldRemovedEvent,
+  FormFieldUpdatedEvent,
+} from '../forms/types';
+
 /** Events available through `instance.on(type, listener)`. */
 export interface ViewerEventMap {
   documentLoaded: { url: string; numPages: number };
@@ -313,6 +322,24 @@ export interface ViewerEventMap {
   textSelected: { text: string };
   textCopied: { text: string };
   linkClicked: LinkClickEvent;
+  /** Fires when active UI tab changes (View / Annotate / Forms). */
+  tabChanged: { tab: string };
+  /** Granular form field value change event (F18). */
+  fieldValueChanged: FormFieldValueChangedEvent;
+  /** Granular signature applied event (F18). */
+  signatureApplied: FormSignatureAppliedEvent;
+  /** Granular signature cleared event (F18). */
+  signatureCleared: FormSignatureClearedEvent;
+  /** Form field schema added (F18). */
+  fieldAdded: FormFieldAddedEvent;
+  /** Form field schema removed (F18). */
+  fieldRemoved: FormFieldRemovedEvent;
+  /** Form field schema updated (F18). */
+  fieldUpdated: FormFieldUpdatedEvent;
+  /** Full form data changed event. */
+  formDataChanged: { data: Record<string, any> };
+  /** Full form fields schema changed event. */
+  formFieldsChanged: { fields: FormField[] };
   /** Fires when an Office document begins conversion. */
   officeConverting: { fileType: OfficeFileType; url?: string; fileName?: string };
   /** Fires when an Office document finishes conversion successfully. */

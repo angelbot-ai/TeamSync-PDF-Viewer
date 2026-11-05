@@ -14,6 +14,7 @@ interface FormSignatureModalProps {
   role?: FormRole;
   currentUser?: ViewerUser | null;
   currentValue?: FormSignatureValue | any;
+  adoptedSignature?: FormSignatureValue | null;
   defaultSignerName?: string;
   onSave: (value: FormSignatureValue) => void;
   onClear?: () => void;
@@ -25,6 +26,7 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
   role,
   currentUser,
   currentValue,
+  adoptedSignature,
   defaultSignerName = '',
   onSave,
   onClear,
@@ -70,14 +72,12 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
   const penColorRef = useRef(penColor);
   penColorRef.current = penColor;
 
-  // Generate SHA-256 style fingerprint for digital signature preview
-  const [certFingerprint] = useState(() => {
+  // Generate or read certificate fingerprint
+  const [certFingerprint] = useState<string>(() => {
     if (typeof currentValue === 'object' && currentValue?.certificateHash) {
       return currentValue.certificateHash;
     }
-    const bytes = new Uint8Array(32); // 32 bytes => 64 hex chars
-    window.crypto.getRandomValues(bytes);
-    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    return '';
   });
 
   // Redraw all stored strokes cleanly on high-DPI canvas
@@ -481,6 +481,46 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
             <X size={18} />
           </button>
         </div>
+
+        {/* Adopted Signature Banner (F17) */}
+        {adoptedSignature?.dataUrl && signatureType === 'electronic' && (
+          <div
+            style={{
+              padding: '8px 20px',
+              backgroundColor: '#f0fdf4',
+              borderBottom: '1px solid #bbf7d0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Check size={14} color="#16a34a" />
+              <span style={{ fontSize: '12px', color: '#166534', fontWeight: 500 }}>
+                You have an adopted signature from this session
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onSave(adoptedSignature);
+                onClose();
+              }}
+              style={{
+                padding: '4px 10px',
+                backgroundColor: '#16a34a',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Apply Adopted
+            </button>
+          </div>
+        )}
 
         {/* Signature Type Switcher (if field allows both, or author didn't enforce strictly) */}
         <div
@@ -954,19 +994,34 @@ export const FormSignatureModal: React.FC<FormSignatureModalProps> = ({
                   <div style={{ fontSize: '11px', color: '#475569', marginBottom: '6px' }}>
                     Reason: {signingReason}
                   </div>
-                  <div
-                    style={{
-                      fontSize: '9.5px',
-                      color: '#0369a1',
-                      fontFamily: 'monospace',
-                      wordBreak: 'break-all',
-                      backgroundColor: '#e0f2fe',
-                      padding: '4px 6px',
-                      borderRadius: '4px',
-                    }}
-                  >
-                    SHA-256: {certFingerprint.slice(0, 32)}...
-                  </div>
+                  {certFingerprint ? (
+                    <div
+                      style={{
+                        fontSize: '9.5px',
+                        color: '#0369a1',
+                        fontFamily: 'monospace',
+                        wordBreak: 'break-all',
+                        backgroundColor: '#e0f2fe',
+                        padding: '4px 6px',
+                        borderRadius: '4px',
+                      }}
+                    >
+                      SHA-256: {certFingerprint.slice(0, 32)}...
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        fontSize: '10px',
+                        color: '#64748b',
+                        fontStyle: 'italic',
+                        backgroundColor: '#f1f5f9',
+                        padding: '4px 6px',
+                        borderRadius: '4px',
+                      }}
+                    >
+                      Visual Approval Stamp · Timestamped audit entry
+                    </div>
+                  )}
                 </div>
               </div>
 

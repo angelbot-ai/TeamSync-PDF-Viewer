@@ -34,6 +34,8 @@ export interface ExportInput {
   signerName?: string;
   formFields?: FormField[];
   formData?: FormDataRecord;
+  /** Whether to lock and flatten form fields into static page content on export (F5). */
+  flatten?: boolean;
 }
 
 export interface ExportOptions {
@@ -41,6 +43,8 @@ export interface ExportOptions {
   explicitAnnotations?: Annotation[];
   /** Accepted for API compatibility; annotations are always taken from the live list / explicitAnnotations. */
   xfdfString?: string;
+  /** Whether to lock and flatten form fields into static page content on export (F5). */
+  flatten?: boolean;
 }
 
 const hexToRgb = (hex: string | undefined) => {
@@ -402,7 +406,20 @@ export async function buildPdfBytes(input: ExportInput, options: ExportOptions =
   if (input.formFields && input.formFields.length > 0) {
     const form = pdfDoc.getForm();
     const values = input.formData || {};
-    const usedFieldNames = new Set<string>();
+    let helveticaFont: any = null;
+    try {
+      helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    } catch {}
+
+    // Index pre-existing fields in the PDF document (F1, F12)
+    const initialPdfFields = new Map<string, any>();
+    try {
+      for (const f of form.getFields()) {
+        initialPdfFields.set(f.getName(), f);
+      }
+    } catch {}
+
+    const usedFieldNames = new Set<string>(initialPdfFields.keys());
 
     const getUniqueFieldName = (baseName: string): string => {
       let name = (baseName || 'field').trim();
@@ -439,53 +456,164 @@ export async function buildPdfBytes(input: ExportInput, options: ExportOptions =
       const w = Math.max(10, urx - llx);
       const h = Math.max(10, ury - lly);
       const filledVal = values[field.name] !== undefined ? values[field.name] : field.defaultValue;
-      const uniqueFieldName = getUniqueFieldName(field.name);
+      const rawFieldName = (field.name || 'field').trim();
+      const existingField = initialPdfFields.get(rawFieldName);
+      if (existingField) {
+        initialPdfFields.delete(rawFieldName);
+      }
+      const fieldName = existingField ? rawFieldName : getUniqueFieldName(rawFieldName);
 
       try {
-        if (field.type === 'text' || (field.type as string) === 'textbox') {
-          const tf = form.createTextField(uniqueFieldName);
+        if (existingField) {
+          // Field already exists in the PDF: update its value in-place (F1)
+          if (field.type === 'text' || (field.type as string) === 'textbox' || field.type === 'datetime') {
+            if (typeof existingField.setText === 'function') {
+              existingField.setText(filledVal !== undefined && filledVal !== null && filledVal !== '' ? String(filledVal) : '');
+            }
+          } else if (field.type === 'textarea') {
+            if (typeof existingField.enableMultiline === 'function') existingField.enableMultiline();
+            if (typeof existingField.setText === 'function') {
+              existingField.setText(filledVal !== undefined && filledVal !== null && filledVal !== '' ? String(filledVal) : '');
+            }
+          } else if (field.type === 'checkbox') {
+            if (Boolean(filledVal)) {
+              if (typeof existingField.check === 'function') existingField.check();
+            } else {
+              if (typeof existingField.uncheck === 'function') existingField.uncheck();
+            }
+          } else if (field.type === 'dropdown') {
+            if (field.options && field.options.length > 0 && typeof existingField.setOptions === 'function') {
+              try { existingField.setOptions(field.options); } catch {}
+            }
+            if (filledVal !== undefined && filledVal !== null && filledVal !== '' && typeof existingField.select === 'function') {
+              try { existingField.select(String(filledVal)); } catch {}
+            }
+          } else if (field.type === 'radio') {
+            if (filledVal !== undefined && filledVal !== null && filledVal !== '' && typeof existingField.select === 'function') {
+              try { existingField.select(String(filledVal)); } catch {}
+            }
+          } else if (field.type === 'checklist') {
+            const opts = field.options && field.options.length > 0 ? field.options : ['Item 1'];
+            const selectedList = Array.isArray(filledVal) ? filledVal : [];
+            opts.forEach((opt, idx) => {
+              const optKey = `${fieldName}.${opt.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+              const cb = initialPdfFields.get(optKey) || initialPdfFields.get(`${fieldName}_${idx}`);
+              if (cb && typeof cb.check === 'function') {
+                if (selectedList.includes(opt)) {
+                  cb.check();
+                } else if (typeof cb.uncheck === 'function') {
+                  cb.uncheck();
+                }
+              }
+            });
+          }
+
+          if (field.readOnly && typeof existingField.enableReadOnly === 'function') {
+            existingField.enableReadOnly();
+          }
+        } else if (field.type === 'text' || (field.type as string) === 'textbox') {
+          const tf = form.createTextField(fieldName);
           tf.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
           if (field.fontSize) {
             try { tf.setFontSize(field.fontSize); } catch {}
           }
           if (filledVal !== undefined && filledVal !== null && filledVal !== '') tf.setText(String(filledVal));
+          if (field.readOnly) tf.enableReadOnly();
         } else if (field.type === 'textarea') {
-          const tf = form.createTextField(uniqueFieldName);
+          const tf = form.createTextField(fieldName);
           tf.enableMultiline();
           tf.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
           if (field.fontSize) {
             try { tf.setFontSize(field.fontSize); } catch {}
           }
           if (filledVal !== undefined && filledVal !== null && filledVal !== '') tf.setText(String(filledVal));
+          if (field.readOnly) tf.enableReadOnly();
         } else if (field.type === 'datetime') {
-          const tf = form.createTextField(uniqueFieldName);
+          const tf = form.createTextField(fieldName);
           tf.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
           if (field.fontSize) {
             try { tf.setFontSize(field.fontSize); } catch {}
           }
           if (filledVal !== undefined && filledVal !== null && filledVal !== '') tf.setText(String(filledVal));
+          if (field.readOnly) tf.enableReadOnly();
         } else if (field.type === 'checkbox') {
-          const cb = form.createCheckBox(uniqueFieldName);
+          const cb = form.createCheckBox(fieldName);
           cb.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
           if (Boolean(filledVal)) cb.check();
+          if (field.readOnly) cb.enableReadOnly();
         } else if (field.type === 'dropdown') {
-          const dd = form.createDropdown(uniqueFieldName);
+          const dd = form.createDropdown(fieldName);
           if (field.options && field.options.length > 0) dd.setOptions(field.options);
           dd.addToPage(targetPage, { x: llx, y: lly, width: w, height: h });
           if (filledVal) dd.select(String(filledVal));
+          if (field.readOnly) dd.enableReadOnly();
+        } else if (field.type === 'radio') {
+          // Export radio group (F2)
+          const rg = form.createRadioGroup(fieldName);
+          const opts = field.options && field.options.length > 0 ? field.options : ['Option 1', 'Option 2'];
+          const itemH = h / opts.length;
+          opts.forEach((opt, idx) => {
+            const boxSize = Math.min(itemH - 4, 14);
+            const optY = lly + h - (idx + 1) * itemH + (itemH - boxSize) / 2;
+            rg.addOptionToPage(opt, targetPage, {
+              x: llx,
+              y: optY,
+              width: boxSize,
+              height: boxSize,
+            });
+            if (helveticaFont) {
+              try {
+                targetPage.drawText(opt, {
+                  x: llx + boxSize + 4,
+                  y: optY + 2,
+                  size: Math.min(boxSize, 10),
+                  font: helveticaFont,
+                  color: rgb(15 / 255, 23 / 255, 42 / 255),
+                });
+              } catch {}
+            }
+          });
+          if (filledVal) {
+            try { rg.select(String(filledVal)); } catch {}
+          }
+          if (field.readOnly) rg.enableReadOnly();
         } else if (field.type === 'checklist') {
+          // Export checklist with hierarchical naming and text labels (F3)
           const opts = field.options && field.options.length > 0 ? field.options : ['Item 1'];
           const itemH = h / opts.length;
           const selectedList = Array.isArray(filledVal) ? filledVal : [];
           opts.forEach((opt, idx) => {
-            const cb = form.createCheckBox(getUniqueFieldName(`${field.name}_${idx}`));
-            cb.addToPage(targetPage, {
-              x: llx,
-              y: lly + h - (idx + 1) * itemH + 2,
-              width: Math.min(itemH - 4, 16),
-              height: Math.min(itemH - 4, 16),
-            });
-            if (selectedList.includes(opt)) cb.check();
+            const optKey = `${fieldName}.${opt.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+            const boxSize = Math.min(itemH - 4, 14);
+            const optY = lly + h - (idx + 1) * itemH + (itemH - boxSize) / 2;
+            let cb = initialPdfFields.get(optKey) || initialPdfFields.get(`${fieldName}_${idx}`);
+            if (!cb) {
+              cb = form.createCheckBox(optKey);
+              cb.addToPage(targetPage, {
+                x: llx,
+                y: optY,
+                width: boxSize,
+                height: boxSize,
+              });
+              usedFieldNames.add(optKey);
+            }
+            if (selectedList.includes(opt)) {
+              cb.check();
+            } else if (typeof cb.uncheck === 'function') {
+              cb.uncheck();
+            }
+            if (field.readOnly) cb.enableReadOnly();
+            if (helveticaFont) {
+              try {
+                targetPage.drawText(opt, {
+                  x: llx + boxSize + 4,
+                  y: optY + 2,
+                  size: Math.min(boxSize, 10),
+                  font: helveticaFont,
+                  color: rgb(15 / 255, 23 / 255, 42 / 255),
+                });
+              } catch {}
+            }
           });
         } else if (field.type === 'signature') {
           const dataUrl = typeof filledVal === 'object' && filledVal ? (filledVal.dataUrl || (filledVal as any).imageUrl) : (typeof filledVal === 'string' && filledVal.startsWith('data:') ? filledVal : undefined);
@@ -500,7 +628,7 @@ export async function buildPdfBytes(input: ExportInput, options: ExportOptions =
               targetPage.drawImage(image, { x: llx, y: lly, width: w, height: h });
               if (typeof filledVal === 'object' && filledVal?.signerName) {
                 try {
-                  targetPage.drawText(`Digitally signed by ${filledVal.signerName}`, {
+                  targetPage.drawText(`Signed electronically by ${filledVal.signerName}`, {
                     x: llx,
                     y: Math.max(0, lly - 10),
                     size: 8,
@@ -509,14 +637,17 @@ export async function buildPdfBytes(input: ExportInput, options: ExportOptions =
                 } catch {}
               }
             } catch (err) {
-              console.warn('[export] Failed to embed signature image:', err);
+              console.warn('[teamsync-pdf-viewer] Failed to embed signature image:', err);
             }
           } else {
-            // Unsigned signature placeholder box with baseline
-            targetPage.drawRectangle({ x: llx, y: lly, width: w, height: h, color: rgb(1, 1, 1), borderColor: rgb(148 / 255, 163 / 255, 184 / 255), borderWidth: 1 });
-            targetPage.drawLine({ start: { x: llx + 8, y: lly + 14 }, end: { x: llx + w - 8, y: lly + 14 }, color: rgb(148 / 255, 163 / 255, 184 / 255), thickness: 1 });
-            targetPage.drawText('X', { x: llx + 10, y: lly + 17, size: 10, color: rgb(100 / 255, 116 / 255, 139 / 255) });
-            targetPage.drawText(field.label || 'Signature', { x: llx + 24, y: lly + 17, size: 8.5, color: rgb(100 / 255, 116 / 255, 139 / 255) });
+            // F4: Do NOT burn "X Signature" placeholder permanently into page content unless flatten is requested
+            const shouldFlatten = Boolean(options.flatten ?? input.flatten);
+            if (shouldFlatten) {
+              targetPage.drawRectangle({ x: llx, y: lly, width: w, height: h, color: rgb(1, 1, 1), borderColor: rgb(148 / 255, 163 / 255, 184 / 255), borderWidth: 1 });
+              targetPage.drawLine({ start: { x: llx + 8, y: lly + 14 }, end: { x: llx + w - 8, y: lly + 14 }, color: rgb(148 / 255, 163 / 255, 184 / 255), thickness: 1 });
+              targetPage.drawText('X', { x: llx + 10, y: lly + 17, size: 10, color: rgb(100 / 255, 116 / 255, 139 / 255) });
+              targetPage.drawText(field.label || 'Signature', { x: llx + 24, y: lly + 17, size: 8.5, color: rgb(100 / 255, 116 / 255, 139 / 255) });
+            }
           }
         } else if (field.type === 'digital_signature') {
           const isSigned = Boolean(typeof filledVal === 'object' && filledVal && (filledVal.signerName || filledVal.certificateHash));
@@ -525,21 +656,36 @@ export async function buildPdfBytes(input: ExportInput, options: ExportOptions =
           const reason = (typeof filledVal === 'object' && filledVal?.reason) || 'Document Approval';
           const iconW = Math.min(w * 0.16, 40);
 
-          targetPage.drawRectangle({ x: llx, y: lly, width: w, height: h, color: rgb(1, 1, 1), borderColor: rgb(148 / 255, 163 / 255, 184 / 255), borderWidth: 1 });
-          targetPage.drawLine({ start: { x: llx + iconW, y: lly }, end: { x: llx + iconW, y: lly + h }, color: rgb(226 / 255, 232 / 255, 240 / 255), thickness: 1 });
-          targetPage.drawSvgPath('M22 6 L22 14 Q22 20 12 24 Q2 20 2 14 L2 6 L12 2 Z', { x: llx + iconW / 2 - 12, y: lly + h / 2 + 12, borderColor: rgb(2 / 255, 132 / 255, 199 / 255), borderWidth: 2, scale: 1 });
-
           if (isSigned) {
+            targetPage.drawRectangle({ x: llx, y: lly, width: w, height: h, color: rgb(1, 1, 1), borderColor: rgb(148 / 255, 163 / 255, 184 / 255), borderWidth: 1 });
+            targetPage.drawLine({ start: { x: llx + iconW, y: lly }, end: { x: llx + iconW, y: lly + h }, color: rgb(226 / 255, 232 / 255, 240 / 255), thickness: 1 });
+            targetPage.drawSvgPath('M22 6 L22 14 Q22 20 12 24 Q2 20 2 14 L2 6 L12 2 Z', { x: llx + iconW / 2 - 12, y: lly + h / 2 + 12, borderColor: rgb(2 / 255, 132 / 255, 199 / 255), borderWidth: 2, scale: 1 });
             targetPage.drawSvgPath('M7 13 L10 16 L17 8', { x: llx + iconW / 2 - 12, y: lly + h / 2 + 12, borderColor: rgb(2 / 255, 132 / 255, 199 / 255), borderWidth: 2, scale: 1 });
-            targetPage.drawText(`Digitally signed by ${signer}`, { x: llx + iconW + 8, y: lly + h - 16, size: 9.5, color: rgb(15 / 255, 23 / 255, 42 / 255) });
+            targetPage.drawText(`Signed by ${signer}`, { x: llx + iconW + 8, y: lly + h - 16, size: 9.5, color: rgb(15 / 255, 23 / 255, 42 / 255) });
             targetPage.drawText(`Date: ${dateStr}`, { x: llx + iconW + 8, y: lly + h - 28, size: 8.5, color: rgb(51 / 255, 65 / 255, 85 / 255) });
             targetPage.drawText(`Reason: ${reason}`, { x: llx + iconW + 8, y: lly + h - 40, size: 8.5, color: rgb(51 / 255, 65 / 255, 85 / 255) });
           } else {
-            targetPage.drawText(field.label || 'Digital Signature Placeholder', { x: llx + iconW + 8, y: lly + h / 2 - 4, size: 9.5, color: rgb(100 / 255, 116 / 255, 139 / 255) });
+            const shouldFlatten = Boolean(options.flatten ?? input.flatten);
+            if (shouldFlatten) {
+              targetPage.drawRectangle({ x: llx, y: lly, width: w, height: h, color: rgb(1, 1, 1), borderColor: rgb(148 / 255, 163 / 255, 184 / 255), borderWidth: 1 });
+              targetPage.drawLine({ start: { x: llx + iconW, y: lly }, end: { x: llx + iconW, y: lly + h }, color: rgb(226 / 255, 232 / 255, 240 / 255), thickness: 1 });
+              targetPage.drawSvgPath('M22 6 L22 14 Q22 20 12 24 Q2 20 2 14 L2 6 L12 2 Z', { x: llx + iconW / 2 - 12, y: lly + h / 2 + 12, borderColor: rgb(2 / 255, 132 / 255, 199 / 255), borderWidth: 2, scale: 1 });
+              targetPage.drawText(field.label || 'Signature Stamp', { x: llx + iconW + 8, y: lly + h / 2 - 4, size: 9.5, color: rgb(100 / 255, 116 / 255, 139 / 255) });
+            }
           }
         }
       } catch (e) {
         console.warn(`[teamsync-pdf-viewer] Could not bake form field ${field.name}:`, e);
+      }
+    }
+
+    // Optional document flattening (F5)
+    const shouldFlatten = Boolean(options.flatten ?? input.flatten);
+    if (shouldFlatten) {
+      try {
+        form.flatten();
+      } catch (err) {
+        console.warn('[teamsync-pdf-viewer] Error during form flattening:', err);
       }
     }
   }

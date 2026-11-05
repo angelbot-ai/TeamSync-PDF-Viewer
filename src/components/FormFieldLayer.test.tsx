@@ -488,7 +488,7 @@ describe('FormFieldLayer', () => {
 
     // Check signed badge and signer text
     expect(container.textContent).toContain('SIGNED');
-    expect(container.textContent).toContain('Digitally signed by Jane Smith');
+    expect(container.textContent).toContain('Signed electronically by Jane Smith');
   });
 
   it('shows lock badge on signature fields assigned to other users', async () => {

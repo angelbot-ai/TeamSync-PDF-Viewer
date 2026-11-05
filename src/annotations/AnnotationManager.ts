@@ -15,7 +15,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { Annotation, AnnotationInput } from './types';
 import { newAnnotationId } from './ids';
 import { createGeometryResolver, type GeometryResolver } from './geometry';
-import { annotationsToXfdf, annotationToXfdfFragment, parseXfdf, type XfdfExportOptions } from './xfdf';
+import { annotationsToXfdf, annotationToXfdfFragment, parseXfdf, parseXfdfFormFields, type XfdfExportOptions } from './xfdf';
 
 export type AnnotationAction = 'add' | 'modify' | 'delete';
 
@@ -63,6 +63,11 @@ export class AnnotationManager {
   private readOnly = false;
   private canEditOthers = false;
   private resolver: GeometryResolver | null = null;
+  private formManager: any = null;
+
+  setFormManager(fm: any): void {
+    this.formManager = fm;
+  }
 
   // ---- document / user / permissions ------------------------------------------------------
 
@@ -228,6 +233,24 @@ export class AnnotationManager {
    */
   async importAnnotations(xfdf: string): Promise<Annotation[]> {
     const resolver = this.requireResolver();
+
+    // Ingest XFDF form fields and values if present (F13)
+    if (this.formManager && (xfdf.includes('<widget') || xfdf.includes('<fields>'))) {
+      try {
+        const { fields, values } = await parseXfdfFormFields(xfdf, resolver);
+        if (fields.length > 0) {
+          for (const f of fields) {
+            if (!this.formManager.getField(f.id) && !this.formManager.getFieldByName(f.name)) {
+              this.formManager.addField(f);
+            }
+          }
+          this.formManager.setValues(values, { force: true });
+        }
+      } catch (err) {
+        console.warn('[teamsync-pdf-viewer] Failed to import form fields from XFDF:', err);
+      }
+    }
+
     const parsed = await parseXfdf(xfdf, resolver);
     if (parsed.length === 0) return [];
     const incoming = new Map(parsed.map((a) => [a.id, a]));

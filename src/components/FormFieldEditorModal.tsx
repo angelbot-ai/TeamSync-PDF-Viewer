@@ -12,6 +12,7 @@ import { generateSecureId } from '../annotations/ids';
 interface FormFieldEditorModalProps {
   field: FormField;
   roles?: FormRole[];
+  existingFields?: FormField[];
   onAddRole?: (role: FormRole) => void;
   onSave: (updated: Partial<FormField>) => void;
   onClose: () => void;
@@ -42,6 +43,7 @@ const PRESET_BG_COLORS = [
 export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
   field,
   roles = DEFAULT_ROLES,
+  existingFields = [],
   onAddRole,
   onSave,
   onClose,
@@ -61,6 +63,7 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
   const [label, setLabel] = useState(field.label || '');
   const [placeholder, setPlaceholder] = useState(field.placeholder || '');
   const [required, setRequired] = useState(field.required || false);
+  const [readOnly, setReadOnly] = useState(field.readOnly || false);
   const [defaultValue, setDefaultValue] = useState(field.defaultValue !== undefined ? String(field.defaultValue) : '');
   const [dateFormat, setDateFormat] = useState<DateTimeFormat>(field.dateFormat || 'datetime');
   const [options, setOptions] = useState<string[]>(field.options ? [...field.options] : ['Option 1', 'Option 2']);
@@ -92,6 +95,12 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
   const [textAlign, setTextAlign] = useState<'left' | 'center' | 'right'>(field.textAlign || 'left');
 
   const hasOptions = ['checklist', 'dropdown', 'radio'].includes(field.type);
+  const sanitizedCurrentName = (name.trim() || field.name).replace(/\s+/g, '_');
+  const isDuplicateName = Boolean(
+    existingFields.some(
+      (f) => f.id !== field.id && f.name.trim().toLowerCase() === sanitizedCurrentName.toLowerCase()
+    )
+  );
 
   const handleAddOption = () => {
     const trimmed = newOptionText.trim();
@@ -140,6 +149,7 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
       label: label.trim() || undefined,
       placeholder: placeholder.trim() || undefined,
       required,
+      readOnly,
       defaultValue: defaultValue !== '' ? defaultValue : undefined,
       dateFormat: field.type === 'datetime' ? dateFormat : undefined,
       options: hasOptions ? options : undefined,
@@ -296,12 +306,17 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
                     width: '100%',
                     padding: '8px 12px',
                     borderRadius: '6px',
-                    border: '1px solid #d1d5db',
+                    border: isDuplicateName ? '1px solid #ef4444' : '1px solid #d1d5db',
                     fontSize: '13px',
                     boxSizing: 'border-box',
                   }}
                 />
                 <span style={{ fontSize: '11px', color: '#9ca3af' }}>Unique key identifier used when extracting form values</span>
+                {isDuplicateName && (
+                  <span style={{ display: 'block', fontSize: '11px', color: '#ef4444', marginTop: '4px', fontWeight: 500 }}>
+                    ⚠️ A field named "{sanitizedCurrentName}" already exists. Using identical names may link or overwrite values across parties.
+                  </span>
+                )}
               </div>
 
               {/* Display Label */}
@@ -758,18 +773,33 @@ export const FormFieldEditorModal: React.FC<FormFieldEditorModalProps> = ({
                 </div>
               )}
 
-              {/* Required toggle */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input
-                  type="checkbox"
-                  id="field-required"
-                  checked={required}
-                  onChange={(e) => setRequired(e.target.checked)}
-                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                />
-                <label htmlFor="field-required" style={{ fontSize: '13px', fontWeight: 500, color: '#374151', cursor: 'pointer' }}>
-                  Required field (mandatory)
-                </label>
+              {/* Required & Read-only toggles */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    id="field-required"
+                    checked={required}
+                    onChange={(e) => setRequired(e.target.checked)}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  <label htmlFor="field-required" style={{ fontSize: '13px', fontWeight: 500, color: '#374151', cursor: 'pointer' }}>
+                    Required field (mandatory)
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    id="field-readonly"
+                    checked={readOnly}
+                    onChange={(e) => setReadOnly(e.target.checked)}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  <label htmlFor="field-readonly" style={{ fontSize: '13px', fontWeight: 500, color: '#374151', cursor: 'pointer' }}>
+                    Read-only field (locked against editing)
+                  </label>
+                </div>
               </div>
             </>
           ) : (

@@ -48,6 +48,8 @@ declare const __APP_VERSION__: string | undefined;
 
 export const VERSION: string =
   typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '${releaseVersion}';
+
+export const LIB_VERSION: string = VERSION;
 `;
 
 fs.writeFileSync(versionFileUrl, content, 'utf8');

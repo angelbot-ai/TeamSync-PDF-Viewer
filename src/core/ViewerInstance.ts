@@ -78,6 +78,7 @@ export interface ViewerBinding {
   goToPage(pageNumber: number, options?: { smooth?: boolean }): void;
   getTransientHighlights(): TransientHighlight[];
   setTransientHighlights(highlights: TransientHighlight[]): void;
+  getActiveTab?(): string;
 }
 
 const noBinding = (): never => {
@@ -127,6 +128,8 @@ export class WebViewerInstance {
     | string
     | null = null;
 
+  private currentActiveTab = 'View';
+
   constructor(
     bus: ViewerBus,
     annotationManager: AnnotationManager = new AnnotationManager(),
@@ -140,6 +143,19 @@ export class WebViewerInstance {
       this.id = id;
       WebViewerInstance.registerInstance(id, this);
     }
+  }
+
+  /**
+   * Visually highlights form fields belonging to a specific role with an accent glow (F16).
+   * Pass null to clear active highlights.
+   */
+  highlightRoleFields(roleId: string | null): void {
+    this.bus.emit('action-highlight-role-fields', { roleId });
+  }
+
+  /** Returns current active tab in the viewer (F15). */
+  getActiveTab(): string {
+    return this.binding?.getActiveTab?.() ?? this.currentActiveTab;
   }
 
   /** Sets the target viewer instance, ref, getter, or ID to receive cross-document links. */
@@ -649,6 +665,13 @@ export class WebViewerInstance {
   // ---- legacy facade ---------------------------------------------------------------------
 
   readonly UI = {
+    /** Sets active UI mode tab: 'View' | 'Annotate' | 'Forms' (F15). */
+    setActiveTab: (tab: 'View' | 'Annotate' | 'Forms' | string) => {
+      this.currentActiveTab = tab;
+      this.bus.emit('action-set-active-tab', { tab });
+    },
+    /** Returns currently active tab (F15). */
+    getActiveTab: () => this.getActiveTab(),
     /** Theming is not implemented; kept for API compatibility. */
     setTheme: (_theme: string) => {},
     goToPage: (pageNumber: number) => this.goToPage(pageNumber),

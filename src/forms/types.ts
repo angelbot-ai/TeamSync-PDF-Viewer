@@ -114,6 +114,43 @@ export interface FormRole {
   color: string;
   /** Optional human-readable description for the role */
   description?: string;
+  /** Optional party type classification (e.g. 'internal', 'external', 'signer', 'viewer') */
+  partyType?: 'internal' | 'external' | string;
+  /** Optional signing order or sequence index in a multi-party workflow */
+  signingOrder?: number;
+  /** Optional custom host-specific metadata attributes */
+  metadata?: Record<string, any>;
+}
+
+export interface FormFieldValueChangedEvent {
+  fieldName: string;
+  oldValue: any;
+  newValue: any;
+  source: 'user' | 'code';
+}
+
+export interface FormSignatureAppliedEvent {
+  fieldName: string;
+  signature: FormSignatureValue;
+  signerName?: string;
+}
+
+export interface FormSignatureClearedEvent {
+  fieldName: string;
+}
+
+export interface FormFieldAddedEvent {
+  field: FormField;
+}
+
+export interface FormFieldRemovedEvent {
+  fieldId: string;
+  fieldName: string;
+}
+
+export interface FormFieldUpdatedEvent {
+  field: FormField;
+  changes: Partial<FormField>;
 }
 
 export type FormDataRecord = Record<string, any>;
@@ -217,4 +254,12 @@ export interface FormFeatureOptions {
    * Controls which fields and signature flags are active for the current user.
    */
   currentRole?: string | null;
+
+  /**
+   * Defines which role unassigned fields (fields with no roleId) belong to during validation:
+   * - 'all': unassigned fields are required for everyone (default)
+   * - 'none': unassigned fields are never treated as required for any specific role
+   * - string: role ID that unassigned fields belong to
+   */
+  unassignedFieldsRole?: 'all' | 'none' | string;
 }

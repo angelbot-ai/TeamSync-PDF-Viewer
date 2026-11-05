@@ -14,6 +14,7 @@ import {
   Users,
   ChevronLeft,
   ChevronRight,
+  PenTool,
 } from 'lucide-react';
 import type { FormManager } from '../forms/FormManager';
 import type { FormField, FormDataRecord, FormRole, FormFeatureOptions } from '../forms/types';
@@ -63,8 +64,16 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
   const flowFields = formManager.getFlowFields(currentRoleId);
   const currentFlowIndex = activeFieldId ? flowFields.findIndex((f) => f.id === activeFieldId) : -1;
 
-  // Calculate completion progress for current role
-  const targetFields = currentRoleId ? fields.filter((f) => f.roleId === currentRoleId) : fields;
+  // Calculate completion progress for current role (F11)
+  const unassignedPolicy = options.unassignedFieldsRole;
+  const targetFields = currentRoleId
+    ? fields.filter((f) => {
+        if (f.roleId === currentRoleId) return true;
+        if (!f.roleId && unassignedPolicy === 'all') return true;
+        if (!f.roleId && unassignedPolicy === currentRoleId) return true;
+        return false;
+      })
+    : fields;
   const targetRequiredCount = targetFields.filter((f) => f.required).length;
   const targetFilledCount = targetFields.filter((f) => {
     const val = values[f.name];
@@ -72,6 +81,22 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
     if (Array.isArray(val) && val.length === 0) return false;
     return true;
   }).length;
+
+  // Unsigned signature fields belonging to active role for bulk signing (F17)
+  const adoptedSig = formManager.getAdoptedSignature();
+  const myUnsignedSigFields = fields.filter((f) => {
+    if (f.type !== 'signature' && f.type !== 'digital_signature') return false;
+    if (currentRoleId && f.roleId && f.roleId !== currentRoleId) return false;
+    const val = values[f.name];
+    return !Boolean(typeof val === 'object' && val && (val.dataUrl || val.imageUrl));
+  });
+
+  const handleApplyAdoptedToAll = () => {
+    if (!adoptedSig) return;
+    for (const f of myUnsignedSigFields) {
+      formManager.setValue(f.name, adoptedSig, { source: 'user' });
+    }
+  };
 
   const handleExportData = () => {
     const json = formManager.exportDataJson();
@@ -92,8 +117,8 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
       const scopeLabel = currentRole ? `${currentRole.name}'s required fields` : 'All required fields';
       setValidationMsg({ type: 'success', text: `${scopeLabel} are valid!` });
     } else {
-      const missingKeys = Object.keys(res.errors).join(', ');
-      setValidationMsg({ type: 'error', text: `Missing required: ${missingKeys}` });
+      const missingMessages = Object.values(res.errors).join(', ');
+      setValidationMsg({ type: 'error', text: `Missing: ${missingMessages}` });
     }
     setTimeout(() => setValidationMsg(null), 4000);
   };
@@ -310,6 +335,29 @@ export const FormFillerActions: React.FC<FormFillerActionsProps> = ({
 
       {/* Right: Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        {adoptedSig && myUnsignedSigFields.length > 0 && (
+          <button
+            type="button"
+            onClick={handleApplyAdoptedToAll}
+            title="Apply adopted signature to all remaining fields"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 8px',
+              backgroundColor: '#f0fdf4',
+              border: '1px solid #86efac',
+              borderRadius: '4px',
+              color: '#15803d',
+              cursor: 'pointer',
+              fontSize: '11px',
+              fontWeight: 500,
+            }}
+          >
+            <PenTool size={13} color="#16a34a" /> Sign All ({myUnsignedSigFields.length})
+          </button>
+        )}
+
         {options.showValidation !== false && (
           <button
             type="button"

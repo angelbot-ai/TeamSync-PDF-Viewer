@@ -145,7 +145,7 @@ describe('FormSignatureModal', () => {
 
     expect(container.textContent).toContain('Apply Digital Signature');
     expect(container.textContent).toContain('Digitally signed by Officer Smith');
-    expect(container.textContent).toContain('SHA-256:');
+    expect(container.textContent).toContain('Visual Approval Stamp');
 
     // Adopt digital sign
     const signBtn = Array.from(container.querySelectorAll('button')).find((b) =>

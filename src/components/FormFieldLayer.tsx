@@ -25,6 +25,7 @@ interface FormFieldLayerProps {
   canFillForms?: boolean;
   showFlowOrder?: boolean;
   selectedRoleFilter?: string | null;
+  highlightedRoleId?: string | null;
 }
 
 const newId = (): string => generateSecureId('field');
@@ -42,6 +43,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
   canFillForms = true,
   showFlowOrder = true,
   selectedRoleFilter = null,
+  highlightedRoleId = null,
 }) => {
   const [fields, setFields] = useState<FormField[]>(() => formManager.getFieldsForPage(pageNum));
   const [values, setValues] = useState<FormDataRecord>(() => formManager.getValues());
@@ -766,8 +768,8 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
         const isReadOnly = !effectiveCanFill || field.readOnly || isAssignedToOther;
         const isActive = activeFieldId === field.id;
 
-        // Custom styled dimensions and appearance
-        const effectiveFontSizePx = Math.max(10, (field.fontSize || 13) * scale);
+        // Custom styled dimensions and appearance (F9: scale proportionally without rigid 10px clamp)
+        const effectiveFontSizePx = Math.max(7, (field.fontSize || 13) * scale);
         const effectiveFontFamily = field.fontFamily || 'inherit';
         const effectiveFontWeight = field.fontWeight || 'normal';
         const effectiveFontStyle = field.fontStyle || 'normal';
@@ -791,19 +793,21 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
 
         const effectiveBorderWidth = field.borderWidth ?? 1.5;
         const effectiveBorderRadius = field.borderRadius ?? 3;
+        const isHighlighted = Boolean(highlightedRoleId && field.roleId === highlightedRoleId);
 
         const isSignature = field.type === 'signature' || field.type === 'digital_signature';
         const sigVal: FormSignatureValue | null =
           typeof fieldValue === 'object' && fieldValue !== null
             ? fieldValue
-            : fieldValue
+            : typeof fieldValue === 'string' && fieldValue.startsWith('data:')
             ? {
                 type: field.type === 'digital_signature' ? 'digital' : 'electronic',
-                dataUrl: typeof fieldValue === 'string' && fieldValue.startsWith('data:') ? fieldValue : undefined,
-                signerName: typeof fieldValue === 'string' ? fieldValue : undefined,
+                dataUrl: fieldValue,
               }
             : null;
-        const isSigned = Boolean(sigVal && (sigVal.dataUrl || sigVal.signerName || (sigVal as any).imageUrl));
+        const isSigned = Boolean(
+          sigVal && (sigVal.dataUrl || (sigVal as any).imageUrl || (sigVal.type === 'digital' && sigVal.signerName))
+        );
 
         const baseInputStyle: React.CSSProperties = {
           width: '100%',
@@ -819,7 +823,9 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
           borderRadius: `${effectiveBorderRadius}px`,
           boxSizing: 'border-box',
           outline: 'none',
-          boxShadow: isActive
+          boxShadow: isHighlighted
+            ? '0 0 0 3.5px rgba(2, 132, 199, 0.55)'
+            : isActive
             ? `0 0 0 2.5px ${fieldColor}80`
             : isAssignedToOther
             ? 'none'
@@ -1453,7 +1459,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
                             marginTop: '2px',
                           }}
                         >
-                          Digitally signed by {sigVal.signerName}{field.label ? ` · ${field.label}` : ''}
+                          Signed electronically by {sigVal.signerName}{field.label ? ` · ${field.label}` : ''}
                         </span>
                       )}
                     </div>
@@ -1523,6 +1529,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
           <FormFieldEditorModal
             field={editingField}
             roles={roles}
+            existingFields={fields}
             onAddRole={(newRole) => formManager.addRole(newRole)}
             onSave={(updates) => {
               formManager.updateField(editingField.id, updates);
@@ -1541,6 +1548,7 @@ export const FormFieldLayer: React.FC<FormFieldLayerProps> = ({
             role={roles.find((r) => r.id === signingField.roleId)}
             currentUser={formManager.getCurrentUser()}
             currentValue={values[signingField.name]}
+            adoptedSignature={formManager.getAdoptedSignature()}
             defaultSignerName={formManager.getEffectiveSignerName() || ''}
             onSave={(val) => {
               formManager.setValue(signingField.name, val);

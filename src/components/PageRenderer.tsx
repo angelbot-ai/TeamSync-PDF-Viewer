@@ -61,6 +61,7 @@ interface PageRendererProps {
   canFillForms?: boolean;
   showFlowOrder?: boolean;
   selectedRoleFilter?: string | null;
+  highlightedRoleId?: string | null;
 }
 
 function PageRendererComponent({
@@ -72,7 +73,7 @@ function PageRendererComponent({
   watermark, watermarkText, redactions, onDiscardRedaction, onRendered,
   hideAnnotationsUntilPageRendered = true, onLinkClick,
   formManager, activeFormTool = 'select', setActiveFormTool, canFillForms = true,
-  showFlowOrder = true, selectedRoleFilter = null
+  showFlowOrder = true, selectedRoleFilter = null, highlightedRoleId = null
 }: PageRendererProps) {
   const onRenderedRef = useRef(onRendered);
   useEffect(() => {
@@ -1041,6 +1042,7 @@ function PageRendererComponent({
           canFillForms={canFillForms}
           showFlowOrder={showFlowOrder}
           selectedRoleFilter={selectedRoleFilter}
+          highlightedRoleId={highlightedRoleId}
         />
       )}
     </div>

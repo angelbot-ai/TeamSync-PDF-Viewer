@@ -122,6 +122,7 @@ interface DocumentViewerProps {
   formManager?: FormManager;
   setActiveTab?: (tab: string) => void;
   onDownloadFilledPdf?: () => void;
+  highlightedRoleId?: string | null;
 }
 
 export default function DocumentViewer({
@@ -145,6 +146,7 @@ export default function DocumentViewer({
   formManager,
   setActiveTab,
   onDownloadFilledPdf,
+  highlightedRoleId,
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bus = useViewerBus();
@@ -2329,6 +2331,7 @@ export default function DocumentViewer({
                         canFillForms={permissions?.canFillForms !== false}
                         showFlowOrder={showFlowOrder}
                         selectedRoleFilter={selectedRoleFilter}
+                        highlightedRoleId={highlightedRoleId}
                       />
                       {compareState.isActive && compareState.mode === 'overlay' && pdfDocB && (
                         <div style={{

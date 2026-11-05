@@ -9,9 +9,17 @@ import type {
   FormValidationResult,
   FormRole,
   FormFeatureOptions,
+  FormSignatureValue,
+  FormFieldValueChangedEvent,
+  FormSignatureAppliedEvent,
+  FormSignatureClearedEvent,
+  FormFieldAddedEvent,
+  FormFieldRemovedEvent,
+  FormFieldUpdatedEvent,
 } from './types';
 import type { ViewerUser } from '../core/types';
 import { generateSecureId } from '../annotations/ids';
+import { LIB_VERSION } from '../version';
 
 export const DEFAULT_FORM_OPTIONS: FormFeatureOptions = {
   canCreateForms: true,
@@ -64,6 +72,13 @@ export class FormManager {
   private activeFieldListeners = new Set<(fieldId: string | null) => void>();
   private optionsListeners = new Set<(options: FormFeatureOptions) => void>();
   private userListeners = new Set<(user: ViewerUser | null) => void>();
+  private fieldValueListeners = new Set<(event: FormFieldValueChangedEvent) => void>();
+  private signatureAppliedListeners = new Set<(event: FormSignatureAppliedEvent) => void>();
+  private signatureClearedListeners = new Set<(event: FormSignatureClearedEvent) => void>();
+  private fieldAddedListeners = new Set<(event: FormFieldAddedEvent) => void>();
+  private fieldRemovedListeners = new Set<(event: FormFieldRemovedEvent) => void>();
+  private fieldUpdatedListeners = new Set<(event: FormFieldUpdatedEvent) => void>();
+  private adoptedSignature: FormSignatureValue | null = null;
   private readOnly = false;
 
   constructor(
@@ -95,6 +110,104 @@ export class FormManager {
   onDataChange(listener: FormDataChangeListener): () => void {
     this.dataListeners.add(listener);
     return () => this.dataListeners.delete(listener);
+  }
+
+  onFieldValueChanged(listener: (event: FormFieldValueChangedEvent) => void): () => void {
+    this.fieldValueListeners.add(listener);
+    return () => this.fieldValueListeners.delete(listener);
+  }
+
+  onSignatureApplied(listener: (event: FormSignatureAppliedEvent) => void): () => void {
+    this.signatureAppliedListeners.add(listener);
+    return () => this.signatureAppliedListeners.delete(listener);
+  }
+
+  onSignatureCleared(listener: (event: FormSignatureClearedEvent) => void): () => void {
+    this.signatureClearedListeners.add(listener);
+    return () => this.signatureClearedListeners.delete(listener);
+  }
+
+  onFieldAdded(listener: (event: FormFieldAddedEvent) => void): () => void {
+    this.fieldAddedListeners.add(listener);
+    return () => this.fieldAddedListeners.delete(listener);
+  }
+
+  onFieldRemoved(listener: (event: FormFieldRemovedEvent) => void): () => void {
+    this.fieldRemovedListeners.add(listener);
+    return () => this.fieldRemovedListeners.delete(listener);
+  }
+
+  onFieldUpdated(listener: (event: FormFieldUpdatedEvent) => void): () => void {
+    this.fieldUpdatedListeners.add(listener);
+    return () => this.fieldUpdatedListeners.delete(listener);
+  }
+
+  private notifyFieldValueChanged(event: FormFieldValueChangedEvent): void {
+    for (const listener of this.fieldValueListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('Error in FormManager fieldValue listener:', err);
+      }
+    }
+  }
+
+  private notifySignatureApplied(event: FormSignatureAppliedEvent): void {
+    for (const listener of this.signatureAppliedListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('Error in FormManager signatureApplied listener:', err);
+      }
+    }
+  }
+
+  private notifySignatureCleared(event: FormSignatureClearedEvent): void {
+    for (const listener of this.signatureClearedListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('Error in FormManager signatureCleared listener:', err);
+      }
+    }
+  }
+
+  private notifyFieldAdded(event: FormFieldAddedEvent): void {
+    for (const listener of this.fieldAddedListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('Error in FormManager fieldAdded listener:', err);
+      }
+    }
+  }
+
+  private notifyFieldRemoved(event: FormFieldRemovedEvent): void {
+    for (const listener of this.fieldRemovedListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('Error in FormManager fieldRemoved listener:', err);
+      }
+    }
+  }
+
+  private notifyFieldUpdated(event: FormFieldUpdatedEvent): void {
+    for (const listener of this.fieldUpdatedListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('Error in FormManager fieldUpdated listener:', err);
+      }
+    }
+  }
+
+  getAdoptedSignature(): FormSignatureValue | null {
+    return this.adoptedSignature ? { ...this.adoptedSignature } : null;
+  }
+
+  setAdoptedSignature(sig: FormSignatureValue | null): void {
+    this.adoptedSignature = sig ? { ...sig } : null;
   }
 
   private notifyFieldsChange(action: FormFieldsChangeEvent['action']): void {
@@ -176,8 +289,10 @@ export class FormManager {
     return this.fields.find((f) => f.name === name);
   }
 
-  setFields(fields: FormField[]): void {
-    this.pushHistory();
+  setFields(fields: FormField[], recordHistory = true): void {
+    if (recordHistory) {
+      this.pushHistory();
+    }
     this.fields = [...fields];
     // Sync default values
     for (const field of this.fields) {
@@ -208,6 +323,7 @@ export class FormManager {
       this.notifyDataChange();
     }
     this.notifyFieldsChange('add');
+    this.notifyFieldAdded({ field: newField });
   }
 
   updateField(id: string, updates: Partial<Omit<FormField, 'id'>>, recordHistory = true): boolean {
@@ -231,6 +347,7 @@ export class FormManager {
 
     this.fields[idx] = updatedField;
     this.notifyFieldsChange('update');
+    this.notifyFieldUpdated({ field: updatedField, changes: updates });
     return true;
   }
 
@@ -248,7 +365,15 @@ export class FormManager {
       this.setActiveFieldId(null);
     }
     this.notifyFieldsChange('delete');
+    if (removed) {
+      this.notifyFieldRemoved({ fieldId: id, fieldName: removed.name });
+    }
     return true;
+  }
+
+  /** Alias for deleteField (F18). */
+  removeField(id: string): boolean {
+    return this.deleteField(id);
   }
 
   clearFields(): void {
@@ -270,17 +395,103 @@ export class FormManager {
     return this.values[name];
   }
 
-  setValue(name: string, value: any): void {
+  /**
+   * Checks whether a form field can currently be modified based on form read-only state,
+   * field-level read-only setting, and the active role assignment (F8).
+   */
+  canEditField(fieldOrName: FormField | string): boolean {
+    if (this.readOnly) return false;
+    const field = typeof fieldOrName === 'string' ? this.getFieldByName(fieldOrName) : fieldOrName;
+    if (!field) return true;
+    if (field.readOnly) return false;
+    if (this.currentRoleId && field.roleId && field.roleId !== this.currentRoleId) return false;
+    return true;
+  }
+
+  setValue(
+    name: string,
+    value: any,
+    options?: { force?: boolean; source?: 'user' | 'code' }
+  ): boolean {
+    const field = this.getFieldByName(name);
+    if (!options?.force) {
+      if (!this.canEditField(field || name)) {
+        console.warn(`[teamsync-pdf-viewer] Cannot modify locked/read-only field "${name}". Pass { force: true } if authorized.`);
+        return false;
+      }
+    }
+
+    // F10: Signature validation
+    if (field && (field.type === 'signature' || field.type === 'digital_signature')) {
+      if (value !== undefined && value !== null && value !== '') {
+        const isSigObj = typeof value === 'object' && Boolean(value.dataUrl || value.imageUrl || value.certificateHash || value.signerName);
+        const isDataUrl = typeof value === 'string' && value.startsWith('data:');
+        if (!isSigObj && !isDataUrl) {
+          console.warn(`[teamsync-pdf-viewer] Invalid signature value for field "${name}". Must be a signature object or image data URL.`);
+          return false;
+        }
+      }
+    }
+
+    const oldValue = this.values[name];
     this.values = {
       ...this.values,
       [name]: value,
     };
+
+    const source = options?.source || 'code';
+    this.notifyFieldValueChanged({ fieldName: name, oldValue, newValue: value, source });
+
+    if (field && (field.type === 'signature' || field.type === 'digital_signature')) {
+      if (value && (typeof value === 'object' || (typeof value === 'string' && value.startsWith('data:')))) {
+        const sigObj: FormSignatureValue = typeof value === 'object' ? value : { type: 'electronic', dataUrl: value };
+        this.notifySignatureApplied({ fieldName: name, signature: sigObj, signerName: sigObj.signerName });
+        if (sigObj.dataUrl) {
+          this.adoptedSignature = { ...sigObj };
+        }
+      } else if (!value && oldValue) {
+        this.notifySignatureCleared({ fieldName: name });
+      }
+    }
+
     this.notifyDataChange();
+    return true;
   }
 
-  setValues(newValues: FormDataRecord): void {
-    this.values = { ...newValues };
-    this.notifyDataChange();
+  setValues(newValues: FormDataRecord, options?: { force?: boolean; source?: 'user' | 'code' }): void {
+    const source = options?.source || 'code';
+    const oldValues = { ...this.values };
+
+    if (options?.force) {
+      this.values = { ...newValues };
+      for (const [k, v] of Object.entries(newValues)) {
+        if (oldValues[k] !== v) {
+          this.notifyFieldValueChanged({ fieldName: k, oldValue: oldValues[k], newValue: v, source });
+        }
+      }
+      this.notifyDataChange();
+      return;
+    }
+
+    let changed = false;
+    const updatedValues = { ...this.values };
+
+    for (const [k, v] of Object.entries(newValues)) {
+      if (this.canEditField(k)) {
+        if (updatedValues[k] !== v) {
+          updatedValues[k] = v;
+          changed = true;
+          this.notifyFieldValueChanged({ fieldName: k, oldValue: oldValues[k], newValue: v, source });
+        }
+      } else {
+        console.warn(`[teamsync-pdf-viewer] Skipped locked field "${k}" in setValues(). Pass { force: true } if authorized.`);
+      }
+    }
+
+    if (changed) {
+      this.values = updatedValues;
+      this.notifyDataChange();
+    }
   }
 
   clearValues(): void {
@@ -530,23 +741,38 @@ export class FormManager {
 
   validate(roleId?: string | null): FormValidationResult {
     const targetRole = roleId !== undefined ? roleId : this.currentRoleId;
+    const unassignedPolicy = this.options.unassignedFieldsRole;
     const errors: Record<string, string> = {};
 
     for (const field of this.fields) {
       if (!field.required) continue;
-      if (targetRole && field.roleId && field.roleId !== targetRole) continue;
+
+      if (targetRole) {
+        if (field.roleId) {
+          if (field.roleId !== targetRole) continue;
+        } else {
+          // Unassigned field handling (F11):
+          // If no specific unassigned policy or 'none', skip unassigned fields for individual roles so counter and validate align.
+          // If 'all', validate for every role; if matches targetRole, validate for that role.
+          if (!unassignedPolicy || unassignedPolicy === 'none') continue;
+          if (unassignedPolicy !== 'all' && unassignedPolicy !== targetRole) continue;
+        }
+      }
 
       const val = this.values[field.name];
       const displayName = field.label || field.name;
+      const role = field.roleId ? this.getRole(field.roleId) : null;
+      const roleSuffix = role ? ` (${role.name})` : '';
 
       if (val === undefined || val === null || val === '') {
-        errors[field.name] = `${displayName} is required`;
+        errors[field.name] = `${displayName}${roleSuffix} is required`;
       } else if (field.type === 'checklist' && Array.isArray(val) && val.length === 0) {
-        errors[field.name] = `${displayName} requires at least one selection`;
-      } else if ((field.type === 'signature' || field.type === 'digital_signature') && typeof val === 'object') {
-        const hasSig = Boolean(val.dataUrl || val.signerName || val.imageUrl);
-        if (!hasSig) {
-          errors[field.name] = `${displayName} signature is required`;
+        errors[field.name] = `${displayName}${roleSuffix} requires at least one selection`;
+      } else if (field.type === 'signature' || field.type === 'digital_signature') {
+        const isSigObj = typeof val === 'object' && val !== null && Boolean(val.dataUrl || val.imageUrl || val.certificateHash || val.signerName);
+        const isDataUrl = typeof val === 'string' && val.startsWith('data:');
+        if (!isSigObj && !isDataUrl) {
+          errors[field.name] = `${displayName}${roleSuffix} signature is required`;
         }
       }
     }
@@ -562,7 +788,7 @@ export class FormManager {
   exportFieldsJson(): string {
     return JSON.stringify(
       {
-        version: '1.9.0',
+        version: LIB_VERSION,
         fields: this.fields,
         roles: this.roles,
       },

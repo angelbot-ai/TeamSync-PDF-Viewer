@@ -21,6 +21,8 @@ import { WebViewerInstance, type LoadDocumentOptions } from '../core/ViewerInsta
 import { AnnotationManager } from '../annotations/AnnotationManager';
 import { generateSecureId } from '../annotations/ids';
 import { FormManager } from '../forms/FormManager';
+import type { FormField, FormDataRecord } from '../forms/types';
+import { extractAcroFormFields } from '../forms/acroFormIngestion';
 import { printPdfBytes } from '../core/print';
 import { useShortcuts, matchShortcut } from '../hooks/useShortcuts';
 import type { WebViewerOptions, SDKPermissions, Redaction, TransientHighlight, LinkClickEvent } from '../core/types';
@@ -98,6 +100,14 @@ export interface TeamSyncViewerProps extends Omit<WebViewerOptions, 'path'> {
   onOfficeConverted?: (info: { fileType: OfficeFileType; url?: string; fromCache: boolean }) => void;
   /** Fires when an Office document conversion encounters an error. */
   onOfficeConversionError?: (info: { fileType: OfficeFileType; error: Error; url?: string }) => void;
+  /** Initial active UI mode tab: 'View' | 'Annotate' | 'Forms' (default 'View') (F15). */
+  initialTab?: string;
+  /** Initial form fields definition (F19). */
+  initialFormFields?: FormField[];
+  /** Initial form data values (F19). */
+  initialFormData?: FormDataRecord;
+  /** Fires when active UI tab changes (F15). */
+  onTabChanged?: (info: { tab: string }) => void;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -122,6 +132,10 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     formRoles,
     formFields,
     formData,
+    initialTab,
+    initialFormFields,
+    initialFormData,
+    onTabChanged,
   } = props;
 
   // Latest props for callbacks/bindings that must not re-subscribe on every render.
@@ -134,7 +148,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
 
   // Initialize FormManager once per viewer lifecycle; subsequent updates are synced via useEffect hooks
   const [internalFormManager] = useState(
-    () => new FormManager(formFields, formData, formRoles, formOptions, currentUser)
+    () => new FormManager(formFields || initialFormFields, formData || initialFormData, formRoles, formOptions, currentUser)
   );
   const formManager = propFormManager || internalFormManager;
   const instanceRef = useRef<WebViewerInstance | null>(null);
@@ -142,19 +156,49 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   const instance = instanceRef.current;
   useImperativeHandle(ref, () => instance, [instance]);
 
-  // Sync formFields when passed as prop
+  // Connect annotation manager and form manager for XFDF form field ingestion (F13)
+  useEffect(() => {
+    annotationManager.setFormManager(formManager);
+  }, [annotationManager, formManager]);
+
+  // Sync formFields when passed as prop (F19: deep equality check & no undo history for prop sync)
+  const prevFieldsJsonRef = useRef<string>('');
   useEffect(() => {
     if (formFields) {
-      formManager.setFields(formFields);
+      const json = JSON.stringify(formFields);
+      if (json !== prevFieldsJsonRef.current) {
+        prevFieldsJsonRef.current = json;
+        formManager.setFields(formFields, false);
+      }
     }
   }, [formManager, formFields]);
 
-  // Sync formData when passed as prop
+  // Sync formData when passed as prop (F19: deep equality check)
+  const prevDataJsonRef = useRef<string>('');
   useEffect(() => {
     if (formData) {
-      formManager.setValues(formData);
+      const json = JSON.stringify(formData);
+      if (json !== prevDataJsonRef.current) {
+        prevDataJsonRef.current = json;
+        formManager.setValues(formData, { force: true });
+      }
     }
   }, [formManager, formData]);
+
+  // Relay granular form events to the viewer event bus (F18)
+  useEffect(() => {
+    const u1 = formManager.onFieldValueChanged((e) => bus.emit('fieldValueChanged', e));
+    const u2 = formManager.onSignatureApplied((e) => bus.emit('signatureApplied', e));
+    const u3 = formManager.onSignatureCleared((e) => bus.emit('signatureCleared', e));
+    const u4 = formManager.onFieldAdded((e) => bus.emit('fieldAdded', e));
+    const u5 = formManager.onFieldRemoved((e) => bus.emit('fieldRemoved', e));
+    const u6 = formManager.onFieldUpdated((e) => bus.emit('fieldUpdated', e));
+    const u7 = formManager.onDataChange((data) => bus.emit('formDataChanged', { data }));
+    const u8 = formManager.onFieldsChange((evt) => bus.emit('formFieldsChanged', { fields: evt.fields }));
+    return () => {
+      u1(); u2(); u3(); u4(); u5(); u6(); u7(); u8();
+    };
+  }, [formManager, bus]);
 
   // Sync formRoles when passed as prop
   useEffect(() => {
@@ -326,7 +370,8 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   }, [docUrl, loadNonce, officeInfo, officeConverter, bus]);
 
   // ---- UI state (formerly the demo App shell) --------------------------------------------------
-  const [activeTab, setActiveTab] = useState('View');
+  const [activeTab, setActiveTab] = useState(initialTab || 'View');
+  const [highlightedRoleId, setHighlightedRoleId] = useState<string | null>(null);
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(sidebars && leftPanelOpen);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<'Comments' | 'Search'>('Comments');
@@ -338,6 +383,24 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   const [rotation, setRotation] = useState(0);
   // Empty by default: hosts opt into watermarks via the `watermark` prop.
   const [watermarkText, setWatermarkText] = useState('');
+
+  const handleSetActiveTab = useCallback(
+    (tab: string) => {
+      setActiveTab((prev) => {
+        if (prev === tab) return prev;
+        bus.emit('tabChanged', { tab });
+        latest.current.onTabChanged?.({ tab });
+        return tab;
+      });
+    },
+    [bus]
+  );
+
+  useEffect(() => {
+    if (initialTab && initialTab !== activeTab) {
+      handleSetActiveTab(initialTab);
+    }
+  }, [initialTab, activeTab, handleSetActiveTab]);
 
   const effectivePermissions = useMemo<SDKPermissions>(() => {
     if (readOnly) {
@@ -388,9 +451,9 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   useEffect(() => annotationManager.addEventListener('annotationChanged', (e) => bus.emit('annotationChanged', e)), [annotationManager, bus]);
 
   useEffect(() => {
-    if (effectivePermissions.canAddAnnotations === false && activeTab === 'Annotate') setActiveTab('View');
-    if (effectivePermissions.canCreateForms === false && activeTab === 'Forms') setActiveTab('View');
-  }, [effectivePermissions.canAddAnnotations, effectivePermissions.canCreateForms, activeTab]);
+    if (effectivePermissions.canAddAnnotations === false && activeTab === 'Annotate') handleSetActiveTab('View');
+    if (effectivePermissions.canCreateForms === false && activeTab === 'Forms') handleSetActiveTab('View');
+  }, [effectivePermissions.canAddAnnotations, effectivePermissions.canCreateForms, activeTab, handleSetActiveTab]);
 
   // ---- live state exposed to the instance ------------------------------------------------------
   const redactionsRef = useRef<Redaction[]>([]);
@@ -414,6 +477,9 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     latest.current.onTransientHighlightsChange?.(highlights);
   }, []);
 
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+
   useEffect(() => {
     instance._bind(
       {
@@ -432,6 +498,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
         },
         getTransientHighlights: () => transientHighlightsRef.current,
         setTransientHighlights,
+        getActiveTab: () => activeTabRef.current,
       },
       rootRef.current
     );
@@ -544,22 +611,48 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
         bus.emit('textCopied', { text: d.text });
         latest.current.onTextCopied?.({ text: d.text });
       }),
+      bus.on<{ tab: string }>('action-set-active-tab', (d) => {
+        if (d?.tab) {
+          if (effectivePermissions.canAddAnnotations === false && d.tab === 'Annotate') return;
+          if (effectivePermissions.canCreateForms === false && d.tab === 'Forms') return;
+          handleSetActiveTab(d.tab);
+        }
+      }),
+      bus.on<{ roleId?: string | null }>('action-highlight-role-fields', (d) => {
+        setHighlightedRoleId(d?.roleId ?? null);
+      }),
     ];
     return () => offs.forEach((off) => off());
-  }, [bus, instance, setTransientHighlights]);
+  }, [bus, instance, setTransientHighlights, handleSetActiveTab, effectivePermissions]);
 
   // ---- DocumentViewer callbacks ----------------------------------------------------------------
   const handleDocumentLoaded = useCallback(
-    (doc: pdfjsLib.PDFDocumentProxy, url: string) => {
+    async (doc: pdfjsLib.PDFDocumentProxy, url: string) => {
       pdfDocRef.current = doc;
       annotationManager.setDocument(doc);
       pageRef.current = { current: 1, count: doc.numPages };
       initialFitAppliedRef.current = false;
+
+      // Ingest existing AcroForm fields if none are loaded (F12)
+      if (formManager.getFields().length === 0) {
+        try {
+          const ingested = await extractAcroFormFields(doc);
+          if (ingested.fields.length > 0) {
+            formManager.setFields(ingested.fields, false);
+            if (Object.keys(ingested.values).length > 0) {
+              formManager.setValues(ingested.values, { force: true });
+            }
+          }
+        } catch (e) {
+          console.warn('[teamsync-pdf-viewer] Failed to ingest AcroForm fields:', e);
+        }
+      }
+
       const reportedUrl = docUrlRef.current ?? url;
       bus.emit('documentLoaded', { url: reportedUrl, numPages: doc.numPages });
       latest.current.onDocumentLoaded?.({ url: reportedUrl, numPages: doc.numPages });
     },
-    [bus, annotationManager]
+    [bus, annotationManager, formManager]
   );
 
   const handleLoadError = useCallback(
@@ -773,7 +866,8 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             activeTab={activeTab}
             setActiveTab={(tab) => {
               if (effectivePermissions.canAddAnnotations === false && tab === 'Annotate') return;
-              setActiveTab(tab);
+              if (effectivePermissions.canCreateForms === false && tab === 'Forms') return;
+              handleSetActiveTab(tab);
             }}
             leftSidebarOpen={leftSidebarOpen}
             setLeftSidebarOpen={(open) => { if (sidebars) setLeftSidebarOpen(open); }}
@@ -888,8 +982,9 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             resolveLinkUrl={resolveLinkUrl}
             onLinkClick={onLinkClick}
             formManager={formManager}
-            setActiveTab={setActiveTab}
+            setActiveTab={handleSetActiveTab}
             onDownloadFilledPdf={() => bus.emit('action-download')}
+            highlightedRoleId={highlightedRoleId}
           />
         </div>
         {isSettingsOpen && (

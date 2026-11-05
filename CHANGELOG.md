@@ -2,7 +2,47 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
-## [2.2.1] — 2026-11-03
+## [2.2.2] — 2026-11-05
+
+### Added & Enhanced
+- **AcroForm In-Place Updates & Round-Trip Export (F1)**:
+  - Form fields already present in a PDF are updated in-place during export via `form.getFields()` rather than failing with `FieldAlreadyExistsError` or skipping value updates.
+- **Interactive Radio Group Export (F2)**:
+  - Radio options are exported into native interactive PDF radio groups using `form.createRadioGroup()` with calculated bounding boxes, Helvetica text labels, and selection state.
+- **Hierarchical Checklist Export (F3)**:
+  - Multi-select checklist fields export with standardized hierarchical naming (`fieldName.OptionName`) and drawn text labels.
+- **Clean Signature Page Stream & Flatten Option (F4, F5)**:
+  - Unsigned signature placeholders no longer burn permanent ink artifacts onto the PDF content stream unless `flatten: true` is explicitly configured in `getFileData()`.
+  - Added `field.readOnly` checkbox in `FormFieldEditorModal` locking fields against modification, and enforced `enableReadOnly()` on AcroForms.
+  - Added `{ flatten?: boolean }` export option to flatten interactive fields into static page content when desired.
+- **Duplicate Field Key Collision Prevention (F6)**:
+  - Added duplicate name detection banner in the field configuration modal and deterministic suffix naming (`name_1`, `name_2`) during export to prevent collisions.
+- **Electronic vs Digital Signature Clarification (F7, F10)**:
+  - Electronic signatures are explicitly labeled `"Signed electronically by ..."` without misrepresenting visual signatures as digital certificates.
+  - Removed misleading pseudo-random hex strings; digital certificate signatures now show genuine status indicators.
+  - Strict signature value validation rejecting raw strings (e.g. `[object Object]` or `hello`) while accepting structured signature objects and Base64 images.
+- **Manager-Level Role Locking & Security (F8)**:
+  - `FormManager` enforces role assignment and read-only checks on `setValue()` and `setValues()`, blocking unauthorized edits unless `{ force: true }` is passed.
+- **Proportional Option Font Scaling (F9)**:
+  - Replaced rigid 10px minimum clamp on radio and checklist options with proportional scaling down to 7px, eliminating overflow clipping and scrollbars on zoom-out.
+- **Aligned Validation & Unassigned Role Policies (F11)**:
+  - Configurable `unassignedFieldsRole` (`'all' | 'none' | roleId`) ensuring completion counters and `validate()` agree. Validation errors now include role names (e.g., `(Buyer)`).
+- **Native AcroForm & XFDF Form Ingestion (F12, F13)**:
+  - Introduced `extractAcroFormFields` to detect and parse existing PDF `Widget` annotations into interactive form field models.
+  - Introduced `parseXfdfFormFields` to parse XFDF `<widget>` and `<field>` tags directly into `FormManager` without creating dead grey outline annotations.
+- **Form Role Metadata (F14)**:
+  - Added `partyType` (`'signer' | 'viewer' | 'notary'`), `signingOrder`, and custom `metadata` to `FormRole`.
+- **Programmatic Tab Navigation & Granular Events (F15, F18)**:
+  - Added `instance.UI.setActiveTab(tab)` and `instance.UI.getActiveTab()` with `tabChanged` event emission.
+  - Added granular event hooks: `fieldValueChanged`, `signatureApplied`, `signatureCleared`, `fieldAdded`, `fieldRemoved`, `fieldUpdated`.
+- **Role Field Highlighting (F16)**:
+  - Added `instance.highlightRoleFields(roleId)` with accent glow across matching fields.
+- **Adopted Signature Caching & 1-Click Sign All (F17)**:
+  - Added session-level adopted signature persistence with 1-click application across all pending signature fields for the active role.
+- **Prop Synchronization & Undo Isolation (F19)**:
+  - Props passed to `<TeamSyncViewer>` (`formFields`, `formData`) synchronize cleanly without resetting state or polluting undo history stacks.
+- **Dynamic Schema Versioning (F20)**:
+  - Exported field templates now dynamically reflect library version `2.2.2`.
 
 ### Security
 - **Cryptographically Secure Identifier Generation**: Replaced pseudo-random number generator routines with cryptographically secure random values (`crypto.randomUUID()` and `crypto.getRandomValues()`) across fallback blob URLs, manual redactions, and form roles, resolving CodeQL alert CWE-338.

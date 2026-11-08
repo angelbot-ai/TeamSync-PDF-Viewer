@@ -182,9 +182,7 @@ describe('FetchRangeTransport (Item 7 Optimization)', () => {
       onError,
     });
 
-    let callCount = 0;
     const mockFetch = vi.fn().mockImplementation(() => {
-      callCount++;
       return Promise.resolve({
         status: 403,
         statusText: 'Forbidden',

@@ -568,7 +568,7 @@ describe('Form Engine Findings (F1 - F20) Verification', () => {
 
     expect(parsed.version).toBe(LIB_VERSION);
     expect(parsed.version).toBe(VERSION);
-    expect(parsed.version).toBe('2.2.4');
+    expect(parsed.version).toBe('2.2.5');
     expect(parsed.version).not.toBe('1.9.0');
   });
 });

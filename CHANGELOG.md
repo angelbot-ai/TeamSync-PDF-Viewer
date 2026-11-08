@@ -2,6 +2,25 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [2.2.5] — 2026-11-08
+
+### High-DPI Rendering & Subpixel Sharpness
+- **LCD Subpixel Text Antialiasing (`alpha: false`)**:
+  - Initialized both offscreen scratch canvas and destination display canvas 2D contexts with `{ alpha: false }`.
+  - Enables native OS LCD subpixel font rendering (Quartz subpixel on macOS, ClearType on Windows, FreeType LCD on Linux), eliminating blurry or faint text on transparent canvas backing stores.
+  - Automatically initializes backing store to `#ffffff` to guarantee pristine white page backgrounds without rendering artifacts.
+- **High-DPI Supersampling & Device Pixel Ratio Support**:
+  - Expanded `outputScale` calculation to dynamically support displays up to 3x (`Math.min(Math.max(rawDpr, 1.5), 3)`).
+  - Provides at least 1.5x supersampling on standard 1x (1080p) monitors to eliminate aliasing and jagged edges on small font sizes (8–12pt).
+  - Renders 1:1 physical pixel matching on 2x Retina and high-density 3x displays.
+- **Hardware Canvas Limits Expansion**:
+  - Corrected `isMobileOrTablet()` user agent detection so desktop Safari on macOS is no longer falsely classified as a mobile device with constrained canvas limits.
+  - Increased desktop `MAX_CANVAS_DIM` from 4096 to 8192 px and `MAX_CANVAS_PIXELS` from 8.4 Megapixels to 33.55 Megapixels (`2**25`, matching the PDF.js standard).
+  - Preserves full vector rasterization resolution without artificial downscaling or blur up to 400% zoom on Retina displays and for large-format engineering schematics.
+- **High-Quality Canvas Resampling**:
+  - Configured `imageSmoothingEnabled = true` and `imageSmoothingQuality = 'high'` on all canvas transfer contexts.
+  - Explicitly set `imageRendering: 'auto'` on canvas DOM elements to guarantee bilinear/bicubic filtering during viewport zoom transitions.
+
 ## [2.2.4] — 2026-11-08
 
 ### Performance & AcroForm Ingestion Optimizations (Item 8)

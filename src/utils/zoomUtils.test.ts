@@ -6,6 +6,7 @@ import {
   calculateFitWidthScale,
   calculateSafeRenderScale,
   calculateScrollCompensation,
+  isMobileOrTablet,
   MAX_SCALE,
   MIN_SCALE,
   MAX_CANVAS_DIM,
@@ -128,13 +129,93 @@ describe('zoomUtils', () => {
       expect(clampedW * clampedH).toBeLessThanOrEqual(MAX_CANVAS_PIXELS + 1); // floating point tolerance
     });
 
-    it('clamps to mobile max dimension (2048px) when specified', () => {
-      const mobileMaxDim = 2048;
+    it('clamps to mobile max dimension when specified', () => {
+      const mobileMaxDim = 4096;
       const renderScale = calculateSafeRenderScale(8.0, 2.0, 612, 792, mobileMaxDim, MAX_CANVAS_PIXELS);
       const clampedW = 612 * renderScale;
       const clampedH = 792 * renderScale;
       expect(clampedW).toBeLessThanOrEqual(mobileMaxDim);
       expect(clampedH).toBeLessThanOrEqual(mobileMaxDim);
+    });
+
+    it('preserves full sharpness up to 400% zoom on Retina displays for standard A4 and Letter pages', () => {
+      // Standard A4: 595 x 842 pt. At 400% zoom with DPR 2.0 (targetScale = 8.0):
+      // Pixel dimensions: 4,760 x 6,736 px = 32.06 Megapixels <= 33.55 MP limit
+      const a4Scale = calculateSafeRenderScale(4.0, 2.0, 595, 842);
+      expect(a4Scale).toBe(8.0); // Full target scale is preserved without artificial blur!
+
+      // Standard Letter: 612 x 792 pt. At 350% zoom with DPR 2.0 (targetScale = 7.0):
+      const letterScale = calculateSafeRenderScale(3.5, 2.0, 612, 792);
+      expect(letterScale).toBe(7.0);
+    });
+
+    it('safely clamps oversized engineering schematics within hardware limits', () => {
+      // Engineering drawing: 2400 x 3600 pt (e.g. A0/A1 schematic)
+      const drawingScale = calculateSafeRenderScale(2.0, 2.0, 2400, 3600);
+      const pixelW = 2400 * drawingScale;
+      const pixelH = 3600 * drawingScale;
+      expect(pixelW).toBeLessThanOrEqual(MAX_CANVAS_DIM);
+      expect(pixelH).toBeLessThanOrEqual(MAX_CANVAS_DIM);
+      expect(pixelW * pixelH).toBeLessThanOrEqual(MAX_CANVAS_PIXELS + 1);
+    });
+
+    it('does not falsely classify desktop Safari on macOS as a mobile device', () => {
+      const originalNavigator = global.navigator;
+      try {
+        // macOS Safari User Agent
+        Object.defineProperty(global, 'navigator', {
+          value: {
+            userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+            platform: 'MacIntel',
+            maxTouchPoints: 0,
+          },
+          configurable: true,
+          writable: true,
+        });
+
+        expect(isMobileOrTablet()).toBe(false);
+      } finally {
+        Object.defineProperty(global, 'navigator', {
+          value: originalNavigator,
+          configurable: true,
+          writable: true,
+        });
+      }
+    });
+
+    it('correctly identifies mobile devices and touch tablets', () => {
+      const originalNavigator = global.navigator;
+      try {
+        // iPhone
+        Object.defineProperty(global, 'navigator', {
+          value: {
+            userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+            platform: 'iPhone',
+            maxTouchPoints: 5,
+          },
+          configurable: true,
+          writable: true,
+        });
+        expect(isMobileOrTablet()).toBe(true);
+
+        // iPad Pro (reports MacIntel with maxTouchPoints > 1)
+        Object.defineProperty(global, 'navigator', {
+          value: {
+            userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
+            platform: 'MacIntel',
+            maxTouchPoints: 5,
+          },
+          configurable: true,
+          writable: true,
+        });
+        expect(isMobileOrTablet()).toBe(true);
+      } finally {
+        Object.defineProperty(global, 'navigator', {
+          value: originalNavigator,
+          configurable: true,
+          writable: true,
+        });
+      }
     });
   });
 

@@ -7,16 +7,16 @@ export const MAX_SCALE = 8.0;
 
 export const isMobileOrTablet = (): boolean =>
   typeof navigator !== 'undefined' && (
-    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(navigator.userAgent) ||
-    (/^((?!chrome|android).)*safari/i.test(navigator.userAgent))
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
   );
 
 export const isSafariOrMobile = isMobileOrTablet;
 
-export const MAX_CANVAS_DIM = 4096;
-export const MAX_CANVAS_DIM_MOBILE = 2048;
-export const MAX_CANVAS_PIXELS = 8388608; // 8.4 Megapixels (~32MB RGBA texture buffer)
-export const MAX_CANVAS_PIXELS_MOBILE = 4194304; // 4.2 Megapixels (~16MB RGBA texture buffer)
+export const MAX_CANVAS_DIM = 8192;
+export const MAX_CANVAS_DIM_MOBILE = 4096;
+export const MAX_CANVAS_PIXELS = 33554432; // 33.5 Megapixels (matches PDF.js 2**25 standard, ~128MB texture)
+export const MAX_CANVAS_PIXELS_MOBILE = 8388608; // 8.4 Megapixels (~32MB texture buffer)
 
 /**
  * Calculates the next step when zooming in.

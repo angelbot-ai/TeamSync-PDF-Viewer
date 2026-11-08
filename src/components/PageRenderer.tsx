@@ -180,7 +180,9 @@ function PageRendererComponent({
         currentPage = page;
         pageProxyRef.current = page;
 
-        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
+        const rawDpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+        // Support up to 3x high-DPI displays (Retina/4K/OLED), with at least 1.5x supersampling on 1x displays for crisp text
+        const outputScale = Math.min(Math.max(rawDpr, 1.5), 3);
         const normalizedRot = normalizeRotation(page.rotate + rotation);
         const unscaledViewport = page.getViewport({ scale: 1.0, rotation: normalizedRot });
 
@@ -196,20 +198,26 @@ function PageRendererComponent({
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = Math.floor(viewport.width);
         tempCanvas.height = Math.floor(viewport.height);
-        let ctx = tempCanvas.getContext('2d');
+        let ctx = (tempCanvas.getContext('2d', { alpha: false }) || tempCanvas.getContext('2d')) as CanvasRenderingContext2D | null;
         if (!ctx) {
           // If GPU canvas memory allocation fails, fall back to safe half scale
           renderScale = renderScale * 0.5;
           viewport = page.getViewport({ scale: renderScale, rotation: normalizedRot });
           tempCanvas.width = Math.floor(viewport.width);
           tempCanvas.height = Math.floor(viewport.height);
-          ctx = tempCanvas.getContext('2d');
+          ctx = (tempCanvas.getContext('2d', { alpha: false }) || tempCanvas.getContext('2d')) as CanvasRenderingContext2D | null;
         }
         if (!ctx || isCancelled) {
           tempCanvas.width = 0;
           tempCanvas.height = 0;
           return;
         }
+
+        // Initialize with crisp white background for subpixel text rendering
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
 
         const renderTask = page.render({
           canvasContext: ctx,
@@ -298,8 +306,10 @@ function PageRendererComponent({
         if (destCanvas && !isCancelled) {
           destCanvas.width = tempCanvas.width;
           destCanvas.height = tempCanvas.height;
-          const destCtx = destCanvas.getContext('2d');
+          const destCtx = (destCanvas.getContext('2d', { alpha: false }) || destCanvas.getContext('2d')) as CanvasRenderingContext2D | null;
           if (destCtx) {
+            destCtx.imageSmoothingEnabled = true;
+            destCtx.imageSmoothingQuality = 'high';
             destCtx.drawImage(tempCanvas, 0, 0);
           }
           hasRenderedOnceRef.current = true;
@@ -523,7 +533,18 @@ function PageRendererComponent({
         marginBottom: '16px'
       }}
     >
-      <canvas ref={canvasRef} style={{ position: 'absolute', width: '100%', height: '100%', left: 0, top: 0 }} />
+      <canvas 
+        ref={canvasRef} 
+        style={{ 
+          position: 'absolute', 
+          width: '100%', 
+          height: '100%', 
+          left: 0, 
+          top: 0,
+          display: 'block',
+          imageRendering: 'auto'
+        }} 
+      />
       
       <div 
         ref={textLayerRef}

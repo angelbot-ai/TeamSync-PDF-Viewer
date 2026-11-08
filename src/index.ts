@@ -96,7 +96,7 @@ export type {
 export { VERSION } from './version';
 export { FormManager, DEFAULT_FORM_OPTIONS, DEFAULT_ROLES } from './forms/FormManager';
 export type { FormFieldsChangeEvent, FormFieldsChangeListener, FormDataChangeListener } from './forms/FormManager';
-export { extractAcroFormFields } from './forms/acroFormIngestion';
+export { extractAcroFormFields, type AcroFormIngestionOptions } from './forms/acroFormIngestion';
 export { parseXfdfFormFields } from './annotations/xfdf';
 export type {
   FormField,

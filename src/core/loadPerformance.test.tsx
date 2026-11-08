@@ -411,4 +411,33 @@ describe('PDF Viewer Load Performance & Optimization Suite', () => {
       root.unmount();
     });
   });
+
+  it('does not block onDocumentLoaded on AcroForm field extraction (Item 8b)', async () => {
+    const root = createRoot(container);
+    let documentLoadedFired = false;
+
+    const onDocumentLoaded = vi.fn(() => {
+      documentLoadedFired = true;
+    });
+
+    await act(async () => {
+      root.render(
+        <TeamSyncViewer
+          initialDoc="https://example.com/test-doc.pdf"
+          onDocumentLoaded={onDocumentLoaded}
+        />
+      );
+    });
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 25));
+    });
+
+    expect(onDocumentLoaded).toHaveBeenCalled();
+    expect(documentLoadedFired).toBe(true);
+
+    act(() => {
+      root.unmount();
+    });
+  });
 });

@@ -466,6 +466,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   // ---- live state exposed to the instance ------------------------------------------------------
   const redactionsRef = useRef<Redaction[]>([]);
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
+  const activeIngestionRef = useRef<{ cancel: () => void } | null>(null);
   const pageRef = useRef({ current: 1, count: 0 });
   const docUrlRef = useRef(docUrl);
   docUrlRef.current = docUrl;
@@ -633,6 +634,15 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     return () => offs.forEach((off) => off());
   }, [bus, instance, setTransientHighlights, handleSetActiveTab, effectivePermissions]);
 
+  useEffect(() => {
+    return () => {
+      if (activeIngestionRef.current) {
+        activeIngestionRef.current.cancel();
+        activeIngestionRef.current = null;
+      }
+    };
+  }, []);
+
   // ---- DocumentViewer callbacks ----------------------------------------------------------------
   const handleDocumentLoaded = useCallback(
     async (doc: pdfjsLib.PDFDocumentProxy, url: string) => {
@@ -641,24 +651,48 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
       pageRef.current = { current: 1, count: doc.numPages };
       initialFitAppliedRef.current = false;
 
-      // Ingest existing AcroForm fields if none are loaded (F12)
-      if (formManager.getFields().length === 0) {
-        try {
-          const ingested = await extractAcroFormFields(doc);
-          if (ingested.fields.length > 0) {
-            formManager.setFields(ingested.fields, false);
-            if (Object.keys(ingested.values).length > 0) {
-              formManager.setValues(ingested.values, { force: true });
-            }
-          }
-        } catch (e) {
-          console.warn('[teamsync-pdf-viewer] Failed to ingest AcroForm fields:', e);
-        }
+      // Cancel any ongoing background AcroForm ingestion from previous document
+      if (activeIngestionRef.current) {
+        activeIngestionRef.current.cancel();
+        activeIngestionRef.current = null;
       }
 
+      // (Item 8b) Emit documentLoaded / call onDocumentLoaded FIRST without waiting for AcroForm ingestion
       const reportedUrl = docUrlRef.current ?? url;
       bus.emit('documentLoaded', { url: reportedUrl, numPages: doc.numPages });
       latest.current.onDocumentLoaded?.({ url: reportedUrl, numPages: doc.numPages });
+
+      // Ingest existing AcroForm fields in the background without blocking documentLoaded (Item 8)
+      if (formManager.getFields().length === 0) {
+        let cancelled = false;
+        const cancelFn = () => {
+          cancelled = true;
+        };
+        activeIngestionRef.current = { cancel: cancelFn };
+
+        (async () => {
+          try {
+            const ingested = await extractAcroFormFields(doc, undefined, {
+              viewportPage: pageRef.current.current,
+              isCancelled: () => cancelled || pdfDocRef.current !== doc,
+            });
+            if (cancelled || pdfDocRef.current !== doc) return;
+
+            if (ingested.fields.length > 0) {
+              formManager.setFields(ingested.fields, false);
+              if (Object.keys(ingested.values).length > 0) {
+                formManager.setValues(ingested.values, { force: true });
+              }
+            }
+          } catch (e) {
+            console.warn('[teamsync-pdf-viewer] Failed to ingest AcroForm fields in background:', e);
+          } finally {
+            if (activeIngestionRef.current?.cancel === cancelFn) {
+              activeIngestionRef.current = null;
+            }
+          }
+        })();
+      }
     },
     [bus, annotationManager, formManager]
   );

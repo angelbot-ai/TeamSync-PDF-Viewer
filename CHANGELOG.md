@@ -2,6 +2,21 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [2.2.4] — 2026-11-08
+
+### Performance & AcroForm Ingestion Optimizations (Item 8)
+- **Non-Blocking Document Loaded Event**:
+  - `bus.emit('documentLoaded')` and `latest.current.onDocumentLoaded` are emitted immediately upon document readiness without blocking on AcroForm field extraction.
+  - Host applications receive the document loaded event instantly (~1.3s on large linearized PDFs), enabling instant annotation import, citation highlighting, and dismissal of loading overlays.
+- **Cheap /AcroForm Catalog Inspection (`doc.getFieldObjects()`)**:
+  - `extractAcroFormFields()` now queries `doc.getFieldObjects()` upfront. If the catalog lacks an `/AcroForm` entry (`null` or empty), extraction completes in 1 ms with 0 page reads and 0 range requests.
+  - Eliminates full-document page-by-page annotation walks (e.g. 43 sequential HTTP 206 chunk reads across 256 pages on non-form documents).
+- **Candidate-Only Viewport-Outward Idle Slicing**:
+  - When form fields exist, candidate pages are identified directly from `getFieldObjects()` widget references. Only pages actually containing widgets are inspected; all other pages are skipped completely.
+  - Candidate pages are scanned in idle slices (using `requestIdleCallback`) sorted outward from the active viewport (`viewportPage`), prioritizing visible form fields while preventing main-thread or network contention.
+- **Cancellation & Document Lifecycle Guards**:
+  - Ingestion processes observe document lifecycle and abort immediately if the document changes or unmounts before background scanning completes.
+
 ## [2.2.3] — 2026-11-08
 
 ### Performance & Loading Optimizations

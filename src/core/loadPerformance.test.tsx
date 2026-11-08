@@ -116,6 +116,16 @@ describe('PDF Viewer Load Performance & Optimization Suite', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     vi.clearAllMocks();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve({
+        status: 206,
+        headers: new Headers({
+          'Content-Range': 'bytes 0-524287/1000000',
+          'Content-Type': 'application/pdf',
+        }),
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(100)),
+      } as any)
+    );
   });
 
   afterEach(() => {

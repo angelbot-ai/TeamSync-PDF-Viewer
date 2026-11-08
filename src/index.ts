@@ -12,8 +12,18 @@ export { TeamSyncViewer } from './components/TeamSyncViewer';
 export type { TeamSyncViewerProps } from './components/TeamSyncViewer';
 export * from './types/compare';
 export * from './utils/pdfDiffEngine';
-export { configurePdfAssets, getPdfAssetPaths, isWorkerConfigured, pdfjsVersion } from './core/pdfAssets';
-export type { PdfAssetPaths } from './core/pdfAssets';
+export {
+  configurePdfAssets,
+  getPdfAssetPaths,
+  isWorkerConfigured,
+  pdfjsVersion,
+  createPdfWorker,
+  getSharedPdfWorker,
+  destroySharedPdfWorker,
+} from './core/pdfAssets';
+export type { PdfAssetPaths, PDFWorker } from './core/pdfAssets';
+export { FetchRangeTransport, prepareDocumentLoading } from './core/fetchRangeTransport';
+export type { RangeTransportFetchOptions, PreparedDocSource } from './core/fetchRangeTransport';
 export { ViewerBus } from './core/eventBus';
 export type { BusListener } from './core/eventBus';
 export { buildPdfBytes, MAX_EXPORT_BYTES } from './core/export';

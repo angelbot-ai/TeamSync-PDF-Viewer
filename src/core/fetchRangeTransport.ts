@@ -18,6 +18,7 @@ export interface RangeTransportFetchOptions {
   signal?: AbortSignal;
   onProgress?: (info: { bytesLoaded: number; totalBytes: number; rangeRequests: number }) => void;
   onRangeRequest?: () => void;
+  onError?: (error: Error & { status?: number }) => void;
 }
 
 const BaseDataRangeTransport = (pdfjsLib.PDFDataRangeTransport || class {
@@ -72,25 +73,29 @@ export class FetchRangeTransport extends BaseDataRangeTransport {
     this.totalRangeRequests++;
     this.options.onRangeRequest?.();
 
-    const ac = new AbortController();
-    this.abortControllers.add(ac);
+    const doFetchRange = async (attempt: number): Promise<void> => {
+      if (this.isAborted) return;
+      const ac = new AbortController();
+      this.abortControllers.add(ac);
 
-    const headers = new Headers(this.options.httpHeaders || {});
-    // PDF.js end is exclusive; HTTP Range is inclusive
-    headers.set('Range', `bytes=${begin}-${Math.max(begin, end - 1)}`);
+      const headers = new Headers(this.options.httpHeaders || {});
+      // PDF.js end is exclusive; HTTP Range is inclusive
+      headers.set('Range', `bytes=${begin}-${Math.max(begin, end - 1)}`);
 
-    fetch(this.url, {
-      method: 'GET',
-      headers,
-      credentials: this.options.withCredentials ? 'include' : 'same-origin',
-      signal: ac.signal
-    })
-      .then(async (res) => {
+      try {
+        const res = await fetch(this.url, {
+          method: 'GET',
+          headers,
+          credentials: this.options.withCredentials ? 'include' : 'same-origin',
+          signal: ac.signal
+        });
+
         this.abortControllers.delete(ac);
         if (this.isAborted) return;
 
-        if (res.status === 206 || res.status === 200) {
+        if (res.status === 206) {
           const buffer = await res.arrayBuffer();
+          if (this.isAborted) return;
           const chunk = new Uint8Array(buffer);
           this.totalBytesLoaded += chunk.byteLength;
           this.options.onProgress?.({
@@ -101,21 +106,76 @@ export class FetchRangeTransport extends BaseDataRangeTransport {
           try {
             this.onDataRange(begin, chunk);
           } catch {}
-        } else if (res.status === 416) {
+          return;
+        }
+
+        if (res.status === 200) {
+          const buffer = await res.arrayBuffer();
+          if (this.isAborted) return;
+          const chunk = new Uint8Array(buffer);
+          // Accept 200 only for begin === 0 with byteLength === length (Item 10)
+          if (begin === 0 && chunk.byteLength === this.length) {
+            this.totalBytesLoaded += chunk.byteLength;
+            this.options.onProgress?.({
+              bytesLoaded: this.totalBytesLoaded,
+              totalBytes: this.length,
+              rangeRequests: this.totalRangeRequests
+            });
+            try {
+              this.onDataRange(begin, chunk);
+            } catch {}
+            return;
+          }
+          // Server ignored Range on a later read or length mismatched: treat as failure
+          throw Object.assign(
+            new Error(`Server returned status 200 for range ${begin}-${end - 1} on "${this.url}" (expected partial content)`),
+            { status: 200, name: 'ResponseException' }
+          );
+        }
+
+        if (res.status === 416) {
           // Range Not Satisfiable (e.g. read at or past EOF)
           try {
             this.onDataRange(begin, new Uint8Array(0));
           } catch {}
-        } else {
-          console.warn(`[teamsync-pdf-viewer] HTTP range fetch ${begin}-${end - 1} returned status ${res.status}`);
+          return;
         }
-      })
-      .catch((err) => {
+
+        // 403, 5xx, or unexpected HTTP status
+        throw Object.assign(
+          new Error(`Unexpected server response (${res.status}) while retrieving PDF range "${this.url}".`),
+          { status: res.status, name: 'ResponseException' }
+        );
+      } catch (err: any) {
         this.abortControllers.delete(ac);
-        if (err?.name !== 'AbortError' && !this.isAborted) {
-          console.warn('[teamsync-pdf-viewer] HTTP range fetch error:', err);
+        if (err?.name === 'AbortError' || this.isAborted) {
+          return;
         }
-      });
+
+        // Retry once on failure (Item 9)
+        if (attempt === 0) {
+          console.warn(`[teamsync-pdf-viewer] HTTP range fetch ${begin}-${end - 1} failed, retrying once:`, err?.message || err);
+          return doFetchRange(1);
+        }
+
+        // Second attempt failed: fail the load with error carrying status
+        console.error(`[teamsync-pdf-viewer] HTTP range fetch ${begin}-${end - 1} failed permanently:`, err?.message || err);
+        const finalError = err instanceof Error
+          ? err
+          : Object.assign(new Error(`Failed to load PDF range "${this.url}": ${String(err)}`), { status: err?.status || 0, name: 'ResponseException' });
+        if (!(finalError as any).status && err?.status) {
+          (finalError as any).status = err.status;
+        }
+        if (!(finalError as any).name) {
+          (finalError as any).name = 'ResponseException';
+        }
+
+        this.abort();
+        this.options.onError?.(finalError);
+      }
+    };
+
+    doFetchRange(0);
   }
 
   override abort(): void {
@@ -205,6 +265,11 @@ export async function prepareDocumentLoading(
           };
         }
       }
+      // Content-Range missing or unreadable (e.g. not exposed cross-origin):
+      // Abort probe before falling back so the 512 KB chunk isn't downloaded for nothing (Item 11)
+      try { (res as any).body?.cancel?.()?.catch?.(() => {}); } catch {}
+      probeController.abort();
+      return { docParams: { url, ...networkParams } };
     } else if (res.status === 200) {
       // Small file or server doesn't support Range requests - full data already returned
       const buf = await res.arrayBuffer();
@@ -221,9 +286,14 @@ export async function prepareDocumentLoading(
           rangeRequests: 1
         }
       };
+    } else {
+      // Non-200, non-206 response on probe: abort probe before falling back
+      try { (res as any).body?.cancel?.()?.catch?.(() => {}); } catch {}
+      probeController.abort();
+      return { docParams: { url, ...networkParams } };
     }
   } catch (err: any) {
-    if (err?.name === 'AbortError' || probeController.signal.aborted) {
+    if (options.signal?.aborted) {
       throw err;
     }
     // Fall back to standard { url } loading on fetch/CORS errors

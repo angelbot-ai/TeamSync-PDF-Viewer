@@ -174,4 +174,126 @@ describe('FetchRangeTransport (Item 7 Optimization)', () => {
     transport.abort();
     expect(abortSignalObserved?.aborted).toBe(true);
   });
+
+  it('retries range fetch once on failure, then calls onError with status (Item 9)', async () => {
+    const fakeChunk0 = new Uint8Array(100);
+    const onError = vi.fn();
+    const transport = new FetchRangeTransport(1000, fakeChunk0, 'https://example.com/retry.pdf', {
+      onError,
+    });
+
+    let callCount = 0;
+    const mockFetch = vi.fn().mockImplementation(() => {
+      callCount++;
+      return Promise.resolve({
+        status: 403,
+        statusText: 'Forbidden',
+      });
+    });
+
+    global.fetch = mockFetch;
+
+    transport.requestDataRange(100, 200);
+
+    await vi.waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(onError).toHaveBeenCalledTimes(1);
+    });
+
+    const error = onError.mock.calls[0][0];
+    expect(error.status).toBe(403);
+    expect(error.message).toContain('403');
+  });
+
+  it('succeeds if retry attempt succeeds (Item 9)', async () => {
+    const fakeChunk0 = new Uint8Array(100);
+    const onError = vi.fn();
+    const transport = new FetchRangeTransport(1000, fakeChunk0, 'https://example.com/retry-success.pdf', {
+      onError,
+    });
+    const onDataRangeSpy = vi.spyOn(transport, 'onDataRange');
+
+    let callCount = 0;
+    const chunkData = new Uint8Array(100);
+    const mockFetch = vi.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.reject(new Error('Network error'));
+      }
+      return Promise.resolve({
+        status: 206,
+        arrayBuffer: () => Promise.resolve(chunkData.buffer),
+      });
+    });
+
+    global.fetch = mockFetch;
+
+    transport.requestDataRange(100, 200);
+
+    await vi.waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(onDataRangeSpy).toHaveBeenCalledWith(100, expect.any(Uint8Array));
+      expect(onError).not.toHaveBeenCalled();
+    });
+  });
+
+  it('rejects 200 response when begin > 0 (server ignored Range) (Item 10)', async () => {
+    const fakeChunk0 = new Uint8Array(100);
+    const onError = vi.fn();
+    const transport = new FetchRangeTransport(1000, fakeChunk0, 'https://example.com/ignore-range.pdf', {
+      onError,
+    });
+
+    const fullFile = new Uint8Array(1000);
+    const mockFetch = vi.fn().mockImplementation(() => {
+      return Promise.resolve({
+        status: 200,
+        arrayBuffer: () => Promise.resolve(fullFile.buffer),
+      });
+    });
+
+    global.fetch = mockFetch;
+
+    // Request range at offset 500
+    transport.requestDataRange(500, 600);
+
+    await vi.waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledTimes(2); // Initial + 1 retry
+      expect(onError).toHaveBeenCalledTimes(1);
+    });
+
+    const error = onError.mock.calls[0][0];
+    expect(error.status).toBe(200);
+    expect(error.message).toContain('Server returned status 200');
+  });
+
+  it('cancels probe stream and aborts probe before fallback when 206 has no Content-Range (Item 11)', async () => {
+    let cancelCalled = false;
+    let abortObserved = false;
+
+    const mockFetch = vi.fn().mockImplementation((_url: string, init: any) => {
+      init.signal?.addEventListener('abort', () => {
+        abortObserved = true;
+      });
+      return Promise.resolve({
+        status: 206,
+        headers: new Headers(), // No Content-Range header exposed!
+        body: {
+          cancel: () => {
+            cancelCalled = true;
+            return Promise.resolve();
+          },
+        },
+      });
+    });
+
+    global.fetch = mockFetch;
+
+    const prepared = await prepareDocumentLoading('https://example.com/no-content-range.pdf');
+
+    expect(cancelCalled).toBe(true);
+    expect(abortObserved).toBe(true);
+    expect(prepared.docParams.url).toBe('https://example.com/no-content-range.pdf');
+    expect(prepared.docParams.range).toBeUndefined();
+  });
 });

@@ -2,7 +2,22 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
-## [2.2.6] — 2026-11-08
+## [2.2.7] — 2026-11-08
+
+### Range Transport Resilience, Probing Improvements & Worker Exports (Items 9–11)
+- **Automatic Range Read Retry & Load Error Propagation (Item 9)**:
+  - `FetchRangeTransport.requestDataRange()` now retries a failed range read once on network errors, expired presigned URL 403s, or 5xx server responses.
+  - If the retry also fails, it terminates in-flight fetches and raises an error carrying the HTTP `status` code (`ResponseException`), invoking `onDocumentLoadError` so host applications can automatically refresh signed URLs via `onUrlRefresh` and retry without hanging indefinitely.
+- **Strict HTTP 200 Range Validation (Item 10)**:
+  - `FetchRangeTransport.requestDataRange()` now strictly accepts HTTP 200 OK only for `begin === 0` where `byteLength === length`.
+  - Servers ignoring the `Range` header on subsequent chunk reads (or returning whole files at non-zero offsets) are rejected and failed gracefully, preventing silent document corruption.
+- **Immediate Probe Abort on Missing Content-Range (Item 11)**:
+  - `prepareDocumentLoading()` immediately cancels the response stream and aborts the probe fetch if the server returns 206 without an exposed or parseable `Content-Range` header (or returns unexpected non-200/206 status).
+  - Prevents downloading unwanted probe payload data before falling back to the standard URL loader.
+- **Public Export of Worker Utilities and Types**:
+  - Exported `createPdfWorker`, `getSharedPdfWorker`, `destroySharedPdfWorker`, and `type PDFWorker` from the main SDK entry point (`teamsync-pdf-viewer`).
+  - Enables host applications to pre-warm and share a single PDF worker across multiple viewers and comparison modes.
+  - Also exported `FetchRangeTransport`, `prepareDocumentLoading`, and related transport types.
 
 ### Direct HTTP Range Transport & Zero-Drain Document Open (Item 7)
 - **Direct Chunk 0 Probe (`Range: bytes=0-524287`)**:

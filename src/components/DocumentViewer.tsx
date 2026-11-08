@@ -1211,7 +1211,27 @@ export default function DocumentViewer({
     let cancelled = false;
     let loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
     let activeTransport: FetchRangeTransport | null = null;
+    let hasNotifiedLoadError = false;
     const probeController = new AbortController();
+
+    const notifyLoadError = (error: any, info: { url: string; passwordRequired: boolean }) => {
+      if (cancelled || hasNotifiedLoadError) return;
+      hasNotifiedLoadError = true;
+      try { activeTransport?.abort(); } catch {}
+      if (loadingTask) {
+        try {
+          (loadingTask as any)._capability?.reject(error);
+        } catch {}
+        loadingTask.destroy().catch(() => {});
+      }
+      const err = error instanceof Error ? error : new Error(String(error?.message ?? error));
+      if (error?.status && !(err as any).status) {
+        (err as any).status = error.status;
+      }
+      console.error('[teamsync-pdf-viewer] Error loading PDF:', err.message, err);
+      setLoadError(err);
+      callbacksRef.current.onLoadError?.(err, info);
+    };
 
     const loadPdf = async () => {
       try {
@@ -1232,6 +1252,9 @@ export default function DocumentViewer({
             },
             onRangeRequest: () => {
               loadTelemetryRef.current.rangeRequests = (loadTelemetryRef.current.rangeRequests ?? 0) + 1;
+            },
+            onError: (rangeErr) => {
+              notifyLoadError(rangeErr, { url, passwordRequired: false });
             }
           }
         );
@@ -1306,11 +1329,8 @@ export default function DocumentViewer({
         callbacksRef.current.onDocumentLoaded?.(doc, url);
       } catch (error: any) {
         if (cancelled) return;
-        const err = error instanceof Error ? error : new Error(String(error?.message ?? error));
         const passwordRequired = error?.name === 'PasswordException';
-        console.error('[teamsync-pdf-viewer] Error loading PDF:', err.message, err);
-        setLoadError(err);
-        callbacksRef.current.onLoadError?.(err, { url, passwordRequired });
+        notifyLoadError(error, { url, passwordRequired });
       }
     };
     loadPdf();

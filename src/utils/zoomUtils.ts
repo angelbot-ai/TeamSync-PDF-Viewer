@@ -64,6 +64,23 @@ export function calculateFitWidthScale(
 }
 
 /**
+ * Calculates the target scale to fit a given page (both width and height) inside an available container viewport.
+ */
+export function calculateFitPageScale(
+  availableWidth: number,
+  availableHeight: number,
+  pageWidth: number,
+  pageHeight: number,
+  minScale = MIN_SCALE,
+  maxScale = MAX_SCALE
+): number {
+  if (availableWidth <= 0 || availableHeight <= 0 || pageWidth <= 0 || pageHeight <= 0) return 1.0;
+  const scaleX = availableWidth / pageWidth;
+  const scaleY = availableHeight / pageHeight;
+  return clampScale(Math.min(scaleX, scaleY), minScale, maxScale);
+}
+
+/**
  * Calculates the safe rasterization scale for PDF.js viewport rendering so that
  * canvas dimensions and texture memory stay strictly within hardware limits.
  */

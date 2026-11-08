@@ -55,6 +55,12 @@ vi.mock('pdfjs-dist', () => {
   return {
     GlobalWorkerOptions: { workerSrc: '/pdf.worker.min.mjs' },
     version: '4.10.38',
+    PDFWorker: class MockPDFWorker {
+      destroyed = false;
+      destroy() {
+        this.destroyed = true;
+      }
+    },
     TextLayer: class MockTextLayer {
       render() {
         return Promise.resolve();

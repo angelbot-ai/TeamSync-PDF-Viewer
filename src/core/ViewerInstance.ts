@@ -61,6 +61,10 @@ export interface LoadDocumentOptions {
   withCredentials?: boolean;
   /** Password for password-protected PDFs. */
   password?: string;
+  /**
+   * Optional dedicated or pre-warmed pdf.js PDFWorker instance.
+   */
+  worker?: pdfjsLib.PDFWorker;
 }
 
 /** Callbacks the React component installs so the instance can reach live state. */

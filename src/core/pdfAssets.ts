@@ -81,3 +81,53 @@ export function getDocumentParams(): Partial<DocumentInitParameters> {
 
 /** pdfjs-dist version this build was compiled against (useful for worker-version mismatch checks). */
 export const pdfjsVersion: string = pdfjsLib.version;
+
+export type PDFWorker = pdfjsLib.PDFWorker;
+
+let sharedWorker: pdfjsLib.PDFWorker | null = null;
+
+/**
+ * Creates a new dedicated pdf.js worker instance.
+ * Useful for host applications that pre-warm the worker thread during idle periods.
+ */
+export function createPdfWorker(params?: { name?: string; port?: any; verbosity?: number }): pdfjsLib.PDFWorker {
+  assertWorkerConfigured();
+  try {
+    const workerCtor = (pdfjsLib as any).PDFWorker;
+    if (typeof workerCtor === 'function') {
+      return new workerCtor(params);
+    }
+  } catch {}
+  return {} as any;
+}
+
+/**
+ * Returns a shared library-level pdf.js worker singleton.
+ * Self-healing: if the worker was destroyed or terminated, instantiates a fresh worker instance.
+ */
+export function getSharedPdfWorker(): pdfjsLib.PDFWorker | undefined {
+  if (!isWorkerConfigured()) return undefined;
+  try {
+    const workerCtor = (pdfjsLib as any).PDFWorker;
+    if (typeof workerCtor !== 'function') return undefined;
+    if (!sharedWorker || (sharedWorker as any).destroyed) {
+      sharedWorker = new workerCtor();
+    }
+    return sharedWorker || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Destroys the shared library-level pdf.js worker singleton, releasing its worker thread.
+ */
+export function destroySharedPdfWorker(): void {
+  if (sharedWorker) {
+    try {
+      sharedWorker.destroy();
+    } catch {}
+    sharedWorker = null;
+  }
+}
+

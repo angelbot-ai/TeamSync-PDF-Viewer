@@ -2,6 +2,33 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [2.2.3] — 2026-11-08
+
+### Performance & Loading Optimizations
+- **Lazy Page-Dimension Scanning**:
+  - Deferred scanning page dimensions for pages 2 through $N$ until after Page 1 has completed its first canvas paint (`onFirstPageRendered`).
+  - Replaced eager 25-page parallel Promise batches with background idle slices (6 pages per slice via `requestIdleCallback`) to eliminate network contention on document open.
+  - Applied slice-level scroll offset compensation (`delta = newTop - oldTop`) in continuous mode to prevent layout jumps when non-uniform pages are measured.
+- **Viewport-Gated Text & Link Extraction**:
+  - `fetchText()` and `fetchNativeLinks()` now run only for pages currently in view (`isInViewport`) or that have previously rendered.
+  - Off-screen virtualization buffer rows no longer issue concurrent network requests for text content, fonts, and annotation dictionaries on mount.
+  - Extracted text and links are cached in component state, eliminating redundant network reads when scrolling back into view.
+- **Shared PDF.js Worker Lifecycle & Pre-Warming**:
+  - Added support for passing an explicit `worker?: pdfjsLib.PDFWorker` instance to `<TeamSyncViewer>`, `<DocumentViewer>`, and `createWebViewer()`.
+  - Added `createPdfWorker()`, `getSharedPdfWorker()`, and `destroySharedPdfWorker()` helpers in `src/core/pdfAssets.ts` for host idle warm-up.
+  - Reused a persistent shared worker singleton when none is passed, eliminating the 1.2 MB worker script re-evaluation overhead on every document load, retry, or split pane.
+  - Added self-healing recovery that automatically instantiates a fresh worker if `worker.destroyed` is detected.
+- **Single-Pass Initial Fit Scale**:
+  - Pre-calculates target `fit-width` and `fit-page` scale as soon as Page 1 dimensions and container width are retrieved in `loadPdf`.
+  - Page 1 paints directly at the fitted scale on its initial canvas render, eliminating double-rendering and scale flicker.
+- **Optimized HTTP/2 Network Defaults**:
+  - Defaulted `disableStream: true` in `resolveNetworkParams()`, aborting full-file HTTP 200 download streams after headers to prioritize HTTP 206 range reads for Page 1.
+  - Defaulted `rangeChunkSize: 524288` (512 KiB) to minimize round-trip overhead on high-latency links. Explicit host props continue to override defaults.
+- **Load Telemetry Reporting**:
+  - Added `LoadProgressInfo` interface reporting `{ bytesLoaded, totalBytes, rangeRequests }`.
+  - Hooked `loadingTask.onProgress` to emit progress telemetry through `onLoadProgress` and the event bus (`loadProgress`).
+  - Included telemetry payload in `onFirstPageRendered` and `firstPageRendered` event to measure first-page render performance.
+
 ## [2.2.2] — 2026-11-05
 
 ### Added & Enhanced

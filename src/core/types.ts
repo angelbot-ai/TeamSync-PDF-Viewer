@@ -3,6 +3,7 @@
  * Public option and event types.
  */
 import type React from 'react';
+import type * as pdfjsLib from 'pdfjs-dist';
 import type { ViewerPlugin } from '../plugins/types';
 import type { Annotation } from '../annotations/types';
 import type { AnnotationChangedEvent } from '../annotations/AnnotationManager';
@@ -120,6 +121,13 @@ export type ToolMode =
  * Options accepted by `createWebViewer()` (and the deprecated `WebViewer()` alias).
  * Every option is also available as a prop on `<TeamSyncViewer>`.
  */
+/** Loading telemetry reported during PDF document retrieval. */
+export interface LoadProgressInfo {
+  bytesLoaded: number;
+  totalBytes: number;
+  rangeRequests?: number;
+}
+
 export interface WebViewerOptions {
   /** @deprecated Only meaningful for the iframe package (`public/webviewer.js`). */
   path?: string;
@@ -198,12 +206,12 @@ export interface WebViewerOptions {
   customHeaders?: Record<string, string>;
   /**
    * Maximum number of bytes fetched per HTTP 206 range request.
-   * Default is 65536 (= 64 KB).
+   * Default is 524288 (= 512 KB), optimizing round-trip latency over HTTP/2.
    */
   rangeChunkSize?: number;
   /**
    * Disable chunked streaming of PDF file data.
-   * Default is false.
+   * Default is true, prioritizing initial page range requests over full-file download streams.
    */
   disableStream?: boolean;
   /**
@@ -218,6 +226,12 @@ export interface WebViewerOptions {
    * Default is false.
    */
   disableRange?: boolean;
+  /**
+   * Optional dedicated or pre-warmed pdf.js PDFWorker instance.
+   * If omitted, a persistent shared library-level worker singleton is used to avoid
+   * recreating a 1.2 MB worker thread on every document open or retry.
+   */
+  worker?: pdfjsLib.PDFWorker;
   /** Render the top toolbar. Default true. */
   toolbar?: boolean;
   /** Render the left (thumbnails) and right (comments/search) panels. Default true. */
@@ -309,7 +323,14 @@ import type {
 export interface ViewerEventMap {
   documentLoaded: { url: string; numPages: number };
   documentLoadError: { url: string; error: Error; passwordRequired: boolean };
-  firstPageRendered: { url: string; pageNumber: number };
+  firstPageRendered: {
+    url: string;
+    pageNumber: number;
+    bytesLoaded?: number;
+    totalBytes?: number;
+    rangeRequests?: number;
+  };
+  loadProgress: LoadProgressInfo;
   pageRendered: { url: string; pageNumber: number };
   pageChanged: { pageNumber: number; numPages: number };
   annotationsChanged: { annotations: Annotation[] };

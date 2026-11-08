@@ -25,7 +25,7 @@ import type { FormField, FormDataRecord } from '../forms/types';
 import { extractAcroFormFields } from '../forms/acroFormIngestion';
 import { printPdfBytes } from '../core/print';
 import { useShortcuts, matchShortcut } from '../hooks/useShortcuts';
-import type { WebViewerOptions, SDKPermissions, Redaction, TransientHighlight, LinkClickEvent } from '../core/types';
+import type { WebViewerOptions, SDKPermissions, Redaction, TransientHighlight, LinkClickEvent, LoadProgressInfo } from '../core/types';
 import type { Annotation } from '../annotations/types';
 import { calculateNextZoomIn, calculateNextZoomOut, clampScale, MIN_SCALE, MAX_SCALE } from '../utils/zoomUtils';
 import {
@@ -47,8 +47,16 @@ export interface TeamSyncViewerProps extends Omit<WebViewerOptions, 'path'> {
    * the previous one was a presigned link that expired.
    */
   onDocumentLoadError?: (error: Error, retry: (newUrl?: string) => void, info: DocumentLoadErrorInfo) => void;
-  /** Fires once per document, after the first page canvas has been painted. */
-  onFirstPageRendered?: (info: { url: string; pageNumber: number }) => void;
+  /** Fires once per document, after the first page canvas has been painted. Includes load telemetry. */
+  onFirstPageRendered?: (info: {
+    url: string;
+    pageNumber: number;
+    bytesLoaded?: number;
+    totalBytes?: number;
+    rangeRequests?: number;
+  }) => void;
+  /** Telemetry callback reporting download progress and range requests. */
+  onLoadProgress?: (info: LoadProgressInfo) => void;
   /** Fires whenever any page canvas has finished rendering. */
   onPageRendered?: (info: { url: string; pageNumber: number }) => void;
   /** Fires (in addition to onDocumentLoadError) when the document is password protected. */
@@ -120,7 +128,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
     plugins, redactions, regexRedactions,
     enableAnnotations, enableSign = false, watermark, permissions, enableRedactions,
     canAddAnnotations, canEditAnnotations, canDeleteAnnotations, readOnly = false,
-    assets, withCredentials = false, httpHeaders, customHeaders, rangeChunkSize, disableStream, disableAutoFetch, disableRange, toolbar = true, sidebars = true, leftPanelOpen = true,
+    assets, worker, onLoadProgress, withCredentials = false, httpHeaders, customHeaders, rangeChunkSize, disableStream, disableAutoFetch, disableRange, toolbar = true, sidebars = true, leftPanelOpen = true,
     className, style, hideAnnotationsUntilPageRendered = true,
     enableTextSelection = true, defaultTool = 'select', showSelectionTooltip = true,
     id, targetViewer, resolveLinkUrl, onLinkClick,
@@ -667,7 +675,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
   );
 
   const handleFirstPageRendered = useCallback(
-    (pageNumber: number) => {
+    (pageNumber: number, telemetry?: LoadProgressInfo) => {
       const url = docUrlRef.current ?? '';
       if (!initialFitAppliedRef.current) {
         initialFitAppliedRef.current = true;
@@ -684,8 +692,17 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
           setTimeout(() => bus.emit('action-fit-to-page'), 0);
         }
       }
-      bus.emit('firstPageRendered', { url, pageNumber });
-      latest.current.onFirstPageRendered?.({ url, pageNumber });
+      const eventPayload = { url, pageNumber, ...telemetry };
+      bus.emit('firstPageRendered', eventPayload);
+      latest.current.onFirstPageRendered?.(eventPayload);
+    },
+    [bus]
+  );
+
+  const handleLoadProgress = useCallback(
+    (info: LoadProgressInfo) => {
+      bus.emit('loadProgress', info);
+      latest.current.onLoadProgress?.(info);
     },
     [bus]
   );
@@ -945,6 +962,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             disableStream={dynamicDocOptions?.disableStream ?? disableStream}
             disableAutoFetch={dynamicDocOptions?.disableAutoFetch ?? disableAutoFetch}
             disableRange={dynamicDocOptions?.disableRange ?? disableRange}
+            worker={dynamicDocOptions?.worker ?? worker}
             password={dynamicDocOptions?.password}
             assets={assets}
             redactions={redactions}
@@ -957,6 +975,7 @@ export const TeamSyncViewer = React.forwardRef<WebViewerInstance, TeamSyncViewer
             onDocumentLoaded={handleDocumentLoaded}
             onLoadError={handleLoadError}
             onFirstPageRendered={handleFirstPageRendered}
+            onLoadProgress={handleLoadProgress}
             onPageRendered={handlePageRendered}
             onPageChange={handlePageChange}
             pageTransition={pageTransition}

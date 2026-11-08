@@ -62,6 +62,7 @@ interface PageRendererProps {
   showFlowOrder?: boolean;
   selectedRoleFilter?: string | null;
   highlightedRoleId?: string | null;
+  isInViewport?: boolean;
 }
 
 function PageRendererComponent({
@@ -73,7 +74,8 @@ function PageRendererComponent({
   watermark, watermarkText, redactions, onDiscardRedaction, onRendered,
   hideAnnotationsUntilPageRendered = true, onLinkClick,
   formManager, activeFormTool = 'select', setActiveFormTool, canFillForms = true,
-  showFlowOrder = true, selectedRoleFilter = null, highlightedRoleId = null
+  showFlowOrder = true, selectedRoleFilter = null, highlightedRoleId = null,
+  isInViewport: propIsInViewport
 }: PageRendererProps) {
   const onRenderedRef = useRef(onRendered);
   useEffect(() => {
@@ -85,17 +87,20 @@ function PageRendererComponent({
   const renderTaskRef = useRef<any>(null);
   const pageProxyRef = useRef<pdfjsLib.PDFPageProxy | null>(null);
   const hasRenderedOnceRef = useRef(false);
+  const hasLoadedTextRef = useRef(false);
   const [isCanvasRendered, setIsCanvasRendered] = useState(false);
   const [textContent, setTextContent] = useState<any>(null);
 
   // Virtualization: only allocate heavy GPU canvas memory when page is in or near viewport (800px buffer)
-  const [isInViewport, setIsInViewport] = useState<boolean>(() => {
+  const [internalIsInViewport, setInternalIsInViewport] = useState<boolean>(() => {
     return typeof IntersectionObserver === 'undefined' || pageNum === 1;
   });
+  const isInViewport = propIsInViewport ?? internalIsInViewport;
 
   useEffect(() => {
+    if (typeof propIsInViewport === 'boolean') return;
     if (typeof IntersectionObserver === 'undefined') {
-      setIsInViewport(true);
+      setInternalIsInViewport(true);
       return;
     }
     const el = pageContainerRef.current;
@@ -105,7 +110,7 @@ function PageRendererComponent({
       (entries) => {
         const entry = entries[0];
         if (entry) {
-          setIsInViewport(entry.isIntersecting);
+          setInternalIsInViewport(entry.isIntersecting);
         }
       },
       {
@@ -118,7 +123,7 @@ function PageRendererComponent({
     return () => {
       observer.disconnect();
     };
-  }, [pageNum]);
+  }, [pageNum, propIsInViewport]);
 
   // When scrolling far out of viewport, free GPU canvas backbuffer textures and text layer nodes
   useEffect(() => {
@@ -338,8 +343,15 @@ function PageRendererComponent({
     };
   }, [pageNum, pdfDoc, scale, rotation, basePageWidth, basePageHeight, watermark, watermarkText, redactions, isInViewport]);
 
-  // Load TextContent independently
   useEffect(() => {
+    hasLoadedTextRef.current = false;
+    setTextContent(null);
+  }, [pdfDoc, pageNum]);
+
+  // Load TextContent independently - gated on viewport and cached
+  useEffect(() => {
+    if (!isInViewport && !hasRenderedOnceRef.current) return;
+    if (hasLoadedTextRef.current) return;
     let isCancelled = false;
     const fetchText = async () => {
       try {
@@ -375,12 +387,15 @@ function PageRendererComponent({
           }
         }
         
-        if (!isCancelled) setTextContent(text);
+        if (!isCancelled) {
+          hasLoadedTextRef.current = true;
+          setTextContent(text);
+        }
       } catch {}
     };
     fetchText();
     return () => { isCancelled = true; };
-  }, [pdfDoc, pageNum, redactions]);
+  }, [pdfDoc, pageNum, redactions, isInViewport]);
 
   // Render TextLayer
   useEffect(() => {
@@ -439,9 +454,18 @@ function PageRendererComponent({
     };
   }, [textContent, pdfDoc, pageNum, rotation, redactions, isInViewport]);
 
-  // Load Native PDF Link Annotations
+  // Load Native PDF Link Annotations - gated on viewport and cached
   const [nativeLinks, setNativeLinks] = useState<Array<{ id: string; rect: number[]; url: string }>>([]);
+  const hasLoadedLinksRef = useRef(false);
+
   useEffect(() => {
+    hasLoadedLinksRef.current = false;
+    setNativeLinks([]);
+  }, [pdfDoc, pageNum]);
+
+  useEffect(() => {
+    if (!isInViewport && !hasRenderedOnceRef.current) return;
+    if (hasLoadedLinksRef.current) return;
     let isCancelled = false;
     const fetchNativeLinks = async () => {
       try {
@@ -465,7 +489,10 @@ function PageRendererComponent({
             }
           }
         }
-        if (!isCancelled) setNativeLinks(links);
+        if (!isCancelled) {
+          hasLoadedLinksRef.current = true;
+          setNativeLinks(links);
+        }
       } catch {
         // Ignore native annotation retrieval failures
       }
@@ -474,7 +501,7 @@ function PageRendererComponent({
     return () => {
       isCancelled = true;
     };
-  }, [pdfDoc, pageNum]);
+  }, [pdfDoc, pageNum, isInViewport]);
 
   const pageAnnotations = annotations.filter(a => a.pageIndex === pageNum);
   const isOverlayVisible = !hideAnnotationsUntilPageRendered || isCanvasRendered;

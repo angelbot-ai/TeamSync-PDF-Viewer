@@ -15,15 +15,15 @@ import PageRenderer from './PageRenderer';
 import type { Annotation } from '../annotations/types';
 import { newAnnotationId, generateSecureId } from '../annotations/ids';
 import type { AnnotationManager } from '../annotations/AnnotationManager';
-import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths, TransientHighlight, ToolMode, InitialScale, LinkClickEvent, WebViewerInstance } from '../core/types';
+import type { Redaction, WatermarkOptions, SDKPermissions, PdfAssetPaths, TransientHighlight, ToolMode, InitialScale, LinkClickEvent, WebViewerInstance, LoadProgressInfo } from '../core/types';
 import { parseLinkTarget } from '../utils/linkUtils';
 import TextSelectionTooltip from './TextSelectionTooltip';
 import { findRegexRedactions } from '../utils/findRegexRedactions';
 import { convertToUnrotated, convertToRotated, normalizeRotation } from '../utils/rotationUtils';
-import { clampScale, calculateFitWidthScale, calculateScrollCompensation } from '../utils/zoomUtils';
+import { clampScale, calculateFitWidthScale, calculateFitPageScale, calculateScrollCompensation } from '../utils/zoomUtils';
 import { estimatePageDimensions, computeRowLayout, DEFAULT_FALLBACK_DIMS } from '../utils/layoutUtils';
 import { useViewerBus, useBusEvent } from '../hooks/useViewerBus';
-import { assertWorkerConfigured, configurePdfAssets, getDocumentParams } from '../core/pdfAssets';
+import { assertWorkerConfigured, configurePdfAssets, getDocumentParams, getSharedPdfWorker } from '../core/pdfAssets';
 import SideBySideViewer from './SideBySideViewer';
 import CompareToolbar from './CompareToolbar';
 import DiffSummarySidebar from './DiffSummarySidebar';
@@ -57,14 +57,16 @@ interface DocumentViewerProps {
   httpHeaders?: Record<string, string>;
   /** Alias for `httpHeaders` providing an alternative headers option. */
   customHeaders?: Record<string, string>;
-  /** Maximum number of bytes fetched per HTTP 206 range request. Default is 65536. */
+  /** Maximum number of bytes fetched per HTTP 206 range request. Default is 524288 (512 KB). */
   rangeChunkSize?: number;
-  /** Disable chunked streaming of PDF file data. Default false. */
+  /** Disable chunked streaming of PDF file data. Default true. */
   disableStream?: boolean;
   /** Disable automatic background pre-fetching of remaining PDF file chunks. Default false. */
   disableAutoFetch?: boolean;
   /** Disable HTTP 206 range requests entirely, forcing full PDF download. Default false. */
   disableRange?: boolean;
+  /** Optional dedicated or pre-warmed pdf.js worker instance. Defaults to shared worker singleton. */
+  worker?: pdfjsLib.PDFWorker;
   /** Password for password-protected PDFs. */
   password?: string;
   /** pdf.js asset locations, applied right before the document is opened. */
@@ -85,7 +87,9 @@ interface DocumentViewerProps {
   onDocumentLoaded?: (doc: pdfjsLib.PDFDocumentProxy, url: string) => void;
   onLoadError?: (error: Error, info: DocumentLoadErrorInfo) => void;
   /** Fires once per loaded document, after the first page canvas has been painted. */
-  onFirstPageRendered?: (pageNumber: number) => void;
+  onFirstPageRendered?: (pageNumber: number, telemetry?: LoadProgressInfo) => void;
+  /** Telemetry callback reporting download progress and range requests. */
+  onLoadProgress?: (info: LoadProgressInfo) => void;
   /** Fires whenever any page canvas has finished rendering. */
   onPageRendered?: (pageNumber: number) => void;
   onPageChange?: (pageNumber: number, numPages: number) => void;
@@ -130,7 +134,7 @@ export default function DocumentViewer({
   withCredentials = false, httpHeaders, customHeaders, rangeChunkSize, disableStream, disableAutoFetch, disableRange, password,
   assets, sidebars = true,
   redactions, regexRedactions, scale, setScale, sidebarTab, setSidebarTab, onAnnotationsChange, onRedactionsChange, onRedactionsApplied,
-  onDocumentLoaded, onLoadError, onFirstPageRendered, onPageRendered, onPageChange,
+  onDocumentLoaded, onLoadError, onFirstPageRendered, onLoadProgress, onPageRendered, onPageChange,
   pageTransition, pageLayout, rotation, setRotation, watermark, watermarkText, enableAnnotations: _enableAnnotations, initialPage, page, transientHighlights, permissions,
   hideAnnotationsUntilPageRendered = true,
   enableTextSelection = true,
@@ -147,6 +151,7 @@ export default function DocumentViewer({
   setActiveTab,
   onDownloadFilledPdf,
   highlightedRoleId,
+  worker,
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bus = useViewerBus();
@@ -193,10 +198,19 @@ export default function DocumentViewer({
   }, []);
 
   // Latest-callback refs: parents may pass inline functions without re-triggering effects.
-  const callbacksRef = useRef({ onRedactionsChange, onRedactionsApplied, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageRendered, onPageChange });
-  callbacksRef.current = { onRedactionsChange, onRedactionsApplied, onDocumentLoaded, onLoadError, onFirstPageRendered, onPageRendered, onPageChange };
+  const callbacksRef = useRef({ onRedactionsChange, onRedactionsApplied, onDocumentLoaded, onLoadError, onFirstPageRendered, onLoadProgress, onPageRendered, onPageChange });
+  callbacksRef.current = { onRedactionsChange, onRedactionsApplied, onDocumentLoaded, onLoadError, onFirstPageRendered, onLoadProgress, onPageRendered, onPageChange };
   const assetsRef = useRef(assets);
   assetsRef.current = assets;
+  const workerRef = useRef(worker);
+  workerRef.current = worker;
+
+  const resolveWorker = useCallback(() => {
+    if (workerRef.current && !(workerRef.current as any).destroyed) {
+      return workerRef.current;
+    }
+    return getSharedPdfWorker();
+  }, []);
 
   const httpHeadersRef = useRef(httpHeaders);
   httpHeadersRef.current = httpHeaders;
@@ -219,11 +233,17 @@ export default function DocumentViewer({
     if (Object.keys(headers).length > 0) {
       params.httpHeaders = headers;
     }
+    // Default rangeChunkSize to 512 KiB (524288) to minimize round-trip latency on HTTP/2
     if (typeof rangeChunkSizeRef.current === 'number' && rangeChunkSizeRef.current > 0) {
       params.rangeChunkSize = rangeChunkSizeRef.current;
+    } else {
+      params.rangeChunkSize = 512 * 1024;
     }
+    // Default disableStream to true to avoid full-file download stream contention
     if (typeof disableStreamRef.current === 'boolean') {
       params.disableStream = disableStreamRef.current;
+    } else {
+      params.disableStream = true;
     }
     if (typeof disableAutoFetchRef.current === 'boolean') {
       params.disableAutoFetch = disableAutoFetchRef.current;
@@ -247,6 +267,8 @@ export default function DocumentViewer({
       if (assetsRef.current) configurePdfAssets(assetsRef.current);
       const params: any = typeof docSource === 'string' ? { url: docSource } : { data: docSource };
       if (withCredentials) params.withCredentials = true;
+      const workerInstance = resolveWorker();
+      if (workerInstance) params.worker = workerInstance;
       Object.assign(params, resolveNetworkParams(), getDocumentParams());
       const loadingTask = pdfjsLib.getDocument(params);
       const loadedDocA = await loadingTask.promise;
@@ -255,7 +277,7 @@ export default function DocumentViewer({
     } catch (err: any) {
       console.error('Failed to load comparison document A:', err);
     }
-  }, [withCredentials, resolveNetworkParams]);
+  }, [withCredentials, resolveNetworkParams, resolveWorker]);
 
   const loadCompareDoc = useCallback(async (docSource: string | ArrayBuffer | Uint8Array) => {
     try {
@@ -263,6 +285,8 @@ export default function DocumentViewer({
       if (assetsRef.current) configurePdfAssets(assetsRef.current);
       const params: any = typeof docSource === 'string' ? { url: docSource } : { data: docSource };
       if (withCredentials) params.withCredentials = true;
+      const workerInstance = resolveWorker();
+      if (workerInstance) params.worker = workerInstance;
       Object.assign(params, resolveNetworkParams(), getDocumentParams());
       const loadingTask = pdfjsLib.getDocument(params);
       const loadedDocB = await loadingTask.promise;
@@ -278,7 +302,7 @@ export default function DocumentViewer({
     } catch (err: any) {
       console.error('Failed to load comparison document B:', err);
     }
-  }, [withCredentials]);
+  }, [withCredentials, resolveNetworkParams, resolveWorker]);
 
   useEffect(() => {
     if (compareState.isActive && pdfDoc && pdfDocB) {
@@ -1155,12 +1179,17 @@ export default function DocumentViewer({
   // Load the document. Re-runs when the URL or the reload nonce changes; the previous loading task
   // (and its worker transport) is destroyed on cleanup so documents never leak across loads.
   const firstPageRenderedRef = useRef(false);
+  const loadTelemetryRef = useRef<LoadProgressInfo>({ bytesLoaded: 0, totalBytes: 0, rangeRequests: 0 });
+  const triggerLazyScanRef = useRef<(() => void) | null>(null);
+  const activeScanRef = useRef<{ cancel: () => void } | null>(null);
+
   useEffect(() => {
     setPdfDoc(null);
     setLoadError(null);
     setPageNum(1);
     setPageDims([]);
     firstPageRenderedRef.current = false;
+    loadTelemetryRef.current = { bytesLoaded: 0, totalBytes: 0, rangeRequests: 0 };
     if (!initialDoc) return;
 
     const url = initialDoc;
@@ -1171,12 +1200,31 @@ export default function DocumentViewer({
       try {
         if (assetsRef.current) configurePdfAssets(assetsRef.current);
         assertWorkerConfigured();
-        loadingTask = pdfjsLib.getDocument({
+        const docParams: any = {
           url,
           withCredentials,
           ...resolveNetworkParams(),
           ...getDocumentParams(),
-        });
+        };
+        const workerInstance = resolveWorker();
+        if (workerInstance) docParams.worker = workerInstance;
+        loadingTask = pdfjsLib.getDocument(docParams);
+
+        if (loadingTask && typeof loadingTask === 'object') {
+          loadingTask.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
+            if (loaded > loadTelemetryRef.current.bytesLoaded) {
+              loadTelemetryRef.current.rangeRequests = (loadTelemetryRef.current.rangeRequests ?? 0) + 1;
+            }
+            loadTelemetryRef.current.bytesLoaded = loaded;
+            loadTelemetryRef.current.totalBytes = total;
+            callbacksRef.current.onLoadProgress?.({
+              bytesLoaded: loaded,
+              totalBytes: total,
+              rangeRequests: loadTelemetryRef.current.rangeRequests,
+            });
+          };
+        }
+
         const doc = await loadingTask.promise;
         // If the effect was cleaned up meanwhile, the loading task (and its worker transport)
         // has already been destroyed by the cleanup function.
@@ -1185,7 +1233,27 @@ export default function DocumentViewer({
           const p1 = await doc.getPage(1);
           if (!cancelled) {
             const vp1 = p1.getViewport({ scale: 1, rotation: normalizeRotation(p1.rotate + rotation) });
-            setPageDims(estimatePageDimensions(doc.numPages, { width: vp1.width, height: vp1.height }));
+            const p1Dim = { width: vp1.width, height: vp1.height };
+            setPageDims(estimatePageDimensions(doc.numPages, p1Dim));
+
+            // Compute initial fit BEFORE setting pdfDoc so Page 1 renders directly at the target scale without double-rendering!
+            const container = containerRef.current;
+            if (container && container.clientWidth > 48) {
+              const availableWidth = container.clientWidth - 48;
+              const availableHeight = container.clientHeight - 48;
+              let computedScale: number | null = null;
+              const mode = activeFitModeRef.current;
+              if (mode?.type === 'fit-width') {
+                computedScale = calculateFitWidthScale(availableWidth, p1Dim.width, mode.ratio || 1.0);
+              } else if (mode?.type === 'fit-page' && availableHeight > 0) {
+                computedScale = calculateFitPageScale(availableWidth, availableHeight, p1Dim.width, p1Dim.height);
+              }
+              if (computedScale !== null && Number.isFinite(computedScale) && computedScale > 0) {
+                isProgrammaticScaleRef.current = true;
+                initialFitDoneRef.current = true;
+                setScale(computedScale);
+              }
+            }
           }
         } catch {}
         if (cancelled) return;
@@ -1210,11 +1278,113 @@ export default function DocumentViewer({
     };
   }, [initialDoc, loadNonce, withCredentials, rotation]);
 
+  const startLazyScan = useCallback((doc: pdfjsLib.PDFDocumentProxy, p1Dim: { width: number; height: number }, rot: number) => {
+    if (activeScanRef.current) {
+      activeScanRef.current.cancel();
+      activeScanRef.current = null;
+    }
+    if (doc.numPages <= 1) return;
+
+    let cancelled = false;
+    let idleHandle: any = null;
+
+    const cancel = () => {
+      cancelled = true;
+      if (idleHandle !== null) {
+        if (typeof cancelIdleCallback !== 'undefined') {
+          cancelIdleCallback(idleHandle);
+        } else {
+          clearTimeout(idleHandle);
+        }
+        idleHandle = null;
+      }
+    };
+    activeScanRef.current = { cancel };
+
+    const allDims = estimatePageDimensions(doc.numPages, p1Dim);
+    let mismatch = false;
+    const sliceSize = 6;
+    let nextStart = 2;
+
+    const runSlice = async () => {
+      if (cancelled) return;
+      const start = nextStart;
+      const end = Math.min(doc.numPages, start + sliceSize - 1);
+      nextStart = end + 1;
+
+      let sliceMismatch = false;
+      for (let p = start; p <= end; p++) {
+        if (cancelled) return;
+        try {
+          const page = await doc.getPage(p);
+          if (cancelled) return;
+          const vp = page.getViewport({ scale: 1, rotation: normalizeRotation(page.rotate + rot) });
+          if (Math.abs(vp.width - p1Dim.width) > 0.5 || Math.abs(vp.height - p1Dim.height) > 0.5) {
+            sliceMismatch = true;
+            mismatch = true;
+          }
+          allDims[p - 1] = { width: vp.width, height: vp.height };
+        } catch {
+          // Keep estimated p1Dim
+        }
+      }
+
+      if (cancelled) return;
+
+      if (sliceMismatch) {
+        const container = containerRef.current;
+        if (container && container.scrollTop > 0 && pageTransitionRef.current === 'continuous') {
+          const cRow = visibleRowRef.current;
+          const newLayout = computeRowLayout(
+            rowsRef.current,
+            (p) => allDims[p - 1] ?? p1Dim,
+            scaleRef.current,
+            GAP
+          );
+          const oldTop = rowLayoutRef.current.tops[cRow] ?? 0;
+          const newTop = newLayout.tops[cRow] ?? 0;
+          const delta = newTop - oldTop;
+          if (delta !== 0) {
+            container.scrollTop += delta;
+          }
+        }
+        setPageDims([...allDims]);
+      }
+
+      if (nextStart <= doc.numPages && !cancelled) {
+        scheduleNextSlice();
+      } else if (!cancelled) {
+        if (mismatch) {
+          setPageDims([...allDims]);
+        }
+        activeScanRef.current = null;
+      }
+    };
+
+    const scheduleNextSlice = () => {
+      if (typeof requestIdleCallback !== 'undefined') {
+        idleHandle = requestIdleCallback(() => {
+          idleHandle = null;
+          runSlice();
+        }, { timeout: 200 });
+      } else {
+        idleHandle = setTimeout(() => {
+          idleHandle = null;
+          runSlice();
+        }, 16);
+      }
+    };
+
+    scheduleNextSlice();
+  }, []);
+
   const handlePageRendered = useCallback((renderedPage: number) => {
     callbacksRef.current.onPageRendered?.(renderedPage);
     if (firstPageRenderedRef.current) return;
     firstPageRenderedRef.current = true;
-    callbacksRef.current.onFirstPageRendered?.(renderedPage);
+    callbacksRef.current.onFirstPageRendered?.(renderedPage, { ...loadTelemetryRef.current });
+    // Trigger lazy dimension scan for remaining pages now that Page 1 has painted!
+    triggerLazyScanRef.current?.();
   }, []);
 
   useEffect(() => {
@@ -1238,14 +1408,13 @@ export default function DocumentViewer({
     return () => clearTimeout(t);
   }, [pdfDoc, page, initialPage, pageDims.length, scrollToPage]);
 
-  // Measure base dimensions up front and reserve estimated space for all pages to avoid layout jumps / shaking on scroll.
+  // Pre-allocate estimated dimensions for all pages, and wire lazy background scanning after first paint.
   useEffect(() => {
     if (!pdfDoc) return;
     let cancelled = false;
     const doc = pdfDoc;
 
     (async () => {
-      // 1. Measure Page 1 up front to obtain baseline page dimensions
       let p1: pdfjsLib.PDFPageProxy;
       try {
         p1 = await doc.getPage(1);
@@ -1257,7 +1426,6 @@ export default function DocumentViewer({
       const vp1 = p1.getViewport({ scale: 1, rotation: normalizeRotation(p1.rotate + rotation) });
       const p1Dim = { width: vp1.width, height: vp1.height };
 
-      // 2. Reserve estimated space up front for all pages based on Page 1
       setPageDims((prev) => {
         if (
           prev.length === doc.numPages &&
@@ -1269,66 +1437,25 @@ export default function DocumentViewer({
         return estimatePageDimensions(doc.numPages, p1Dim);
       });
 
-      if (doc.numPages <= 1) return;
+      triggerLazyScanRef.current = () => {
+        startLazyScan(doc, p1Dim, rotation);
+      };
 
-      // 3. Measure remaining page dimensions up front in parallel batches
-      const allDims = estimatePageDimensions(doc.numPages, p1Dim);
-      let mismatch = false;
-      const batchSize = 25;
-
-      for (let start = 2; start <= doc.numPages; start += batchSize) {
-        if (cancelled) return;
-        const end = Math.min(doc.numPages, start + batchSize - 1);
-        const batchPromises: Promise<void>[] = [];
-
-        for (let p = start; p <= end; p++) {
-          const pageNum = p;
-          batchPromises.push((async () => {
-            try {
-              const page = await doc.getPage(pageNum);
-              if (cancelled) return;
-              const vp = page.getViewport({ scale: 1, rotation: normalizeRotation(page.rotate + rotation) });
-              if (Math.abs(vp.width - p1Dim.width) > 0.5 || Math.abs(vp.height - p1Dim.height) > 0.5) {
-                mismatch = true;
-              }
-              allDims[pageNum - 1] = { width: vp.width, height: vp.height };
-            } catch {
-              // Retain estimated p1Dim
-            }
-          })());
-        }
-
-        await Promise.all(batchPromises);
-      }
-
-      if (cancelled) return;
-
-      // 4. Update pageDims only if any page had different dimensions than the page 1 estimate
-      if (mismatch) {
-        const container = containerRef.current;
-        if (container && container.scrollTop > 0 && pageTransitionRef.current === 'continuous') {
-          const cRow = visibleRowRef.current;
-          const newLayout = computeRowLayout(
-            rowsRef.current,
-            (p) => allDims[p - 1] ?? p1Dim,
-            scaleRef.current,
-            GAP
-          );
-          const oldTop = rowLayoutRef.current.tops[cRow] ?? 0;
-          const newTop = newLayout.tops[cRow] ?? 0;
-          const delta = newTop - oldTop;
-          if (delta !== 0) {
-            container.scrollTop += delta;
-          }
-        }
-        setPageDims(allDims);
+      // If Page 1 already rendered (e.g. rotation changed after initial paint), scan immediately in idle slices.
+      if (firstPageRenderedRef.current) {
+        startLazyScan(doc, p1Dim, rotation);
       }
     })();
 
     return () => {
       cancelled = true;
+      if (activeScanRef.current) {
+        activeScanRef.current.cancel();
+        activeScanRef.current = null;
+      }
+      triggerLazyScanRef.current = null;
     };
-  }, [pdfDoc, rotation]);
+  }, [pdfDoc, rotation, startLazyScan]);
 
   // Dynamic Fit to Width calculation
   const handleFitToWidth = useCallback(

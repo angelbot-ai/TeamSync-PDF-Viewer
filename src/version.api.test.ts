@@ -53,8 +53,8 @@ describe('api/version edge function', () => {
     expect(response.status).toBe(200);
 
     const body = await response.json();
-    expect(body.version).toBe('2.2.5');
-    expect(body.tag).toBe('v2.2.5');
-    expect(body.releaseUrl).toContain('releases/tag/v2.2.5');
+    expect(body.version).toBe('2.2.6');
+    expect(body.tag).toBe('v2.2.6');
+    expect(body.releaseUrl).toContain('releases/tag/v2.2.6');
   });
 });

@@ -73,6 +73,20 @@ vi.mock('pdfjs-dist', () => {
     GlobalWorkerOptions: { workerSrc: '/pdf.worker.min.mjs' },
     version: '4.10.38',
     PDFWorker: MockPDFWorker,
+    PDFDataRangeTransport: class MockPDFDataRangeTransport {
+      length: number;
+      initialData: any;
+      constructor(length: number, initialData: any) {
+        this.length = length;
+        this.initialData = initialData;
+      }
+      onDataRange() {}
+      onDataProgressiveRead() {}
+      onDataProgressiveDone() {}
+      transportReady() {}
+      requestDataRange() {}
+      abort() {}
+    },
     TextLayer: class MockTextLayer {
       render() {
         return Promise.resolve();

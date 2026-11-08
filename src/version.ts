@@ -8,6 +8,6 @@
 declare const __APP_VERSION__: string | undefined;
 
 export const VERSION: string =
-  typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.2.5';
+  typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.2.6';
 
 export const LIB_VERSION: string = VERSION;

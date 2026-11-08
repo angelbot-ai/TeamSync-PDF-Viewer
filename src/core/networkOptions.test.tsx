@@ -61,6 +61,20 @@ vi.mock('pdfjs-dist', () => {
         this.destroyed = true;
       }
     },
+    PDFDataRangeTransport: class MockPDFDataRangeTransport {
+      length: number;
+      initialData: any;
+      constructor(length: number, initialData: any) {
+        this.length = length;
+        this.initialData = initialData;
+      }
+      onDataRange() {}
+      onDataProgressiveRead() {}
+      onDataProgressiveDone() {}
+      transportReady() {}
+      requestDataRange() {}
+      abort() {}
+    },
     TextLayer: class MockTextLayer {
       render() {
         return Promise.resolve();

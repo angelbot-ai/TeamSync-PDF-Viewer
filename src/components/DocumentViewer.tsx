@@ -24,6 +24,7 @@ import { clampScale, calculateFitWidthScale, calculateFitPageScale, calculateScr
 import { estimatePageDimensions, computeRowLayout, DEFAULT_FALLBACK_DIMS } from '../utils/layoutUtils';
 import { useViewerBus, useBusEvent } from '../hooks/useViewerBus';
 import { assertWorkerConfigured, configurePdfAssets, getDocumentParams, getSharedPdfWorker } from '../core/pdfAssets';
+import { prepareDocumentLoading, FetchRangeTransport } from '../core/fetchRangeTransport';
 import SideBySideViewer from './SideBySideViewer';
 import CompareToolbar from './CompareToolbar';
 import DiffSummarySidebar from './DiffSummarySidebar';
@@ -265,12 +266,19 @@ export default function DocumentViewer({
     try {
       assertWorkerConfigured();
       if (assetsRef.current) configurePdfAssets(assetsRef.current);
-      const params: any = typeof docSource === 'string' ? { url: docSource } : { data: docSource };
-      if (withCredentials) params.withCredentials = true;
+      const networkParams = resolveNetworkParams();
+      const otherParams = getDocumentParams();
+      let docParams: any;
+      if (typeof docSource === 'string') {
+        const prepared = await prepareDocumentLoading(docSource, { ...networkParams, ...otherParams }, { withCredentials });
+        docParams = prepared.docParams;
+      } else {
+        docParams = { data: docSource, ...networkParams, ...otherParams };
+      }
+      if (withCredentials) docParams.withCredentials = true;
       const workerInstance = resolveWorker();
-      if (workerInstance) params.worker = workerInstance;
-      Object.assign(params, resolveNetworkParams(), getDocumentParams());
-      const loadingTask = pdfjsLib.getDocument(params);
+      if (workerInstance) docParams.worker = workerInstance;
+      const loadingTask = pdfjsLib.getDocument(docParams);
       const loadedDocA = await loadingTask.promise;
       setPdfDoc(loadedDocA);
       callbacksRef.current.onDocumentLoaded?.(loadedDocA, typeof docSource === 'string' ? docSource : 'documentA.pdf');
@@ -283,12 +291,19 @@ export default function DocumentViewer({
     try {
       assertWorkerConfigured();
       if (assetsRef.current) configurePdfAssets(assetsRef.current);
-      const params: any = typeof docSource === 'string' ? { url: docSource } : { data: docSource };
-      if (withCredentials) params.withCredentials = true;
+      const networkParams = resolveNetworkParams();
+      const otherParams = getDocumentParams();
+      let docParams: any;
+      if (typeof docSource === 'string') {
+        const prepared = await prepareDocumentLoading(docSource, { ...networkParams, ...otherParams }, { withCredentials });
+        docParams = prepared.docParams;
+      } else {
+        docParams = { data: docSource, ...networkParams, ...otherParams };
+      }
+      if (withCredentials) docParams.withCredentials = true;
       const workerInstance = resolveWorker();
-      if (workerInstance) params.worker = workerInstance;
-      Object.assign(params, resolveNetworkParams(), getDocumentParams());
-      const loadingTask = pdfjsLib.getDocument(params);
+      if (workerInstance) docParams.worker = workerInstance;
+      const loadingTask = pdfjsLib.getDocument(docParams);
       const loadedDocB = await loadingTask.promise;
       setPdfDocB(loadedDocB);
       setCompareState(prev => ({
@@ -1195,16 +1210,46 @@ export default function DocumentViewer({
     const url = initialDoc;
     let cancelled = false;
     let loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
+    let activeTransport: FetchRangeTransport | null = null;
+    const probeController = new AbortController();
 
     const loadPdf = async () => {
       try {
         if (assetsRef.current) configurePdfAssets(assetsRef.current);
         assertWorkerConfigured();
-        const docParams: any = {
+        const networkParams = resolveNetworkParams();
+        const otherParams = getDocumentParams();
+
+        const prepared = await prepareDocumentLoading(
           url,
+          { ...networkParams, ...otherParams },
+          {
+            withCredentials,
+            signal: probeController.signal,
+            onProgress: (info) => {
+              loadTelemetryRef.current = info;
+              callbacksRef.current.onLoadProgress?.(info);
+            },
+            onRangeRequest: () => {
+              loadTelemetryRef.current.rangeRequests = (loadTelemetryRef.current.rangeRequests ?? 0) + 1;
+            }
+          }
+        );
+
+        if (cancelled) {
+          prepared.abort?.();
+          return;
+        }
+
+        activeTransport = prepared.transport || null;
+        if (prepared.probeTelemetry) {
+          loadTelemetryRef.current = prepared.probeTelemetry;
+          callbacksRef.current.onLoadProgress?.(prepared.probeTelemetry);
+        }
+
+        const docParams: any = {
+          ...prepared.docParams,
           withCredentials,
-          ...resolveNetworkParams(),
-          ...getDocumentParams(),
         };
         const workerInstance = resolveWorker();
         if (workerInstance) docParams.worker = workerInstance;
@@ -1215,11 +1260,11 @@ export default function DocumentViewer({
             if (loaded > loadTelemetryRef.current.bytesLoaded) {
               loadTelemetryRef.current.rangeRequests = (loadTelemetryRef.current.rangeRequests ?? 0) + 1;
             }
-            loadTelemetryRef.current.bytesLoaded = loaded;
-            loadTelemetryRef.current.totalBytes = total;
+            loadTelemetryRef.current.bytesLoaded = Math.max(loaded, loadTelemetryRef.current.bytesLoaded);
+            loadTelemetryRef.current.totalBytes = total || loadTelemetryRef.current.totalBytes;
             callbacksRef.current.onLoadProgress?.({
-              bytesLoaded: loaded,
-              totalBytes: total,
+              bytesLoaded: loadTelemetryRef.current.bytesLoaded,
+              totalBytes: loadTelemetryRef.current.totalBytes,
               rangeRequests: loadTelemetryRef.current.rangeRequests,
             });
           };
@@ -1272,6 +1317,10 @@ export default function DocumentViewer({
 
     return () => {
       cancelled = true;
+      try { probeController.abort(); } catch {}
+      if (activeTransport) {
+        try { activeTransport.abort(); } catch {}
+      }
       if (loadingTask) {
         loadingTask.destroy().catch(() => {});
       }

@@ -2,6 +2,24 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [2.2.6] — 2026-11-08
+
+### Direct HTTP Range Transport & Zero-Drain Document Open (Item 7)
+- **Direct Chunk 0 Probe (`Range: bytes=0-524287`)**:
+  - Implemented `prepareDocumentLoading()` and `FetchRangeTransport` extending PDF.js `PDFDataRangeTransport`.
+  - Probes chunk 0 directly using an explicit HTTP Range request (`bytes=0-${rangeChunkSize - 1}`), completely bypassing the initial unconstrained full-file HTTP 200 GET.
+  - Parses total file length directly from the HTTP 206 `Content-Range` response header (`bytes 0-524287/22904441`).
+- **Elimination of HTTP/2 Connection Drain Latency**:
+  - Eliminates the ~300–400 ms connection drain where bytes already in flight from an aborted HTTP 200 stream queued ahead of chunk 0 on shared HTTP/2 multiplexed connections.
+  - Zero cancelled requests in browser HAR logs; all requests on `/storage-proxy/` are purely HTTP 206 Range responses from the first millisecond.
+- **Dynamic Fetch-Backed Range Service**:
+  - Subclasses `PDFDataRangeTransport` to serve PDF.js internal `requestDataRange(begin, end)` calls via native `fetch()`.
+  - Forwards host `httpHeaders` and `withCredentials: 'include'` on every chunk request.
+  - Supports non-range servers and small files: if the initial probe returns HTTP 200 OK, the document opens directly from the in-memory buffer with zero additional network requests.
+  - Cancellation-safe: aborts active probe and chunk fetches immediately upon document unmount or navigation.
+- **Integrated Load Telemetry**:
+  - Emits accurate range request counts (chunk 0 as request #1, followed by incremental range reads) and byte progression through `onLoadProgress` and `onFirstPageRendered`.
+
 ## [2.2.5] — 2026-11-08
 
 ### High-DPI Rendering & Subpixel Sharpness

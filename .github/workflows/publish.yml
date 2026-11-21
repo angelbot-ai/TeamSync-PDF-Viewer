@@ -1,14 +1,17 @@
-name: Publish to npm
+name: Publish to the forge npm registry
 
-# Publishes the package to the public npm registry (https://www.npmjs.com/package/teamsync-pdf-viewer).
+# Publishes @angelbot-ai-pvt-ltd/teamsync-pdf-viewer to the forge's npm registry
+# (git.teamsync.link), which the TeamSync frontend installs it from. Until 2026-11-22 this
+# package was published to the public npm registry as `teamsync-pdf-viewer`; the apps no longer
+# install that one (frontend audit 2026-11-21, decision 15).
 #
 # Two triggers:
 #   - pushing a tag `vX.Y.Z` (the tag's commit must have package.json version X.Y.Z)
-#   - manual "Run workflow" with a `ref` (branch / tag / SHA) to publish from — this also covers
-#     commits that predate this workflow file, e.g. the 1.1.0 merge commit.
+#   - manual "Run workflow" with a `ref` (branch / tag / SHA) to publish from
 #
-# Requires the repository secret NPM_TOKEN (an npm "Automation" token with publish rights).
-# The full verification chain runs first; nothing is published if any step fails.
+# Uses the org secret PACKAGES_WRITE_TOKEN, as the forge's other package repos do. The full
+# verification chain runs first; nothing is published if any step fails. Registry versions are
+# immutable: bump package.json before publishing again.
 
 on:
   push:
@@ -20,31 +23,32 @@ on:
         required: true
         default: 'main'
       dry_run:
-        description: 'Run everything but skip the actual npm publish'
+        description: 'Run everything but skip the actual publish'
         type: boolean
         default: false
 
 permissions:
   contents: read
-  id-token: write
+
+env:
+  REGISTRY: https://git.teamsync.link/api/packages/angelbot-ai-pvt-ltd/npm/
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
           # Full history: actions/checkout resolves a *short* SHA only if the object is already
           # local. With the default shallow fetch it treats the input as a branch/tag pattern
           # (refs/heads/<ref>*) and dies with an opaque "git failed with exit code 1".
           fetch-depth: 0
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
-          registry-url: https://registry.npmjs.org
-      - run: npm ci
+          node-version: 24
+      # Everything this package depends on is public, so the install needs no token.
+      - run: npm ci --ignore-scripts
       - name: Verify (lint, typecheck, tests, build, package guards)
         run: |
           npm run lint
@@ -52,30 +56,29 @@ jobs:
           npm test
           npm run build
           npm run verify:package
+      - name: Point npm at the forge registry
+        run: |
+          npm config set @angelbot-ai-pvt-ltd:registry "$REGISTRY"
+          npm config set "//git.teamsync.link/api/packages/angelbot-ai-pvt-ltd/npm/:_authToken" "$PACKAGES_WRITE_TOKEN"
+        env:
+          PACKAGES_WRITE_TOKEN: ${{ secrets.PACKAGES_WRITE_TOKEN }}
       - name: Check version against tag / registry
         run: |
+          NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
-          echo "package.json version: $VERSION"
+          echo "package.json: $NAME@$VERSION"
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             TAG="${GITHUB_REF_NAME#v}"
             if [[ "$TAG" != "$VERSION" ]]; then
               echo "::error::tag v$TAG does not match package.json version $VERSION"; exit 1
             fi
           fi
-          if npm view "teamsync-pdf-viewer@$VERSION" version >/dev/null 2>&1; then
-            echo "::error::teamsync-pdf-viewer@$VERSION is already on the registry"; exit 1
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "::error::$NAME@$VERSION is already on the registry"; exit 1
           fi
-      - name: Check npm authentication
-        run: npm whoami
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --ignore-scripts
       - name: Dry run
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
-        run: npm publish --access public --dry-run
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --ignore-scripts --dry-run

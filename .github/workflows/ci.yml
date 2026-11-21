@@ -12,11 +12,12 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      # The forge's runners: v4 actions as in every other repo there, Node 24 as the apps that
+      # install this package run, and no setup-node cache (the runners keep ~/.npm on the host).
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          node-version: 24
       - run: npm ci
       - name: Lint
         run: npm run lint
@@ -30,9 +31,3 @@ jobs:
         run: npm run verify:package
       - name: Build demo application
         run: npm run build:app
-      - name: Upload library artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: dist-lib
-          path: dist
-          if-no-files-found: error

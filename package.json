@@ -1,5 +1,5 @@
 {
-  "name": "teamsync-pdf-viewer",
+  "name": "@angelbot-ai-pvt-ltd/teamsync-pdf-viewer",
   "version": "2.2.7",
   "license": "CPAL-1.0",
   "description": "TeamSync PDF Viewer SDK — client-side PDF viewing, annotation, search, redaction and watermarking for React.",
@@ -44,14 +44,14 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/angelbot-ai/TeamSync-PDF-Viewer.git"
+    "url": "git+https://git.teamsync.link/angelbot-ai-pvt-ltd/teamsync-pdf-viewer.git"
   },
   "bugs": {
-    "url": "https://github.com/angelbot-ai/TeamSync-PDF-Viewer/issues"
+    "url": "https://git.teamsync.link/angelbot-ai-pvt-ltd/teamsync-pdf-viewer/issues"
   },
-  "homepage": "https://github.com/angelbot-ai/TeamSync-PDF-Viewer#readme",
+  "homepage": "https://git.teamsync.link/angelbot-ai-pvt-ltd/teamsync-pdf-viewer",
   "publishConfig": {
-    "access": "public"
+    "registry": "https://git.teamsync.link/api/packages/angelbot-ai-pvt-ltd/npm/"
   },
   "engines": {
     "node": ">=20"

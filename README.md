@@ -37,29 +37,25 @@ Try the **[Interactive Live Demo](https://pdfviewer.teamsync.com/)** or integrat
 
 Install the package into your React / TypeScript project:
 
-```bash
-# Using npm
-npm install teamsync-pdf-viewer
+The package is published to the TeamSync forge's npm registry as
+`@angelbot-ai-pvt-ltd/teamsync-pdf-viewer`. Point the scope at it in `.npmrc` (the registry needs
+a token with package read access):
 
-# Using yarn
-yarn add teamsync-pdf-viewer
-
-# Using pnpm
-pnpm add teamsync-pdf-viewer
+```ini
+@angelbot-ai-pvt-ltd:registry=https://git.teamsync.link/api/packages/angelbot-ai-pvt-ltd/npm/
+//git.teamsync.link/api/packages/angelbot-ai-pvt-ltd/npm/:_authToken=${NODE_AUTH_TOKEN}
 ```
 
-### Installing from GitHub Packages (Alternative)
+Then install it, under its own name or aliased to the old one so existing imports keep working:
 
-If installing from GitHub Packages registry:
+```bash
+npm install @angelbot-ai-pvt-ltd/teamsync-pdf-viewer
+# or, keeping `import ... from 'teamsync-pdf-viewer'`:
+npm install teamsync-pdf-viewer@npm:@angelbot-ai-pvt-ltd/teamsync-pdf-viewer
+```
 
-1. Create or update your `.npmrc` file:
-   ```ini
-   @angelbot-ai:registry=https://npm.pkg.github.com
-   ```
-2. Install via npm:
-   ```bash
-   npm install teamsync-pdf-viewer
-   ```
+Releases up to 2.2.7 were also published to the public npm registry as `teamsync-pdf-viewer`;
+new releases go to the forge registry only.
 
 ---
 

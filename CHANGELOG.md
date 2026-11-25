@@ -2,6 +2,16 @@
 
 All notable changes to `teamsync-pdf-viewer` are documented here.
 
+## [2.2.8] — 2026-11-25
+
+### Security Hardening & Dependency Upgrades
+- **Inert DOM-Based XFDF Parsing (CodeQL `js/html-constructed-from-input`)**:
+  - Replaced template-string XML wrapping in `parseXfdf()` and `parseXfdfFormFields()` with a shared `parseXfdfDocument()` helper and linear-time `splitTopLevelXmlElements()` scanner.
+  - Parses XFDF documents and concatenated sibling fragments directly via `DOMParser(..., 'application/xml')` and assembles them with `document.implementation.createDocument` and `importNode`, eliminating HTML/XML string interpolation from library input while preserving DTD/ENTITY rejection.
+- **Scoped Forge Package & Dependencies**:
+  - Upgraded `pdfjs-dist` (`6.5.438`) bringing range/stream teardown fixes, concurrent Wasm worker image decoding fixes, and lower memory usage on large images.
+  - Upgraded `lucide-react` (`1.80.0`), `vite` (`8.3.8`), `vitest` (`5.1.1`), `@vitejs/plugin-react` (`6.3.0`), `oxlint` (`1.95.0`), `jsdom` (`31.0.1`), `@types/node`, and `@types/react`.
+
 ## [2.2.7] — 2026-11-08
 
 ### Range Transport Resilience, Probing Improvements & Worker Exports (Items 9–11)

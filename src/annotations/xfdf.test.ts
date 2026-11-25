@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createPageGeometry, type GeometryResolver } from './geometry';
-import { annotationToXfdfFragment, annotationsToXfdf, fromPdfDate, parseXfdf, toPdfDate } from './xfdf';
+import { annotationToXfdfFragment, annotationsToXfdf, fromPdfDate, parseXfdf, parseXfdfFormFields, toPdfDate } from './xfdf';
 import type { Annotation } from './types';
 
 const LETTER = createPageGeometry(1, [0, 0, 612, 792], 0);
@@ -140,5 +140,30 @@ describe('xfdf hardening', () => {
     // Unterminated declaration: everything from it on is treated as text, not a hang.
     await expect(parseXfdf('<?xml version="1.0" <?xml <?xml', resolve)).resolves.toEqual([]).catch(() => undefined);
     await expect(parseXfdf('<!DOCTYPE x [<!ENTITY a "b">]><square name="x"/>', resolve)).rejects.toThrow(/DOCTYPE/);
+  });
+
+  it('parses concatenated sibling fragments and full XFDF documents without string-wrapped XML', async () => {
+    const siblings = `<square page="0" rect="0,0,10,10" name="s1" title="a > b"/><circle page="0" rect="0,0,10,10" name="s2"><contents><![CDATA[<script>alert(1)</script>]]></contents></circle>`;
+    const anns = await parseXfdf(siblings, resolve);
+    expect(anns.map((a) => a.id)).toEqual(['s1', 's2']);
+    expect(anns[0].author).toBe('a > b');
+
+    const docs =
+      `<?xml version="1.0"?><xfdf xmlns="http://ns.adobe.com/xfdf/"><annots><square page="0" rect="0,0,10,10" name="d1"/></annots></xfdf>` +
+      `<!-- comment between docs -->` +
+      `<?xml version="1.0"?><xfdf xmlns="http://ns.adobe.com/xfdf/"><annots><circle page="0" rect="0,0,10,10" name="d2"/></annots></xfdf>`;
+    const anns2 = await parseXfdf(docs, resolve);
+    expect(anns2.map((a) => a.id)).toEqual(['d1', 'd2']);
+  });
+
+  it('parses form fields safely and rejects DTD/malformed input', async () => {
+    const xfdf = `<fields><field name="fullName"><value>Alice</value></field></fields><widget field="fullName" page="0" rect="10,20,110,50"/>`;
+    const { fields, values } = await parseXfdfFormFields(xfdf, resolve);
+    expect(values).toEqual({ fullName: 'Alice' });
+    expect(fields.length).toBe(1);
+    expect(fields[0].name).toBe('fullName');
+
+    await expect(parseXfdfFormFields('<!DOCTYPE x><fields/>')).rejects.toThrow(/DOCTYPE/);
+    await expect(parseXfdfFormFields('<fields><field name="x"', resolve)).rejects.toThrow(/invalid XFDF/);
   });
 });

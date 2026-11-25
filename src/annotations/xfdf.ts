@@ -444,22 +444,173 @@ function stripXmlDeclarations(input: string): string {
   return out + input.slice(pos);
 }
 
-export async function parseXfdf(xml: string, resolve: GeometryResolver): Promise<Annotation[]> {
-  // Hosts may store one full XFDF document per annotation and concatenate them inside an
-  // envelope, so XML declarations can appear anywhere and <xfdf>/<annots> wrappers can nest.
-  // Strip every declaration and collect annotation elements from every <annots> at any depth.
+/**
+ * Split concatenated sibling XML elements (with optional comments/PIs/whitespace) in linear time
+ * so multi-root fragments can be parsed without interpolating untrusted input into markup strings.
+ */
+function splitTopLevelXmlElements(input: string): string[] {
+  const fragments: string[] = [];
+  const len = input.length;
+  let i = 0;
+  let depth = 0;
+  let elementStart = -1;
+
+  while (i < len) {
+    if (depth === 0) {
+      while (i < len && (input[i] === ' ' || input[i] === '\t' || input[i] === '\r' || input[i] === '\n')) {
+        i++;
+      }
+      if (i >= len) break;
+
+      if (input[i] !== '<') {
+        const nextLt = input.indexOf('<', i);
+        if (nextLt === -1) break;
+        i = nextLt;
+        continue;
+      }
+
+      if (input.startsWith('<!--', i)) {
+        const end = input.indexOf('-->', i + 4);
+        if (end === -1) throw new Error('[teamsync-pdf-viewer] invalid XFDF: unterminated XML comment');
+        i = end + 3;
+        continue;
+      }
+
+      if (input.startsWith('<?', i)) {
+        const end = input.indexOf('?>', i + 2);
+        if (end === -1) throw new Error('[teamsync-pdf-viewer] invalid XFDF: unterminated processing instruction');
+        i = end + 2;
+        continue;
+      }
+
+      if (input.startsWith('</', i)) {
+        throw new Error('[teamsync-pdf-viewer] invalid XFDF: unexpected closing XML tag');
+      }
+
+      if (input.startsWith('<!', i)) {
+        throw new Error('[teamsync-pdf-viewer] invalid XFDF: XML directives are not allowed');
+      }
+
+      elementStart = i;
+    } else {
+      const nextLt = input.indexOf('<', i);
+      if (nextLt === -1) {
+        throw new Error('[teamsync-pdf-viewer] invalid XFDF: unclosed XML element');
+      }
+      i = nextLt;
+    }
+
+    if (input.startsWith('<!--', i)) {
+      const end = input.indexOf('-->', i + 4);
+      if (end === -1) throw new Error('[teamsync-pdf-viewer] invalid XFDF: unterminated XML comment');
+      i = end + 3;
+      continue;
+    }
+    if (input.startsWith('<![CDATA[', i)) {
+      const end = input.indexOf(']]>', i + 9);
+      if (end === -1) throw new Error('[teamsync-pdf-viewer] invalid XFDF: unterminated CDATA section');
+      i = end + 3;
+      continue;
+    }
+    if (input.startsWith('<?', i)) {
+      const end = input.indexOf('?>', i + 2);
+      if (end === -1) throw new Error('[teamsync-pdf-viewer] invalid XFDF: unterminated processing instruction');
+      i = end + 2;
+      continue;
+    }
+    if (input.startsWith('<!', i)) {
+      throw new Error('[teamsync-pdf-viewer] invalid XFDF: XML directives are not allowed');
+    }
+
+    const isClosing = input.startsWith('</', i);
+    let j = i + (isClosing ? 2 : 1);
+    let quote: string | null = null;
+    while (j < len) {
+      const ch = input[j];
+      if (quote) {
+        if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'") {
+        quote = ch;
+      } else if (ch === '>') {
+        break;
+      } else if (ch === '<') {
+        throw new Error('[teamsync-pdf-viewer] invalid XFDF: unexpected "<" inside XML tag');
+      }
+      j++;
+    }
+    if (j >= len) {
+      throw new Error('[teamsync-pdf-viewer] invalid XFDF: unterminated XML tag');
+    }
+
+    const selfClosing = !isClosing && j > i + 1 && input[j - 1] === '/';
+    if (isClosing) {
+      depth--;
+      if (depth < 0) throw new Error('[teamsync-pdf-viewer] invalid XFDF: mismatched closing XML tag');
+      if (depth === 0 && elementStart !== -1) {
+        fragments.push(input.slice(elementStart, j + 1));
+        elementStart = -1;
+      }
+    } else if (selfClosing) {
+      if (depth === 0 && elementStart !== -1) {
+        fragments.push(input.slice(elementStart, j + 1));
+        elementStart = -1;
+      }
+    } else {
+      depth++;
+    }
+
+    i = j + 1;
+  }
+
+  if (depth !== 0 || elementStart !== -1) {
+    throw new Error('[teamsync-pdf-viewer] invalid XFDF: unclosed XML element');
+  }
+
+  return fragments;
+}
+
+/**
+ * Parse an XFDF document or concatenated XML fragments using inert `application/xml` DOM parsing
+ * and DOM node construction (no XML/HTML string concatenation).
+ */
+function parseXfdfDocument(xml: string, wrapInAnnots: boolean): Document | null {
   const cleaned = stripXmlDeclarations(xml).trim();
-  if (!cleaned) return [];
+  if (!cleaned) return null;
   // XFDF never carries a DTD; refuse one outright (entity expansion / external entity tricks).
   if (/<!DOCTYPE|<!ENTITY/i.test(cleaned)) {
     throw new Error('[teamsync-pdf-viewer] invalid XFDF: DOCTYPE/ENTITY declarations are not allowed');
   }
-  // Parsed as application/xml: the parser is inert (no script execution, no resource loading)
-  // and the resulting DOM is only read as data.
-  const wrapped = `<xfdf xmlns="${XFDF_NS}"><annots>${cleaned}</annots></xfdf>`;
-  const doc = new DOMParser().parseFromString(wrapped, 'application/xml');
-  const error = doc.getElementsByTagName('parsererror')[0];
-  if (error) throw new Error(`[teamsync-pdf-viewer] invalid XFDF: ${error.textContent?.slice(0, 200)}`);
+
+  const outDoc = document.implementation.createDocument(XFDF_NS, 'xfdf', null);
+  const container = wrapInAnnots ? outDoc.createElementNS(XFDF_NS, 'annots') : outDoc.documentElement;
+  if (wrapInAnnots) outDoc.documentElement.appendChild(container);
+
+  const parser = new DOMParser();
+  const directDoc = parser.parseFromString(cleaned, 'application/xml');
+  if (!directDoc.getElementsByTagName('parsererror').length && directDoc.documentElement) {
+    container.appendChild(outDoc.importNode(directDoc.documentElement, true));
+    return outDoc;
+  }
+
+  const fragments = splitTopLevelXmlElements(cleaned);
+  for (const frag of fragments) {
+    const fragDoc = parser.parseFromString(frag, 'application/xml');
+    const error = fragDoc.getElementsByTagName('parsererror')[0];
+    if (error || !fragDoc.documentElement) {
+      throw new Error(`[teamsync-pdf-viewer] invalid XFDF: ${error?.textContent?.slice(0, 200) || 'malformed XML'}`);
+    }
+    container.appendChild(outDoc.importNode(fragDoc.documentElement, true));
+  }
+
+  return outDoc;
+}
+
+export async function parseXfdf(xml: string, resolve: GeometryResolver): Promise<Annotation[]> {
+  // Hosts may store one full XFDF document per annotation and concatenate them inside an
+  // envelope, so XML declarations can appear anywhere and <xfdf>/<annots> wrappers can nest.
+  // Strip every declaration and collect annotation elements from every <annots> at any depth.
+  const doc = parseXfdfDocument(xml, true);
+  if (!doc) return [];
 
   const WRAPPERS = new Set(['xfdf', 'annots', 'fields', 'f', 'ids']);
   const elements = Array.from(doc.getElementsByTagName('*')).filter(
@@ -483,16 +634,8 @@ export async function parseXfdfFormFields(
   resolve?: GeometryResolver,
   roleMapper?: (customData: Record<string, string>) => string | undefined
 ): Promise<{ fields: FormField[]; values: FormDataRecord }> {
-  const cleaned = stripXmlDeclarations(xml).trim();
-  if (!cleaned) return { fields: [], values: {} };
-  if (/<!DOCTYPE|<!ENTITY/i.test(cleaned)) {
-    throw new Error('[teamsync-pdf-viewer] invalid XFDF: DOCTYPE/ENTITY declarations are not allowed');
-  }
-
-  const wrapped = `<xfdf xmlns="${XFDF_NS}">${cleaned}</xfdf>`;
-  const doc = new DOMParser().parseFromString(wrapped, 'application/xml');
-  const error = doc.getElementsByTagName('parsererror')[0];
-  if (error) throw new Error(`[teamsync-pdf-viewer] invalid XFDF: ${error.textContent?.slice(0, 200)}`);
+  const doc = parseXfdfDocument(xml, false);
+  if (!doc) return { fields: [], values: {} };
 
   // 1. Extract values from <fields> / <field> / <value>
   const values: FormDataRecord = {};
